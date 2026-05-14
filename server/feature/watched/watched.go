@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
-	"strconv"
 
 	"github.com/sbondCo/Watcharr/database/dbmodel"
 	"github.com/sbondCo/Watcharr/database/entity"
@@ -603,7 +602,8 @@ func (s *Service) updateWatched(
 	}
 	addedActivity := entity.Activity{}
 	if ar.Rating != 0 {
-		addedActivity, _ = s.activityProvider.AddActivity(userId, domain.ActivityAddRequest{WatchedID: id, Type: entity.RATING_CHANGED, Data: strconv.Itoa(int(ar.Rating))})
+		ratingData, _ := json.Marshal(map[string]any{"rating": ar.Rating})
+		addedActivity, _ = s.activityProvider.AddActivity(userId, domain.ActivityAddRequest{WatchedID: id, Type: entity.RATING_CHANGED, Data: string(ratingData)})
 	}
 	if ar.Status != "" {
 		addedActivity, _ = s.activityProvider.AddActivity(userId, domain.ActivityAddRequest{WatchedID: id, Type: entity.STATUS_CHANGED, Data: string(ar.Status)})

@@ -38,7 +38,12 @@
 				return "Removed from Watched List";
 			case "RATING_CHANGED":
 				if (a.data) {
-					return `Rating Changed to ${a.data}`;
+					const data = JSON.parse(a.data);
+					// check for legacy rating activities that only have the int
+					if (data.rating != undefined) {
+						return `Rating Changed to ${data.rating} Stars`;
+					}
+					return `Rating Changed to ${a.data} Stars`;
 				}
 				return "Rating Changed";
 			case "STATUS_CHANGED":
