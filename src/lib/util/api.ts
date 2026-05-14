@@ -22,8 +22,9 @@ const { MODE } = import.meta.env;
 export const baseURL =
 	MODE === "development"
 		? browser
-			? `${location.protocol}//${location.hostname}:3080/api`
-			: "http://127.0.0.1:3080/api"
+			// FIX Don't forget to add :3080 again before building!!!	
+			? `${location.protocol}//${location.hostname}/api`
+			: "http://127.0.0.1/api"
 		: "/api";
 console.log("api: baseURL constructed:", baseURL);
 
