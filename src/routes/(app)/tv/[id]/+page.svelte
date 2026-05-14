@@ -4,6 +4,7 @@
 	import HorizontalList from "@/lib/HorizontalList.svelte";
 	import Icon from "@/lib/Icon.svelte";
 	import PersonPoster from "@/lib/poster/PersonPoster.svelte";
+	import PersonLink from "@/lib/content/PersonLink.svelte";
 	import SeasonsList from "@/lib/season/SeasonsList.svelte";
 	import Spinner from "@/lib/Spinner.svelte";
 	import ProvidersList from "@/lib/content/ProvidersList.svelte";
@@ -263,8 +264,12 @@
 					<div class="creators">
 						{#each credits.topCrew as crew}
 							<div>
-								<span>{crew.name}</span>
-								<span>{crew.job}</span>
+								<PersonLink
+									id={crew.id}
+									name={crew.name}
+									role={crew.job}
+									className="person-link"
+								/>
 							</div>
 						{/each}
 					</div>

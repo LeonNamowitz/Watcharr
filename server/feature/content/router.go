@@ -4,6 +4,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-contrib/cache"
@@ -235,6 +236,15 @@ func (r *Router) GetPersonCredits(c *gin.Context) {
 		c.Status(400)
 		return
 	}
+	creditsType := strings.ToLower(c.Query("creditsType"))
+	if creditsType == "" {
+		person, err := r.cs.PersonDetails(c.Param("id"))
+		if err != nil {
+			c.JSON(http.StatusBadRequest, router.ErrorResponse{Error: err.Error()})
+			return
+		}
+		creditsType = strings.ToLower(person.KnownForDepartment)
+	}
 	content, err := r.cs.PersonCredits(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, router.ErrorResponse{Error: err.Error()})
@@ -242,8 +252,29 @@ func (r *Router) GetPersonCredits(c *gin.Context) {
 	}
 	// Add content into response struct then add watched entries
 	resp := domain.PersonCreditsResponse{}
-	for i := range content.Cast {
-		resp.Credits = append(resp.Credits, content.Cast[i].AsMedia())
+	resp.HasActing = len(content.Cast) > 0
+	for i := range content.Crew {
+		if strings.EqualFold(content.Crew[i].Department, "Directing") {
+			resp.HasDirecting = true
+			break
+		}
+	}
+	switch {
+	case creditsType == "directing":
+		for i := range content.Crew {
+			if !strings.EqualFold(content.Crew[i].Department, "Directing") {
+				continue
+			}
+			resp.Credits = append(resp.Credits, content.Crew[i].AsMedia())
+		}
+	case creditsType == "acting":
+		for i := range content.Cast {
+			resp.Credits = append(resp.Credits, content.Cast[i].AsMedia())
+		}
+	default:
+		for i := range content.Cast {
+			resp.Credits = append(resp.Credits, content.Cast[i].AsMedia())
+		}
 	}
 	if err := addedtocontent.AddList(
 		r.wp,

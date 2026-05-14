@@ -708,12 +708,13 @@ func (t *TMDBPersonDetails) AsPersonDetailsResponse() domain.PersonDetailsRespon
 
 //
 // Person Combined Credits
+// Cast for actors, crew includes everything else
 //
 
 type TMDBPersonCombinedCredits struct {
 	ID   int                                   `json:"id"`
 	Cast []TMDBPersonCombinedCreditsCastResult `json:"cast"`
-	// crew TMDBPersonCombinedCreditsCrew
+	Crew []TMDBPersonCombinedCreditsCrewResult `json:"crew"`
 }
 
 type TMDBPersonCombinedCreditsCastResult struct {
@@ -742,6 +743,66 @@ type TMDBPersonCombinedCreditsCastResult struct {
 }
 
 func (t *TMDBPersonCombinedCreditsCastResult) AsMedia() domain.Media {
+	m := domain.Media{
+		IDs: domain.MediaIDs{
+			TMDB: t.ID,
+		},
+		Summary:         t.Overview,
+		ExtPosterPath:   t.PosterPath,
+		ExtBackdropPath: t.BackdropPath,
+		Rating:          uint(t.VoteAverage * 10),
+		RatingCount:     uint(t.VoteCount),
+	}
+
+	m.Name = t.Title
+	if t.Name != "" {
+		m.Name = t.Name
+	}
+
+	var tmdbReleaseDate string
+	switch t.MediaType {
+	case "movie":
+		m.Type = domain.MediaTypeTMDBMovie
+		tmdbReleaseDate = t.ReleaseDate
+	case "tv":
+		m.Type = domain.MediaTypeTMDBShow
+		tmdbReleaseDate = t.FirstAirDate
+	}
+	if releaseDate, err := time.Parse("2006-01-02", tmdbReleaseDate); err == nil {
+		m.ReleaseDate = releaseDate
+	} else {
+		slog.Error("AsMedia: Failed to parse release date", "name", m.Name, "error", err)
+	}
+	return m
+}
+
+type TMDBPersonCombinedCreditsCrewResult struct {
+	ID               int      `json:"id"`
+	OriginalLanguage string   `json:"original_language"`
+	EpisodeCount     int      `json:"episode_count"`
+	Overview         string   `json:"overview"`
+	OriginCountry    []string `json:"origin_country"`
+	OriginalName     string   `json:"original_name"`
+	GenreIDs         []int    `json:"genre_ids"`
+	Name             string   `json:"name"`
+	MediaType        string   `json:"media_type"`
+	PosterPath       string   `json:"poster_path"`
+	FirstAirDate     string   `json:"first_air_date"`
+	VoteAverage      float64  `json:"vote_average"`
+	VoteCount        uint32   `json:"vote_count"`
+	BackdropPath     string   `json:"backdrop_path"`
+	Popularity       float64  `json:"popularity"`
+	CreditID         string   `json:"credit_id"`
+	OriginalTitle    string   `json:"original_title"`
+	Video            bool     `json:"video"`
+	ReleaseDate      string   `json:"release_date"`
+	Title            string   `json:"title"`
+	Adult            bool     `json:"adult"`
+	Department       string   `json:"department"`
+	Job              string   `json:"job"`
+}
+
+func (t *TMDBPersonCombinedCreditsCrewResult) AsMedia() domain.Media {
 	m := domain.Media{
 		IDs: domain.MediaIDs{
 			TMDB: t.ID,

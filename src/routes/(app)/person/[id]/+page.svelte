@@ -21,8 +21,19 @@
 	let person: PersonDetailsResponse | undefined = $state();
 	let pageError: Error | undefined = $state();
 	let sortOption = $state("Vote count");
+	let creditsType = $state("Acting");
 	let credits: PersonCreditsResponse | undefined = $state();
 	let onMyListFilter = $state(false);
+
+	function getCreditsTypeOptions() {
+		const options: string[] = [];
+		const hasActing = credits?.hasActing ?? true;
+		const hasDirecting = credits?.hasDirecting ?? false;
+		if (hasActing) options.push("Acting");
+		if (hasDirecting) options.push("Directing");
+		if (options.length === 0) options.push("Acting");
+		return options;
+	}
 
 	$effect(() => {
 		if (data.personId) {
@@ -36,6 +47,12 @@
 		}
 	});
 
+	$effect(() => {
+		if (creditsType && data.personId && person) {
+			updatePersonCredits();
+		}
+	});
+
 	async function fetchPersonData() {
 		try {
 			person = undefined;
@@ -44,6 +61,11 @@
 				return;
 			}
 			person = await getPerson(data.personId);
+			if (person?.knownForDepartment?.toLowerCase() === "directing") {
+				creditsType = "Directing";
+			} else {
+				creditsType = "Acting";
+			}
 			await updatePersonCredits();
 			sortCredits(sortOption);
 		} catch (err: any) {
@@ -61,8 +83,16 @@
 		credits = (
 			await axios.get<PersonCreditsResponse>(
 				`/content/person/${data.personId}/credits`,
+				{
+					params: { creditsType: creditsType.toLowerCase() },
+				},
 			)
 		).data;
+		const options = getCreditsTypeOptions();
+		if (!options.includes(creditsType)) {
+			creditsType = options[0];
+			return;
+		}
 		credits.credits = credits.credits?.filter(
 			(v, i, a) => a.findIndex((t) => t.ids.tmdb === v.ids.tmdb) === i,
 		); // remove duplicate entries. If an actor has multiple roles in a single movie, it would otherwise show up multiple times
@@ -194,17 +224,28 @@
 			{#if credits}
 				{#if credits?.credits && credits?.credits?.length > 0}
 					<div class="filters">
-						<div class="listFilter">
-							<span>On my list</span>
-							<Checkbox name="On my list" bind:value={onMyListFilter} />
+						<div class="filters-left">
+							<DropDown
+								bind:active={creditsType}
+								placeholder="Acting"
+								options={getCreditsTypeOptions()}
+								isDropDownItem={false}
+								showActiveElementsInOptions={true}
+							/>
 						</div>
-						<DropDown
-							bind:active={sortOption}
-							placeholder="Vote count"
-							options={["Vote count", "Newest", "Oldest"]}
-							isDropDownItem={false}
-							showActiveElementsInOptions={true}
-						/>
+						<div class="filters-right">
+							<div class="listFilter">
+								<span>On my list</span>
+								<Checkbox name="On my list" bind:value={onMyListFilter} />
+							</div>
+							<DropDown
+								bind:active={sortOption}
+								placeholder="Vote count"
+								options={["Vote count", "Newest", "Oldest"]}
+								isDropDownItem={false}
+								showActiveElementsInOptions={true}
+							/>
+						</div>
 					</div>
 					<div class="page">
 						<PosterList>
@@ -242,7 +283,7 @@
 	.filters {
 		align-items: center;
 		display: flex;
-		justify-content: flex-end;
+		justify-content: space-between;
 		gap: 30px;
 		margin: 0 auto;
 		padding-left: 20px;
@@ -250,6 +291,17 @@
 		width: 100%;
 		/* Same as in PosterList */
 		max-width: 1200px;
+
+		.filters-left {
+			display: flex;
+			align-items: center;
+		}
+
+		.filters-right {
+			display: flex;
+			align-items: center;
+			gap: 30px;
+		}
 
 		.listFilter {
 			display: flex;

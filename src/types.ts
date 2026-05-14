@@ -426,6 +426,8 @@ export interface PersonDetailsResponse {
 
 export interface PersonCreditsResponse {
 	credits?: Media[];
+	hasActing?: boolean;
+	hasDirecting?: boolean;
 }
 
 export interface TMDBSeasonDetails {
