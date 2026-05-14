@@ -1,10 +1,13 @@
-.PHONY: dev version
+.PHONY: dev version server
 
 dev:
 	./node_modules/.bin/vite dev
 
 dev_host:
 	./node_modules/.bin/vite dev --host
+
+server:
+	cd ./server && MODE=DEV go run .
 
 # Don't judge me.
 version:
