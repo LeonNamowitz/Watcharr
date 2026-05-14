@@ -7,7 +7,9 @@ type ContentDetailsResponse struct {
 }
 
 type PersonCreditsResponse struct {
-	Credits []Media `json:"credits,omitempty"`
+	Credits      []Media `json:"credits,omitempty"`
+	HasActing    bool    `json:"hasActing"`
+	HasDirecting bool    `json:"hasDirecting"`
 }
 
 type PersonDetailsResponse struct {

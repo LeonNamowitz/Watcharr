@@ -1,5 +1,6 @@
 <script lang="ts">
 	import PersonPoster from "@/lib/poster/PersonPoster.svelte";
+	import PersonLink from "@/lib/content/PersonLink.svelte";
 	import Spinner from "@/lib/Spinner.svelte";
 	import HorizontalList from "@/lib/HorizontalList.svelte";
 	import {
@@ -260,13 +261,16 @@
 			{#await getMovieCredits()}
 				<Spinner />
 			{:then credits}
-				<!-- TODO make this nicer  -->
 				{#if credits.topCrew?.length > 0}
 					<div class="creators">
 						{#each credits.topCrew as crew}
 							<div>
-								<span>{crew.name}</span>
-								<span>{crew.job}</span>
+								<PersonLink
+									id={crew.id}
+									name={crew.name}
+									role={crew.job}
+									className="person-link"
+								/>
 							</div>
 						{/each}
 					</div>
