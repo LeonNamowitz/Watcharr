@@ -246,8 +246,8 @@
 			<Icon i="search" wh={19} />
 		</div>
 		<div class="btns">
-			<!-- Detailed posters only supported on own watched list currently -->
-			{#if page.url?.pathname === "/" || page.url?.pathname.startsWith("/search")}
+			<!-- Detailed posters supported on own watched list, tags and other peoples lists -->
+			{#if page.url?.pathname === "/" || page.url?.pathname.startsWith("/search") || page.url?.pathname.startsWith("/tag") || page.url?.pathname.startsWith("/lists")}
 				<button
 					class="plain other detailedView"
 					onclick={() => {
