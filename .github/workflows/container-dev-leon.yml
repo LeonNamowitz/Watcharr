@@ -5,7 +5,7 @@ on:
 
 
 env:
-  image: ${{ github.repository_owner }}/watcharr
+  image: leonnamowitz/watcharr
 
 permissions:
   contents: read
