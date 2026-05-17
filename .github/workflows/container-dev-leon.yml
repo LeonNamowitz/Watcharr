@@ -5,7 +5,7 @@ on:
 
 
 env:
-  image: leonnamowitz/watcharr
+  image: ${{ github.repository_owner }}/watcharr
 
 permissions:
   contents: read
@@ -34,3 +34,4 @@ jobs:
         tags: |
           ghcr.io/${{ env.image }}:dev-leon
           ghcr.io/${{ env.image }}:${{ github.sha }}
+          
