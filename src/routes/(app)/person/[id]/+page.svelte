@@ -140,6 +140,15 @@
 			case "Oldest":
 				credits.credits.sort((a, b) => newestOldestSort(a, b, 1));
 				break;
+			case "My Rating":
+				// Sort by the user's rating (watched.rating) if present.
+				// Items with a rating come first, highest rating at top.
+				credits.credits.sort(
+					(a, b) =>
+						((b.watched?.rating ?? -1) as number) -
+						((a.watched?.rating ?? -1) as number),
+				);
+				break;
 		}
 		credits.credits = credits.credits;
 	}
@@ -241,7 +250,7 @@
 							<DropDown
 								bind:active={sortOption}
 								placeholder="Vote count"
-								options={["Vote count", "Newest", "Oldest"]}
+								options={["Vote count", "Newest", "Oldest", "My Rating"]}
 								isDropDownItem={false}
 								showActiveElementsInOptions={true}
 							/>

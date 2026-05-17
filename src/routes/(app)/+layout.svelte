@@ -247,7 +247,7 @@
 		</div>
 		<div class="btns">
 			<!-- Detailed posters supported on own watched list, tags and other peoples lists -->
-			{#if page.url?.pathname === "/" || page.url?.pathname.startsWith("/search") || page.url?.pathname.startsWith("/tag") || page.url?.pathname.startsWith("/lists")}
+			{#if page.url?.pathname === "/" || page.url?.pathname.startsWith("/search") || page.url?.pathname.startsWith("/tag") || page.url?.pathname.startsWith("/lists") || page.url?.pathname.startsWith("/person")}
 				<button
 					class="plain other detailedView"
 					onclick={() => {
