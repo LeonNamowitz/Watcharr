@@ -14,6 +14,10 @@ import { browser } from "$app/environment";
 import { toggleTheme } from "./lib/util/theme";
 
 export const defaultSort = ["DATEADDED", "DOWN"];
+export const defaultWLDetailedView: WLDetailedViewOption[] = [
+	"statusRating",
+	"lastWatched",
+];
 
 export type WatchedListPresetId = "watchlist" | "recentlyWatched";
 
@@ -111,7 +115,7 @@ const _store: Store = $state({
 	userSettings: undefined,
 	serverFeatures: undefined,
 	follows: [],
-	wlDetailedView: [],
+	wlDetailedView: [...defaultWLDetailedView],
 	tags: [],
 });
 
@@ -285,7 +289,7 @@ export const clearAllStores = () => {
 	store.userSettings = undefined;
 	store.serverFeatures = undefined;
 	store.follows = [];
-	store.wlDetailedView = [];
+	store.wlDetailedView = [...defaultWLDetailedView];
 	store.tags = [];
 	clearActiveFilters();
 };
