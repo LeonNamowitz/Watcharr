@@ -4,7 +4,11 @@
 	import tooltip from "@/lib/actions/tooltip.js";
 	import UserAvatar from "@/lib/img/UserAvatar.svelte";
 	import { followUser, req, unfollowUser } from "@/lib/util/api.js";
-	import { clearActiveFilters, store } from "@/store.svelte.js";
+	import {
+		clearActiveFilters,
+		setWatchedListPreset,
+		store,
+	} from "@/store.svelte.js";
 	import type { Media, PaginationResponse, PublicUser } from "@/types.js";
 	import { onDestroy, untrack } from "svelte";
 	import paginatedLoader, {
@@ -167,6 +171,23 @@
 	</div>
 </div>
 
+<div class="type-toggle">
+	<button
+		class="plain"
+		data-active={store.activeWatchedListPreset === "recentlyWatched"}
+		onclick={() => setWatchedListPreset("recentlyWatched")}
+	>
+		<Icon i="reel" wh={18} /> Recently Finished
+	</button>
+	<button
+		class="plain"
+		data-active={store.activeWatchedListPreset === "watchlist"}
+		onclick={() => setWatchedListPreset("watchlist")}
+	>
+		<Icon i="film" wh={18} /> Watchlist
+	</button>
+</div>
+
 <PosterList>
 	{#if dataLoader.state.data?.length > 0}
 		{#each dataLoader.state.data as w, i (`${i}-${w.type}`)}
@@ -231,6 +252,42 @@
 
 	button {
 		width: max-content;
+	}
+
+	.type-toggle {
+		display: flex;
+		flex-flow: row;
+		flex-wrap: wrap;
+		gap: 10px;
+		justify-content: center;
+		margin: 0 auto 15px auto;
+
+		button {
+			display: flex;
+			flex-flow: row;
+			align-items: center;
+			gap: 8px;
+			padding: 8px 14px;
+			border-radius: 8px;
+			font-size: 14px;
+			color: $text-color;
+			fill: $text-color;
+			transition:
+				background-color 150ms ease,
+				color 150ms ease,
+				outline 150ms ease;
+
+			&:hover,
+			&[data-active="true"] {
+				color: $bg-color;
+				fill: $bg-color;
+				background-color: $accent-color-hover;
+			}
+
+			&[data-active="true"] {
+				outline: 3px solid $accent-color;
+			}
+		}
 	}
 
 	textarea {
