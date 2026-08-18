@@ -246,14 +246,14 @@ func (r *Router) GetPersonCredits(c *gin.Context) {
 	}
 	creditsType := strings.ToLower(c.Query("creditsType"))
 	if creditsType == "" {
-		person, err := r.cs.PersonDetails(c.Param("id"))
+		person, err := r.tmdb.PersonDetails(c.Param("id"))
 		if err != nil {
 			c.JSON(http.StatusBadRequest, router.ErrorResponse{Error: err.Error()})
 			return
 		}
 		creditsType = strings.ToLower(person.KnownForDepartment)
 	}
-	content, err := r.cs.PersonCredits(c.Param("id"))
+	content, err := r.tmdb.PersonCredits(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, router.ErrorResponse{Error: err.Error()})
 		return

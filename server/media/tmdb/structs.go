@@ -691,7 +691,7 @@ func (t *PersonDetails) AsPersonDetailsResponse() domain.PersonDetailsResponse {
 // Cast for actors, crew includes everything else
 //
 
-type TMDBPersonCombinedCredits struct {
+type PersonCombinedCredits struct {
 	ID   int                                   `json:"id"`
 	Cast []PersonCombinedCreditsCastResult `json:"cast"`
 	Crew []PersonCombinedCreditsCrewResult `json:"crew"`
