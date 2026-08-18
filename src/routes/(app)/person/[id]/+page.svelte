@@ -75,13 +75,23 @@
 	}
 
 	async function getPerson(id: number) {
-		return await req.get<PersonDetailsResponse>(`/content/person/${id}`);
+		return (await req.get<PersonDetailsResponse>(`/content/person/${id}`));
 	}
 
 	async function updatePersonCredits() {
-		credits = await req.get<PersonCreditsResponse>(
-			`/content/person/${data.personId}/credits`,
+		credits = (
+			await req.get<PersonCreditsResponse>(
+				`/content/person/${data.personId}/credits`,
+				{
+					params: { creditsType }
+				},
+			)
 		);
+		const options = getCreditsTypeOptions();
+		if (!options.includes(creditsType)) {
+			creditsType = options[0];
+			return;
+		}
 		credits.credits = credits.credits?.filter(
 			(v, i, a) => a.findIndex((t) => t.ids.tmdb === v.ids.tmdb) === i,
 		); // remove duplicate entries. If an actor has multiple roles in a single movie, it would otherwise show up multiple times

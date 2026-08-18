@@ -29,6 +29,7 @@ Conventions & expectations
 What the agent can/do
 ---------------------
 - Suggest code changes limited to files matched by `applyTo` patterns below.
+- Keep code in line with existing repo structure, style, and conventions.
 - Propose small, self-contained refactors and fixes with tests or instructions to run them where applicable.
 - Create or update documentation that links to canonical README/CONTRIBUTING rather than duplicating content.
 - Avoid touching secrets, large binary/media files, or deployment credentials.
