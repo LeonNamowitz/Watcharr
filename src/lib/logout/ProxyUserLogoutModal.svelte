@@ -1,11 +1,12 @@
 <script lang="ts">
 	import { onMount } from "svelte";
 	import Modal from "../Modal.svelte";
-	import axios from "axios";
 	import type { TrustedHeaderAuthLogoutDetailsResponse } from "@/types";
 	import Spinner from "../Spinner.svelte";
 	import { clearWatcharrData } from ".";
 	import { goto } from "$app/navigation";
+	import { req } from "../util/api";
+	import { resolve } from "$app/paths";
 
 	interface Props {
 		onClose: () => void;
@@ -18,10 +19,10 @@
 
 	onMount(async () => {
 		try {
-			const r = await axios.get<TrustedHeaderAuthLogoutDetailsResponse>(
+			const r = await req.get<TrustedHeaderAuthLogoutDetailsResponse>(
 				"/auth/proxy_logout_details",
 			);
-			logoutUrl = r?.data?.logoutUrl;
+			logoutUrl = r?.logoutUrl;
 			if (!logoutUrl?.toLowerCase()?.startsWith("http")) {
 				// If no protocol in logoutUrl, set https
 				logoutUrl = `https://${logoutUrl}`;
@@ -34,7 +35,7 @@
 
 	function logout() {
 		clearWatcharrData();
-		goto("/login?noAuto=1");
+		goto(resolve("/login?noAuto=1"));
 	}
 
 	function proxyLogout() {

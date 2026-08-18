@@ -1,5 +1,5 @@
 <script lang="ts">
-	import axios from "axios";
+	import { req } from "../util/api";
 	import Modal from "../Modal.svelte";
 	import type {
 		ArrRequestResponse,
@@ -30,7 +30,6 @@
 
 	let servarrs: SonarrSettingsPublicResponseResult[] | undefined = $state();
 	let selectedServarrIndex: number = $state(0);
-	let inputsDisabled = true;
 	let selectedServerCfg: SonarrTestResponse | undefined = $state();
 	let seasonItems: ListBoxItem[] = $state(
 		content.seasons
@@ -50,15 +49,13 @@
 
 	async function getServers() {
 		try {
-			inputsDisabled = true;
-			const r = await axios.get("/arr/son");
-			if (r.data?.length > 0) {
-				servarrs = r.data;
+			const r = await req.get<SonarrSettingsPublicResponseResult[]>("/arr/son");
+			if (r.length > 0) {
+				servarrs = r;
 				selectedServarrIndex = 0;
 			} else {
 				notify({ text: "No servers found", type: "error" });
 			}
-			inputsDisabled = false;
 			processOriginalRequest();
 		} catch (err) {
 			console.error("Failed to get servers!", err);
@@ -68,10 +65,8 @@
 
 	async function getConfig(name: string) {
 		try {
-			inputsDisabled = true;
-			const r = await axios.get<SonarrTestResponse>(`/arr/son/config/${name}`);
-			selectedServerCfg = r.data;
-			inputsDisabled = false;
+			const r = await req.get<SonarrTestResponse>(`/arr/son/config/${name}`);
+			selectedServerCfg = r;
 		} catch (err) {
 			console.error("Failed to get config!", err);
 			notify({ text: "Failed to load config", type: "error" });
@@ -105,7 +100,7 @@
 				notify({ id: nid, text: "No Root Folder Found", type: "error" });
 				return;
 			}
-			const resp = await axios.post(
+			const resp = await req.post<ArrRequestResponse>(
 				`/arr/son/request${approveMode && originalRequest ? `/approve/${originalRequest.id}` : ""}`,
 				{
 					serverName: server.name,
@@ -128,9 +123,9 @@
 				},
 			);
 			addRequestRunning = false;
-			if (resp?.data) {
+			if (resp) {
 				notify({ id: nid, text: "Request complete", type: "success" });
-				onClose(resp.data);
+				onClose(resp);
 			}
 		} catch (err) {
 			console.error("content request failed!", err);

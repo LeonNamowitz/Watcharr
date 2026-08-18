@@ -25,10 +25,11 @@
 		type Media,
 		type WatchedStatus,
 	} from "@/types";
-	import axios from "axios";
+	import { req } from "@/lib/util/api";
 	import { onDestroy } from "svelte";
 	import papa from "papaparse";
 	import Status from "@/lib/Status.svelte";
+	import { resolve } from "$app/paths";
 
 	interface ImportedListItemMultiProblem {
 		original: ImportedList;
@@ -40,6 +41,7 @@
 	let isImporting = $state(false);
 	let importText = $state("");
 	let cancelled = $state(false);
+	let importTableEl: HTMLTableElement | undefined = $state();
 
 	onDestroy(() => {
 		cancelled = true;
@@ -60,14 +62,13 @@
 	// Set when user clicks 'Change Statuses' button for the change all
 	// statuses modal.
 	let changeAllStatusesModalCb:
-		| ((newStatus?: WatchedStatus) => void)
-		| undefined = $state();
+		((newStatus?: WatchedStatus) => void) | undefined = $state();
 
 	async function getList() {
 		const list = store.importedList;
 		if (!list) {
 			console.log("import/process, no list, returning to /import");
-			goto("/import");
+			goto(resolve("/import"));
 			return;
 		}
 		console.log("getList", list);
@@ -76,18 +77,34 @@
 			// Regex to match a year in between brackets,
 			// which we assume is the release year of content.
 			const yearRegex = new RegExp(/\([0-9]{4}\)/);
+			// Matches supported rating between square brackets.
+			// Supports (the sixes can be any number 0-9): [6], [6.6], and [10].
+			const ratingRegex = new RegExp(/\[([0-9](?:\.[0-9])?|10)\]/);
 			const s = list.data.split("\n");
 			for (let i = 0; i < s.length; i++) {
-				const el = s[i]?.trim();
-				if (el) {
-					const l: ImportedList = { name: el };
-					const year = el.match(yearRegex);
-					if (year && year.length > 0) {
-						l.year = Number(year[0].replaceAll(/\(|\)/g, ""));
-						l.name = l.name?.replace(yearRegex, "").trim();
-					}
-					rList.push(l);
+				if (!s[i]) {
+					console.warn("getList: ignoring entry:", s[i]);
+					continue;
 				}
+				const l: ImportedList = {};
+				l.name = s[i];
+				// Try extracting a year.
+				const year = l.name.match(yearRegex);
+				if (year && year.length > 0) {
+					l.year = Number(year[0].replaceAll(/\(|\)/g, ""));
+					l.name = l.name.replace(yearRegex, "");
+				}
+				// Try extracting a rating.
+				const rating = l.name.match(ratingRegex);
+				if (rating && rating.length > 0) {
+					// console.log("found rating", rating);
+					l.rating = Number(rating[1]);
+					if (typeof rating.index === "number") {
+						l.name = l.name.slice(0, rating.index);
+					}
+				}
+				l.name = l.name.trim();
+				rList.push(l);
 			}
 		} else if (list?.type === "tmdb") {
 			importText = "TMDB";
@@ -95,6 +112,7 @@
 			console.debug("parsed csv", s);
 			for (let i = 0; i < s.data.length; i++) {
 				try {
+					// eslint-disable-next-line @typescript-eslint/no-explicit-any
 					const el = s.data[i] as any;
 					if (el) {
 						// Skip if no name or tmdb id
@@ -136,6 +154,7 @@
 			// there are common keys between these types that we use below so should
 			// be okay with importing either.
 			importText = "IMDb";
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
 			const s = papa.parse<any>(list.data.trim(), { header: true });
 			console.debug("parsed csv", s);
 			let anySkipped = false;
@@ -153,6 +172,7 @@
 			});
 			for (let i = 0; i < s.data.length; i++) {
 				try {
+					// eslint-disable-next-line @typescript-eslint/no-explicit-any
 					const el = s.data[i] as any;
 					if (el) {
 						const imdbId = el["Const"];
@@ -337,7 +357,10 @@
 					try {
 						const startDateNode = animeNode.querySelector("my_start_date");
 						const finishDateNode = animeNode.querySelector("my_finish_date");
-						if (startDateNode?.textContent) {
+						if (
+							startDateNode?.textContent &&
+							startDateNode?.textContent != "0000-00-00"
+						) {
 							// For start date, we can simply add the activity manually.
 							l.activity = [
 								// We don't need all the data when importing activity.
@@ -347,9 +370,13 @@
 									data: "WATCHING",
 									customDate: new Date(startDateNode.textContent),
 								},
+								// eslint-disable-next-line @typescript-eslint/no-explicit-any
 							] as any[];
 						}
-						if (finishDateNode?.textContent) {
+						if (
+							finishDateNode?.textContent &&
+							finishDateNode?.textContent != "0000-00-00"
+						) {
 							l.datesWatched = [new Date(finishDateNode.textContent)];
 						}
 					} catch (err) {
@@ -398,7 +425,6 @@
 				});
 			}
 		}
-		// TODO: remove duplicate names in list
 	}
 
 	function addRow(
@@ -423,8 +449,47 @@
 		rList = rList;
 	}
 
+	/**
+	 * inputs that have a `data-validateme` property, we will validate with the
+	 * browser.
+	 */
+	function validatableInputsAreValid(): boolean {
+		if (!importTableEl) {
+			// Somehow the table isn't defined, i guess allow continuing so we
+			// dont block.
+			console.warn("validatableInputsAreValid: There is no table element.");
+			return true;
+		}
+		const inputs = importTableEl.querySelectorAll<HTMLInputElement>(
+			"tbody input[data-validateme]",
+		);
+		if (inputs.length <= 0) {
+			console.warn("validatableInputsAreValid: No inputs found.");
+			return true;
+		}
+		for (const input of inputs) {
+			if (!input.reportValidity()) {
+				// Stop the for loop after we hit one input that is invalid.
+				// No need to continue after we know at least one is invalid.
+				console.error("validatableInputsAreValid: Invalid input found.", input);
+				return false;
+			}
+		}
+		return true;
+	}
+
 	async function startImport() {
-		console.log(rList);
+		if (!validatableInputsAreValid()) {
+			console.warn(
+				"startImport: Some fields are not valid, not starting import!",
+			);
+			notify({
+				type: "error",
+				text: "An error was found in one of the inputs, please fix it and try starting the import again.",
+			});
+			return;
+		}
+		console.log("startImport: Starting.", rList);
 		isImporting = true;
 		window.scrollTo(0, 0);
 		for (let i = 0; i < rList.length; i++) {
@@ -437,6 +502,7 @@
 				console.log("Importing", li);
 				await doImport(li);
 			} catch (err) {
+				li.state = ImportResponseType.IMPORT_FAILED;
 				console.error("Failed to import item:", li, "reason:", err);
 				notify({
 					type: "error",
@@ -456,14 +522,14 @@
 		) {
 			// Some items failed.. go to some-failed
 			store.parsedImportedList = rList;
-			goto("/import/some-failed");
+			goto(resolve("/import/some-failed"));
 		} else {
 			notify({
 				type: "success",
-				text: "All content successfully imported! Try refreshing if you are missing data.",
+				text: "All content successfully imported!",
 				time: 15000,
 			});
-			goto("/");
+			goto(resolve("/"));
 		}
 	}
 
@@ -473,11 +539,11 @@
 			rList = rList;
 			return;
 		}
-		const resp = await axios.post<ImportResponse>("/import", item);
+		const resp = await req.post<ImportResponse>("/import", item);
 		return new Promise((res, rej) => {
-			if (resp.data.type === ImportResponseType.IMPORT_MULTI) {
-				console.log("Import found multiple responses for content", resp.data);
-				let results = resp.data.results;
+			if (resp.type === ImportResponseType.IMPORT_MULTI) {
+				console.log("Import found multiple responses for content", resp);
+				let results = resp.results;
 				if (!results || results.length <= 0) {
 					item.state = ImportResponseType.IMPORT_NOTFOUND;
 					rList = rList;
@@ -515,9 +581,9 @@
 						}
 					},
 				};
-			} else if (resp.data.type === ImportResponseType.IMPORT_SUCCESS) {
+			} else if (resp.type === ImportResponseType.IMPORT_SUCCESS) {
 				item.state = ImportResponseType.IMPORT_SUCCESS;
-				const w = resp.data.watchedEntry;
+				const w = resp.watchedEntry;
 				if (w) {
 					const release = w.media?.releaseDate;
 					if (release) item.year = new Date(Date.parse(release)).getFullYear();
@@ -527,7 +593,7 @@
 				rList = rList;
 				res(0);
 			} else {
-				item.state = resp.data.type;
+				item.state = resp.type;
 				rList = rList;
 				res(0);
 			}
@@ -587,128 +653,151 @@
 						You can fix any failed imports when the process completes.
 					{/if}
 				</h5>
-				<table class={isImporting ? "is-importing" : ""}>
-					<thead>
-						<tr>
-							{#if isImporting}
-								<th class="loading-col"></th>
-							{/if}
-							<th>Name</th>
-							<th>Year</th>
-							<th>Type</th>
-							<th>Status</th>
-							{#if !isImporting}
-								<th></th>
-							{/if}
-						</tr>
-					</thead>
-					<tbody>
-						{#each rList as l}
+				<div class="table-wrap">
+					<table
+						bind:this={importTableEl}
+						class={isImporting ? "is-importing" : ""}
+					>
+						<thead>
 							<tr>
 								{#if isImporting}
-									<td class="icon-cell">
-										<div>
-											{#if !l.state}
-												<SpinnerTiny style="width: 13px;" />
-											{:else if l.state === ImportResponseType.IMPORT_SUCCESS}
-												<Icon i="check" wh={22} />
-											{:else if l.state === ImportResponseType.IMPORT_NOTFOUND}
-												<Icon i="close" wh={22} />
-											{:else if l.state === ImportResponseType.IMPORT_FAILED}
-												<Icon i="close" wh={22} />
-											{:else if l.state === ImportResponseType.IMPORT_EXISTS}
-												<Icon i="check" wh={22} />
-											{/if}
-										</div>
-									</td>
+									<th class="loading-col"></th>
 								{/if}
-								<td
-									><input
-										class="plain"
-										bind:value={l.name}
-										disabled={isImporting}
-									/></td
-								>
-								<td class="year">
-									<input
-										class="plain"
-										bind:value={l.year}
-										placeholder="YYYY"
-										type="number"
-										disabled={isImporting}
-									/>
-								</td>
-								<td class="type">
-									<DropDown
-										options={dropDownSupportedTypes}
-										bind:active={l.type}
-										placeholder="Type"
-										blendIn={true}
-										disabled={isImporting}
-									/>
-								</td>
-								<td class="type">
-									<DropDown
-										options={[
-											"FINISHED",
-											"PLANNED",
-											"WATCHING",
-											"HOLD",
-											"DROPPED",
-										]}
-										bind:active={l.status}
-										placeholder="Status"
-										blendIn={true}
-										disabled={isImporting}
-									/>
-								</td>
+								<th>Name</th>
+								<th>Year</th>
+								<th>Type</th>
+								<th>Status</th>
+								<th>Rating</th>
 								{#if !isImporting}
-									<td>
-										<button
-											class="plain delete"
-											onclick={() => {
-												removeRow(l);
-											}}
-										>
-											<Icon i="close" wh="25" />
-										</button>
-									</td>
+									<th></th>
 								{/if}
 							</tr>
-						{/each}
-						{#if !isImporting}
-							<tr>
-								<td
-									><input
-										class="plain"
-										placeholder="Name"
-										onblur={addRow}
-									/></td
-								>
-								<td class="year">
-									<input
-										class="plain"
-										id="addYear"
-										placeholder="YYYY"
-										type="number"
-									/>
-								</td>
-								<td class="type"></td>
-								<td class="status"></td>
-								<td></td>
-							</tr>
-						{/if}
-					</tbody>
-				</table>
+						</thead>
+						<tbody>
+							<!-- TODO: Fix this to use a keyed each somehow (need unique id for key) -->
+							<!-- eslint-disable-next-line svelte/require-each-key -->
+							{#each rList as l}
+								<tr>
+									{#if isImporting}
+										<td class="icon-cell">
+											<div>
+												{#if !l.state}
+													<SpinnerTiny />
+												{:else if l.state === ImportResponseType.IMPORT_SUCCESS}
+													<Icon i="check" wh={22} />
+												{:else if l.state === ImportResponseType.IMPORT_NOTFOUND}
+													<Icon i="close" wh={22} />
+												{:else if l.state === ImportResponseType.IMPORT_FAILED}
+													<Icon i="close" wh={22} />
+												{:else if l.state === ImportResponseType.IMPORT_EXISTS}
+													<Icon i="check" wh={22} />
+												{/if}
+											</div>
+										</td>
+									{/if}
+									<td class="name">
+										<input
+											class="plain"
+											bind:value={l.name}
+											disabled={isImporting}
+										/>
+									</td>
+									<td class="year">
+										<input
+											class="plain"
+											bind:value={l.year}
+											placeholder="YYYY"
+											type="number"
+											disabled={isImporting}
+										/>
+									</td>
+									<td class="type">
+										<DropDown
+											options={dropDownSupportedTypes}
+											bind:active={l.type}
+											placeholder="Type"
+											blendIn={true}
+											disabled={isImporting}
+										/>
+									</td>
+									<td class="status">
+										<DropDown
+											options={[
+												"FINISHED",
+												"PLANNED",
+												"WATCHING",
+												"HOLD",
+												"DROPPED",
+											]}
+											bind:active={l.status}
+											placeholder="Status"
+											blendIn={true}
+											disabled={isImporting}
+										/>
+									</td>
+									<td class="rating">
+										<input
+											class="plain"
+											data-validateme
+											bind:value={l.rating}
+											placeholder="0"
+											type="number"
+											min="0"
+											max="10"
+											step="0.1"
+											disabled={isImporting}
+										/>
+									</td>
+									{#if !isImporting}
+										<td>
+											<button
+												class="plain delete"
+												onclick={() => {
+													removeRow(l);
+												}}
+											>
+												<Icon i="close" wh="25" />
+											</button>
+										</td>
+									{/if}
+								</tr>
+							{/each}
+							{#if !isImporting}
+								<tr>
+									<td
+										><input
+											class="plain"
+											placeholder="Name"
+											onblur={addRow}
+										/></td
+									>
+									<td class="year">
+										<input
+											class="plain"
+											id="addYear"
+											placeholder="YYYY"
+											type="number"
+										/>
+									</td>
+									<td class="type"></td>
+									<td class="status"></td>
+									<td class="rating"></td>
+									<td></td>
+								</tr>
+							{/if}
+						</tbody>
+					</table>
+				</div>
 				<div class="btns">
-					<button onclick={() => goto("/import")}><Icon i="arrow" />Back</button
-					>
-					<button onclick={() => changeAllStatuses()} disabled={isImporting}>
-						Change Statuses
+					<button onclick={() => goto(resolve("/import"))}>
+						<Icon i="arrow" />Back
 					</button>
-					<button onclick={startImport} disabled={isImporting}
-						>Start Importing</button
-					>
+					<button onclick={() => changeAllStatuses()} disabled={isImporting}>
+						Change All Statuses
+					</button>
+					<button onclick={startImport} disabled={isImporting}>
+						Start Importing
+					</button>
 				</div>
 				{#if typeof changeAllStatusesModalCb === "function"}
 					<Modal
@@ -742,7 +831,7 @@
 			}}
 		>
 			<PosterList type="vertical">
-				{#each importMultiItem.results as r}
+				{#each importMultiItem.results as r (r.ids)}
 					<Poster
 						media={r}
 						small={true}
@@ -805,8 +894,7 @@
 			display: flex;
 			flex-flow: column;
 			min-width: 400px;
-			max-width: 600px;
-			overflow: hidden;
+			max-width: 1200px;
 
 			@media screen and (max-width: 410px) {
 				min-width: 100%;
@@ -814,14 +902,28 @@
 		}
 	}
 
+	.table-wrap {
+		overflow: auto;
+		margin-top: 20px;
+	}
+
 	table {
 		td {
+			&.name {
+				width: 100%;
+			}
+
 			&.year {
 				width: 70px;
+				min-width: 67px;
 			}
 
 			&.type {
 				width: 120px;
+			}
+
+			&.rating {
+				width: 82px;
 			}
 		}
 	}

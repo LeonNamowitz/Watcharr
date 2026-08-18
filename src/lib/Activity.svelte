@@ -11,16 +11,13 @@
 
 	interface Props {
 		activity: Activity[] | undefined;
+		onRemoved: (activity: Activity) => void;
 	}
 
-	let {
-		// Bindable so we can update/delete activity and reflect
-		// the change upstream.
-		activity = $bindable(undefined),
-	}: Props = $props();
+	let { activity = undefined, onRemoved }: Props = $props();
 
 	let clickedActivity: Activity | undefined = $state();
-	let groupedActivities: { [index: string]: any } = $derived(
+	let groupedActivities: { [index: string]: Activity[] } = $derived(
 		getGroupedActivity(activity),
 	);
 
@@ -176,7 +173,7 @@
 		const a = activities?.sort(
 			(a, b) => getCreatedAtVis(b) - getCreatedAtVis(a),
 		);
-		let grouped: { [index: string]: any } = {};
+		let grouped: { [index: string]: Activity[] } = {};
 		if (a) {
 			for (let i = 0; i < a.length; i++) {
 				const activity = a[i];
@@ -223,14 +220,14 @@
 			const ai = activity.findIndex((a) => a.id === activityId);
 			activity[ai] = updatedActivity;
 		}}
-		onRemoved={(activityId) => {
+		onRemoved={(a) => {
 			if (!activity) {
 				console.error(
 					"ActivityEditor->onRemoved: 'activity' doesn't exist somehow..",
 				);
 				return;
 			}
-			activity = activity.filter((a) => a.id !== activityId);
+			onRemoved(a);
 		}}
 	/>
 {/if}
@@ -239,10 +236,10 @@
 	<h2>Activity</h2>
 	{#if groupedActivities && Object.keys(groupedActivities).length > 0}
 		<ul>
-			{#each Object.keys(groupedActivities) as k}
+			{#each Object.keys(groupedActivities) as k (k)}
 				<h3>{k}</h3>
 
-				{#each groupedActivities[k] as a}
+				{#each groupedActivities[k] as a (a.id)}
 					{@const d = new Date(getCreatedAtVis(a))}
 					<li>
 						<button class="plain" onclick={() => openEditor(a)}>
@@ -257,11 +254,22 @@
 										data && data.reason
 											? `Automated because ${data.reason}`
 											: "Completed by an automation.",
-									pos: "bot",
+									pos: "top",
 								}}
 								style="width: 20px; height: 20px;"
 							>
 								<Icon i="sparkles" wh={20} />
+							</i>
+						{/if}
+						{#if a.countAsPlay}
+							<i
+								use:tooltip={{
+									text: "Counts as a Play.",
+									pos: "top",
+								}}
+								style="width: 20px; height: 20px;"
+							>
+								<Icon i="play" wh={20} />
 							</i>
 						{/if}
 					</li>

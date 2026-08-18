@@ -46,7 +46,7 @@ type Activity struct {
 	// secured (users can only view their own activities).
 	UserID uint `json:"-" gorm:"not null"`
 	// ID of watched list item this activity is linked to.
-	WatchedID uint `json:"watchedId" gorm:"not null"`
+	WatchedID uint `json:"watchedId" gorm:"not null;index"`
 	// Type of activity.
 	Type ActivityType `json:"type" gorm:"not null"`
 	// Holds custom data (ex, if rating changed, this can
@@ -54,4 +54,18 @@ type Activity struct {
 	Data string `json:"data" gorm:"not null"`
 	// Custom date for the activity, that the user can define.
 	CustomDate *time.Time `json:"customDate,omitempty"`
+	// Count this Activity as a Play?
+	// Currently this was the best way I could see forward for implementing
+	// counting plays of media that doesn't involve inefficient querying of
+	// the actitivties table (or a whole new table, which would create extra
+	// complexities itself, ie, plays/activity showing different records).
+	// We write to this field when creating the activity to count is as a play
+	// or not (ie when we create STATUS CHANGE activities with status of
+	// FINISHED, imports, etc).
+	// We won't support the user (or the system) modifying this value after
+	// creation; if the user wants to delete a 'Play', they should delete the
+	// activity.
+	// Indexed (check migrations) to make search faster, since we frequently
+	// do it over the whole table for watched sorting at the moment.
+	CountAsPlay bool `json:"countAsPlay"`
 }

@@ -1,13 +1,13 @@
 <script lang="ts">
+	import { resolve } from "$app/paths";
 	import Error from "@/lib/Error.svelte";
 	import Spinner from "@/lib/Spinner.svelte";
 	import RequestMovie from "@/lib/request/RequestMovie.svelte";
 	import RequestShow from "@/lib/request/RequestShow.svelte";
-	import { baseURL } from "@/lib/util/api";
+	import { baseURL, req } from "@/lib/util/api";
 	import { toRelativeDate } from "@/lib/util/helpers";
 	import { notify } from "@/lib/util/notify";
 	import { type ArrRequestResponse, type Media } from "@/types";
-	import axios from "axios";
 
 	let allRequests: ArrRequestResponse[] | undefined = $state();
 	let showBeingApproved: Media | undefined = $state();
@@ -16,8 +16,7 @@
 
 	async function getRequests() {
 		try {
-			allRequests = (await axios.get<ArrRequestResponse[]>(`/arr/request/`))
-				.data;
+			allRequests = await req.get<ArrRequestResponse[]>(`/arr/request/`);
 			if (allRequests?.length > 0) {
 				allRequests = allRequests?.sort((a, b) => {
 					if (b.status === "PENDING") return 1;
@@ -33,7 +32,7 @@
 
 	async function deny(r: ArrRequestResponse) {
 		try {
-			await axios.post(`/arr/request/deny/${r.id}`);
+			await req.post(`/arr/request/deny/${r.id}`);
 			getRequests();
 		} catch (err) {
 			console.error("Failed to deny request!", err);
@@ -44,13 +43,13 @@
 	async function approve(r: ArrRequestResponse) {
 		console.debug("Approving request:", r);
 		if (r.content.type === "tv") {
-			showBeingApproved = (
-				await axios.get<Media>(`/content/tv/${r.content.tmdbId}`)
-			).data;
+			showBeingApproved = await req.get<Media>(
+				`/content/tv/${r.content.tmdbId}`,
+			);
 		} else if (r.content.type === "movie") {
-			movieBeingApproved = (
-				await axios.get<Media>(`/content/movie/${r.content.tmdbId}`)
-			).data;
+			movieBeingApproved = await req.get<Media>(
+				`/content/movie/${r.content.tmdbId}`,
+			);
 		} else {
 			notify({
 				type: "error",
@@ -71,7 +70,7 @@
 			<Spinner />
 		{:then}
 			<div class="request-container">
-				{#each allRequests as r}
+				{#each allRequests as r (r.id)}
 					<div class={`request ${r.content.type}`}>
 						<div class="poster">
 							<img
@@ -91,7 +90,9 @@
 							<h2 class="norm">
 								<a
 									data-sveltekit-preload-data="tap"
-									href={`/${r.content.type}/${r.content.tmdbId}`}
+									href={r.content.type !== "tv_episode"
+										? resolve(`/${r.content.type}/${r.content.tmdbId}`)
+										: undefined}
 									class="plain"
 								>
 									{r.content.title}

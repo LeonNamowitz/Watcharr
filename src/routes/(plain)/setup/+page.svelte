@@ -1,30 +1,31 @@
 <script lang="ts">
-	import { preventDefault } from "svelte/legacy";
-
 	import { goto } from "$app/navigation";
-	import type { AvailableAuthProviders } from "@/types";
-	import { noAuthAxios } from "@/lib/util/api";
+	import type { AuthResponse, AvailableAuthProviders } from "@/types";
 	import { onMount } from "svelte";
 	import { notify, unNotify } from "@/lib/util/notify";
+	import { noAuthReq } from "@/lib/util/api";
+	import { ReqerError } from "@/lib/util/fetch";
+	import { resolve } from "$app/paths";
 
-	let error: string = $state();
+	let error: string | undefined = $state();
 
 	onMount(() => {
 		if (localStorage.getItem("token")) {
-			goto("/");
+			goto(resolve("/"));
 		}
 
-		noAuthAxios.get<AvailableAuthProviders>("/auth/available").then((r) => {
-			if (r?.data) {
-				if (!r?.data?.isInSetup) {
+		noAuthReq.get<AvailableAuthProviders>("/auth/available").then((r) => {
+			if (r) {
+				if (!r.isInSetup) {
 					console.log("Server not in setup.. navigating to login page.");
-					goto("/login");
+					goto(resolve("/(plain)/login"));
 				}
 			}
 		});
 	});
 
 	function handleLogin(ev: SubmitEvent) {
+		ev.preventDefault();
 		const fd = new FormData(ev.target! as HTMLFormElement);
 		const user = fd.get("username");
 		const pass = fd.get("password");
@@ -35,25 +36,21 @@
 		}
 
 		const nid = notify({ text: "Setting Up Admin User", type: "loading" });
-		noAuthAxios
-			.post("/setup/create_admin", {
+		noAuthReq
+			.post<AuthResponse>("/setup/create_admin", {
 				username: user,
 				password: pass,
 			})
 			.then((resp) => {
-				if (resp.data?.token) {
+				if (resp.token) {
 					console.log("Received token... logging in.");
-					localStorage.setItem("token", resp.data.token);
-					goto("/");
+					localStorage.setItem("token", resp.token);
+					goto(resolve("/"));
 					notify({ id: nid, text: `Welcome ${user}!`, type: "success" });
 				}
 			})
 			.catch((err) => {
-				if (err.response) {
-					error = err.response.data.error;
-				} else {
-					error = err.message;
-				}
+				error = ReqerError.getMsg(err, "Setting up user failed");
 				unNotify(nid);
 			});
 	}
@@ -74,7 +71,7 @@
 			<span class="error">{error}!</span>
 		{/if}
 
-		<form onsubmit={preventDefault(handleLogin)}>
+		<form onsubmit={handleLogin}>
 			<label for="username">Username</label>
 			<input type="text" name="username" placeholder="Username" />
 

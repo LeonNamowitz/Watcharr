@@ -7,20 +7,32 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"time"
+
+	gocache "github.com/robfig/go-cache"
+	"github.com/sbondCo/Watcharr/database/entity"
 )
 
-// TODO rewrite tmdb to work like how igdb package was made
-// TODO The *WithWatched structs likely need to go in the watched package (or with go 1.25 can we
-// fix needing so many extra structs for the *WithWatched types and functions)
+var ContentStore = gocache.New(time.Hour*24, time.Minute)
+
+type ContentProvider interface {
+	CacheContentShow(content ShowDetails, onlyUpdate bool) (entity.Content, error)
+	CacheContentMovie(content MovieDetails, onlyUpdate bool) (entity.Content, error)
+}
 
 type TMDB struct {
-	Key string
+	Key             string
+	contentProvider ContentProvider
 }
 
 func NewTMDB(key string) *TMDB {
 	return &TMDB{
 		Key: key,
 	}
+}
+
+func (t *TMDB) AddContentProvider(contentProvider ContentProvider) {
+	t.contentProvider = contentProvider
 }
 
 func (t *TMDB) GetKey() string {
@@ -30,7 +42,7 @@ func (t *TMDB) GetKey() string {
 	return "d047fa61d926371f277e7a83c9c4ff2c"
 }
 
-func (t *TMDB) APIRequest(ep string, p map[string]string) ([]byte, error) {
+func (t *TMDB) apiRequest(ep string, p map[string]string) ([]byte, error) {
 	slog.Debug("tmdbAPIRequest", "endpoint", ep, "params", p)
 	base, err := url.Parse("https://api.themoviedb.org/3")
 	if err != nil {
@@ -68,8 +80,8 @@ func (t *TMDB) APIRequest(ep string, p map[string]string) ([]byte, error) {
 	return body, nil
 }
 
-func (t *TMDB) Request(ep string, p map[string]string, resp interface{}) error {
-	body, err := t.APIRequest(ep, p)
+func (t *TMDB) req(ep string, p map[string]string, resp interface{}) error {
+	body, err := t.apiRequest(ep, p)
 	if err != nil {
 		return err
 	}

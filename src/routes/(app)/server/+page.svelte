@@ -8,13 +8,12 @@
 		ServerConfig,
 		SonarrSettings,
 	} from "@/types";
-	import axios from "axios";
 	import SonarrModal from "./modals/SonarrModal.svelte";
 	import SettingsList from "@/lib/settings/SettingsList.svelte";
 	import Setting from "@/lib/settings/Setting.svelte";
 	import SettingButton from "@/lib/settings/SettingButton.svelte";
 	import RadarrModal from "./modals/RadarrModal.svelte";
-	import { getServerFeatures } from "@/lib/util/api";
+	import { getServerFeatures, req } from "@/lib/util/api";
 	import Stats from "@/lib/stats/Stats.svelte";
 	import Error from "@/lib/Error.svelte";
 	import Stat from "@/lib/stats/Stat.svelte";
@@ -22,6 +21,7 @@
 	import RegionDropDown from "@/lib/RegionDropDown.svelte";
 	import TaskScheduleModal from "./modals/TaskScheduleModal.svelte";
 	import TrustedHeaderAuthModal from "./modals/TrustedHeaderAuthModal.svelte";
+	import { resolve } from "$app/paths";
 
 	let serverConfig: ServerConfig | undefined = $state();
 	let jellyfinOrEmby = $derived(serverConfig?.USE_EMBY ? "Emby" : "Jellyfin");
@@ -44,13 +44,13 @@
 	let useEmbyDisabled = $state(false);
 
 	async function getServerConfig() {
-		serverConfig = (await axios.get(`/server/config`)).data as ServerConfig;
+		serverConfig = await req.get<ServerConfig>(`/server/config`);
 	}
 
 	export function updateServerConfig<K extends keyof ServerConfig>(
 		name: K,
 		value: ServerConfig[K],
-		done?: (respData?: any) => void,
+		done?: (respData?: object) => void,
 	) {
 		if (!serverConfig) {
 			console.error("updateServerConfig: No server config to update!");
@@ -64,13 +64,13 @@
 		if (name === "PLEX_HOST") {
 			ep = "/server/config/plex_host";
 		}
-		axios
-			.post(ep, { key: name, value: value })
+		req
+			.postWhole<object>(ep, { key: name, value: value })
 			.then((r) => {
 				if (r.status === 200) {
 					serverConfig![name] = value;
 					notify({ id: nid, type: "success", text: "Updated" });
-					if (typeof done !== "undefined") done(r?.data);
+					if (typeof done !== "undefined") done(r?.body);
 				}
 			})
 			.catch((err) => {
@@ -93,7 +93,7 @@
 	}
 
 	async function getServerStats() {
-		return (await axios.get("/server/stats")).data as ServerStats;
+		return await req.get<ServerStats>("/server/stats");
 	}
 </script>
 
@@ -106,7 +106,12 @@
 				{#await getServerStats()}
 					<Spinner />
 				{:then stats}
-					<Stat name="Users" value={stats.users} href="/manage_users" large />
+					<Stat
+						name="Users"
+						value={stats.users}
+						href={resolve("/manage_users")}
+						large
+					/>
 					<Stat name="Private Users" value={stats.privateUsers} large />
 					<Stat name="Watched Movies" value={stats.watchedMovies} large />
 					<Stat name="Watched Shows" value={stats.watchedShows} large />
@@ -116,14 +121,14 @@
 						<Stat
 							name="Most Watched Movie"
 							value={stats.mostWatchedMovie.title}
-							href="/movie/{stats.mostWatchedMovie.tmdbId}"
+							href={resolve("/movie/{stats.mostWatchedMovie.tmdbId}")}
 						/>
 					{/if}
 					{#if stats.mostWatchedShow?.title}
 						<Stat
 							name="Most Watched Show"
 							value={stats.mostWatchedShow.title}
-							href="/tv/{stats.mostWatchedShow.tmdbId}"
+							href={resolve("/tv/{stats.mostWatchedShow.tmdbId}")}
 						/>
 					{/if}
 				{:catch err}
@@ -206,7 +211,12 @@
 									serverConfig!.PLEX_HOST,
 									(rData) => {
 										plexHostDisabled = false;
-										serverConfig!.PLEX_MACHINE_ID = rData?.PLEX_MACHINE_ID;
+										serverConfig!.PLEX_MACHINE_ID =
+											rData &&
+											"PLEX_MACHINE_ID" in rData &&
+											rData?.PLEX_MACHINE_ID
+												? String(rData?.PLEX_MACHINE_ID)
+												: undefined;
 									},
 								);
 							}}
@@ -266,7 +276,7 @@
 						<SettingButton
 							title="Task Schedule"
 							desc="View and configure server task schedule."
-							icon={"arrow"}
+							icon="arrow"
 							onClick={() => {
 								taskScheduleModalOpen = true;
 							}}
@@ -280,7 +290,7 @@
 						<SettingButton
 							title="Trusted Header Authentication"
 							desc="Configure trusted header single sign-on."
-							icon={"arrow"}
+							icon="arrow"
 							onClick={() => {
 								headerSSOModalOpen = true;
 							}}
@@ -320,8 +330,8 @@
 					</Setting>
 
 					<Setting title="Sonarr">
-						{#if serverConfig.SONARR?.length > 0}
-							{#each serverConfig.SONARR as server}
+						{#if serverConfig.SONARR && serverConfig.SONARR?.length > 0}
+							{#each serverConfig.SONARR as server (server.name)}
 								<SettingButton
 									title={server.name}
 									desc={`Configure server at ${server.host}`}
@@ -339,7 +349,7 @@
 							icon="add"
 							onClick={() => {
 								let name = "Sonarr";
-								if (serverConfig!.SONARR?.length > 0) {
+								if (serverConfig?.SONARR && serverConfig.SONARR.length > 0) {
 									// if this still exists ya on yur own
 									name = `Sonarr${serverConfig!.SONARR.length + 1}`;
 								}
@@ -351,8 +361,8 @@
 					</Setting>
 
 					<Setting title="Radarr">
-						{#if serverConfig.RADARR?.length > 0}
-							{#each serverConfig.RADARR as server}
+						{#if serverConfig.RADARR && serverConfig.RADARR?.length > 0}
+							{#each serverConfig.RADARR as server (server.name)}
 								<SettingButton
 									title={server.name}
 									desc={`Configure server at ${server.host}`}
@@ -370,7 +380,7 @@
 							icon="add"
 							onClick={() => {
 								let name = "Radarr";
-								if (serverConfig!.RADARR?.length > 0) {
+								if (serverConfig?.RADARR && serverConfig.RADARR.length > 0) {
 									// if this still exists ya on yur own
 									name = `Radarr${serverConfig!.RADARR.length + 1}`;
 								}

@@ -1,9 +1,5 @@
 export type WatchedStatus =
-	| "PLANNED"
-	| "WATCHING"
-	| "FINISHED"
-	| "HOLD"
-	| "DROPPED";
+	"PLANNED" | "WATCHING" | "FINISHED" | "HOLD" | "DROPPED";
 /**
  * Types of media supported by Watcharr in an overarching way.
  */
@@ -70,16 +66,17 @@ export type Icon =
 export type Theme = "light" | "dark" | "system";
 
 export type WLDetailedViewOption =
-	| "statusRating"
-	| "lastWatched"
-	| "dateAdded"
-	| "dateModified";
+	"statusRating" | "lastWatched" | "dateAdded" | "dateModified";
 
 export enum UserType {
 	Watcharr = 0,
 	Jellyfin = 1,
 	Plex = 2,
 	Proxy = 3,
+}
+
+export interface AuthResponse {
+	token: string;
 }
 
 interface dbModel {
@@ -114,6 +111,7 @@ export interface Activity extends dbModel {
 	type: string;
 	data: string;
 	customDate: string;
+	countAsPlay: boolean;
 }
 
 export interface WatchedSeason {
@@ -151,6 +149,7 @@ export interface Watched {
 	watchedEpisodes?: WatchedEpisode[];
 	tags?: Tag[];
 	lastViewedSeason?: number;
+	plays?: number;
 
 	// 'Watching Season/Ep' Extra detail.
 	watchingSeason?: string;
@@ -172,10 +171,26 @@ export interface WatchedUpdateRequest {
 	thoughts?: string;
 	removeThoughts?: boolean;
 	pinned?: boolean;
+	letCountAsPlay?: boolean;
 }
 
 export interface WatchedUpdateResponse {
 	newActivity: Activity;
+}
+
+export type WatchedSort =
+	"DATEADDED" | "LASTCHANGED" | "LASTFIN" | "RATING" | "ALPHA" | "DATERELEASED";
+
+export type SortDirection = "asc" | "desc";
+
+export interface WatchedGetPageRequest {
+	// Sorting type.
+	sort?: WatchedSort;
+	// Sorting direction (asc or desc).
+	sortDir?: SortDirection;
+	// Filtering options.
+	type?: SupportedMedia[];
+	status?: WatchedStatus[];
 }
 
 export interface ActivityUpdateRequest {
@@ -320,6 +335,8 @@ export interface Media {
 	watched?: Watched;
 	similar?: Media[];
 	releaseDate?: string;
+	releaseDateLast?: string;
+	status?: string;
 	extBackdropPath?: string;
 	genres?: MediaGenre[];
 	homepage?: string;
@@ -351,9 +368,15 @@ export interface MediaGenre {
 	name: string;
 }
 
+export enum MediaProviderType {
+	Sub = "sub",
+	Free = "free",
+}
+
 export interface MediaProvider {
 	name: string;
-	link: string;
+	type?: MediaProviderType;
+	link?: string;
 }
 
 export enum MediaVideoType {
@@ -573,15 +596,15 @@ export interface ManagedUser {
 }
 
 export interface ServerConfig {
-	DEFAULT_COUNTRY: string;
-	JELLYFIN_HOST: string;
+	DEFAULT_COUNTRY?: string;
+	JELLYFIN_HOST?: string;
 	USE_EMBY: boolean;
 	SIGNUP_ENABLED: boolean;
-	TMDB_KEY: string;
-	PLEX_HOST: string;
-	PLEX_MACHINE_ID: string;
-	SONARR: SonarrSettings[];
-	RADARR: RadarrSettings[];
+	TMDB_KEY?: string;
+	PLEX_HOST?: string;
+	PLEX_MACHINE_ID?: string;
+	SONARR?: SonarrSettings[];
+	RADARR?: RadarrSettings[];
 	TWITCH?: TwitchSettings;
 	DEBUG: boolean;
 }
@@ -617,13 +640,11 @@ interface ArrSettingsPublicResponseBase {
 	automaticSearch: boolean;
 }
 
-export interface SonarrSettingsPublicResponseResult
-	extends ArrSettingsPublicResponseBase {
+export interface SonarrSettingsPublicResponseResult extends ArrSettingsPublicResponseBase {
 	languageProfile?: number;
 }
 
-export interface RadarrSettingsPublicResponseResult
-	extends ArrSettingsPublicResponseBase {}
+export interface RadarrSettingsPublicResponseResult extends ArrSettingsPublicResponseBase {}
 
 export interface TwitchSettings {
 	clientId?: string;
@@ -664,7 +685,7 @@ export interface QualityProfile {
 			source: string;
 			resolution: number;
 		};
-		items: any[];
+		items: unknown[];
 		allowed: boolean;
 		name?: string;
 		id?: number;
@@ -676,7 +697,7 @@ export interface RootFolder {
 	path: string;
 	accessible: boolean;
 	freeSpace: number;
-	unmappedFolders: any[];
+	unmappedFolders: unknown[];
 	id: number;
 }
 
@@ -709,11 +730,7 @@ export interface RadarrTestResponse {
 }
 
 export type ArrRequestStatus =
-	| "PENDING"
-	| "APPROVED"
-	| "AUTO_APPROVED"
-	| "DENIED"
-	| "FOUND";
+	"PENDING" | "APPROVED" | "AUTO_APPROVED" | "DENIED" | "FOUND";
 
 export interface ArrRequestResponse {
 	id: number;

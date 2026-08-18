@@ -21,11 +21,16 @@ type GameProvider interface {
 	GetOrCache(igdbID int) (entity.Game, error)
 }
 
+type UserProvider interface {
+	UserGetSettings(userId uint) (entity.UserSettings, error)
+}
+
 type Service struct {
 	db               *gorm.DB
 	cp               ContentProvider
 	gameProvider     GameProvider
 	activityProvider domain.ActivityAddProvider
+	userProvider     UserProvider
 }
 
 func NewService(
@@ -33,12 +38,14 @@ func NewService(
 	cp ContentProvider,
 	gameProvider GameProvider,
 	activityProvider domain.ActivityAddProvider,
+	userProvider UserProvider,
 ) *Service {
 	return &Service{
 		db,
 		cp,
 		gameProvider,
 		activityProvider,
+		userProvider,
 	}
 }
 
@@ -73,8 +80,16 @@ func (s *Service) GetWatchedPage(
 		"user_id", userId,
 		"pagination_params", pp,
 		"wr", wr)
-	watched := new([]entity.Watched)
+
 	pRes := &util.PaginationResponse[entity.Watched, util.None]{}
+
+	// Get user settings.
+	userSettings, err := s.userProvider.UserGetSettings(userId)
+	if err != nil {
+		return *pRes, errors.New("failed to get user settings")
+	}
+
+	watched := new([]entity.Watched)
 	res := s.db.
 		Model(&entity.Watched{}).
 		Where(&entity.Watched{UserID: userId})
@@ -99,17 +114,18 @@ func (s *Service) GetWatchedPage(
 		Preload("Tags").
 		Preload("WatchedSeasons").
 		Preload("WatchedEpisodes").
-		// Refine our results first (filters, sort);
-		Scopes(
-			watchedRefine(wr),
-		).
+		// Apply filters first.
+		Scopes(watchedRefineFilter(wr, &userSettings)).
 		// Then count results (after filter);
 		Count(&pRes.TotalResults).
 		// Now calculate pagination properties with a TotalResults
 		// that takes filtered out items into account.
-		Scopes(
-			util.Paginate(pp, pRes),
-		).
+		Scopes(util.Paginate(pp, pRes)).
+		// Last we can apply our sorting.
+		// Note: We must sort *after* we count, because currently
+		// our 'Last Finished' sort, causes the COUNT query to also
+		// be given extra JOINS that we don't want (because it slows it down).
+		Scopes(watchedRefineSort(wr, userId)).
 		Find(&watched)
 	if res.Error != nil {
 		slog.Error("GetWatchedPage: Failed!", "error", res.Error)
@@ -161,17 +177,16 @@ func (s *Service) getPublicWatched(
 		Preload("Tags").
 		Preload("WatchedSeasons").
 		Preload("WatchedEpisodes").
-		// Refine our results first (filters, sort);
-		Scopes(
-			watchedRefine(wr),
-		).
+		// Apply filters first.
+		Scopes(watchedRefineFilter(wr, nil)).
 		// Then count results (after filter);
 		Count(&pRes.TotalResults).
 		// Now calculate pagination properties with a TotalResults
 		// that takes filtered out items into account.
-		Scopes(
-			util.Paginate(pp, pRes),
-		).
+		Scopes(util.Paginate(pp, pRes)).
+		// Sort options.
+		// Note: See note above in GetWatchedPage.
+		Scopes(watchedRefineSort(wr, userId)).
 		Find(&watched)
 	if res.Error != nil {
 		slog.Error("getPublicWatched: Failed!", "error", res.Error)
@@ -185,7 +200,10 @@ func (s *Service) getPublicWatched(
 // Get a watched list item by id (must be for `userId`).
 func (s *Service) GetWatchedItemById(userId uint, id uint) (entity.Watched, error) {
 	watched := new(entity.Watched)
-	res := s.db.Model(&entity.Watched{}).Preload("Content").Where("user_id = ? AND id = ?", userId, id).Find(&watched)
+	res := s.db.Model(&entity.Watched{}).
+		Preload("Content").
+		Where("user_id = ? AND id = ?", userId, id).
+		Find(&watched)
 	if res.Error != nil {
 		slog.Error("GetWatchedItemById: Failed!", "error", res.Error)
 		return entity.Watched{}, res.Error
@@ -439,7 +457,8 @@ func (s *Service) AddWatched(
 				&watched,
 			); err != nil {
 				// Try to restore the entry if unique contraint hit.
-				slog.Error("AddWatched: Failed to restore existing watched entry.")
+				slog.Error("AddWatched: Failed to restore existing watched entry.",
+					"error", err)
 				// Returns watched too because handlers of certain errors
 				// may need it (and it's ID since we could have fetched it here)
 				return watched, err
@@ -452,7 +471,7 @@ func (s *Service) AddWatched(
 	slog.Debug("AddWatched: Added watched list item", "item", watched)
 
 	// Finally add activity
-	activityAddReq := domain.ActivityAddRequest{
+	activityAddReq := domain.ActivityAddProps{
 		WatchedID: watched.ID,
 		Type:      extraProps.ActivityType,
 	}
@@ -465,9 +484,14 @@ func (s *Service) AddWatched(
 	} else {
 		activityAddReq.Data = string(activityJson)
 	}
+	countAsPlay := false
+	if ar.Status == entity.FINISHED {
+		countAsPlay = true
+	}
 	act, _ := s.activityProvider.AddActivity(
 		userId,
 		activityAddReq,
+		countAsPlay,
 	)
 	watched.Activity = append(watched.Activity, act)
 
@@ -574,6 +598,11 @@ func (s *Service) updateWatched(
 	ar domain.WatchedUpdateRequest,
 ) (domain.WatchedUpdateResponse, error) {
 	slog.Debug("UpdateWatched", "request_data", ar)
+	if err := ar.Valid(); err != nil {
+		slog.Error("UpdateWatched: UpdateRequest struct is invalid.",
+			"id", id, "error", err)
+		return domain.WatchedUpdateResponse{}, err
+	}
 	upwat := entity.Watched{}
 	res := s.db.Model(&entity.Watched{}).Where("id = ? AND user_id = ?", id, userId).Take(&upwat)
 	if res.Error != nil {
@@ -603,16 +632,49 @@ func (s *Service) updateWatched(
 	addedActivity := entity.Activity{}
 	if ar.Rating != 0 {
 		ratingData, _ := json.Marshal(map[string]any{"rating": ar.Rating})
-		addedActivity, _ = s.activityProvider.AddActivity(userId, domain.ActivityAddRequest{WatchedID: id, Type: entity.RATING_CHANGED, Data: string(ratingData)})
+		addedActivity, _ = s.activityProvider.AddActivity(
+			userId,
+			domain.ActivityAddProps{
+				WatchedID: id,
+				Type:      entity.RATING_CHANGED,
+				Data:      string(ratingData),
+			},
+			false,
+		)
 	}
 	if ar.Status != "" {
-		addedActivity, _ = s.activityProvider.AddActivity(userId, domain.ActivityAddRequest{WatchedID: id, Type: entity.STATUS_CHANGED, Data: string(ar.Status)})
+		countAsPlay := false
+		if ar.Status == entity.FINISHED &&
+			util.Deref(ar.LetCountAsPlay, true) != false {
+			countAsPlay = true
+		}
+		addedActivity, _ = s.activityProvider.AddActivity(userId,
+			domain.ActivityAddProps{
+				WatchedID: id,
+				Type:      entity.STATUS_CHANGED,
+				Data:      string(ar.Status),
+			},
+			countAsPlay,
+		)
 	}
 	if ar.Thoughts != "" {
-		addedActivity, _ = s.activityProvider.AddActivity(userId, domain.ActivityAddRequest{WatchedID: id, Type: entity.THOUGHTS_CHANGED})
+		addedActivity, _ = s.activityProvider.AddActivity(userId,
+			domain.ActivityAddProps{
+				WatchedID: id,
+				Type:      entity.THOUGHTS_CHANGED,
+			},
+			false,
+		)
 	}
 	if ar.RemoveThoughts {
-		addedActivity, _ = s.activityProvider.AddActivity(userId, domain.ActivityAddRequest{WatchedID: id, Type: entity.THOUGHTS_REMOVED, Data: originalThoughts})
+		addedActivity, _ = s.activityProvider.AddActivity(userId,
+			domain.ActivityAddProps{
+				WatchedID: id,
+				Type:      entity.THOUGHTS_REMOVED,
+				Data:      originalThoughts,
+			},
+			false,
+		)
 	}
 	return domain.WatchedUpdateResponse{NewActivity: addedActivity}, nil
 }
@@ -665,6 +727,13 @@ func (s *Service) removeWatched(
 	if res.RowsAffected <= 0 {
 		return domain.WatchedRemoveResponse{}, errors.New("no watched entry found")
 	}
-	addedActivity, _ := s.activityProvider.AddActivity(userId, domain.ActivityAddRequest{WatchedID: id, Type: entity.REMOVED_WATCHED})
+	addedActivity, _ := s.activityProvider.AddActivity(
+		userId,
+		domain.ActivityAddProps{
+			WatchedID: id,
+			Type:      entity.REMOVED_WATCHED,
+		},
+		false,
+	)
 	return domain.WatchedRemoveResponse{NewActivity: addedActivity}, nil
 }

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { afterNavigate, goto } from "$app/navigation";
+	import { resolve } from "$app/paths";
 	import { page } from "$app/state";
 	import Error from "@/lib/Error.svelte";
 	import Icon from "@/lib/Icon.svelte";
@@ -11,10 +12,18 @@
 	import FollowingMenu from "@/lib/nav/FollowingMenu.svelte";
 	import SortMenu from "@/lib/nav/SortMenu.svelte";
 	import TagMenu from "@/lib/tag/TagMenu.svelte";
+	import { req } from "@/lib/util/api";
 	import { isTouch } from "@/lib/util/helpers";
 	import { store, defaultSort } from "@/store.svelte";
-	import axios from "axios";
+	import type {
+		ServerFeatures,
+		Follow,
+		PrivateUser,
+		Tag,
+		UserSettings,
+	} from "@/types";
 	import { onMount } from "svelte";
+	import { SvelteURLSearchParams } from "svelte/reactivity";
 	interface Props {
 		children?: import("svelte").Snippet;
 	}
@@ -34,7 +43,7 @@
 
 	function handleProfileClick() {
 		if (!localStorage.getItem("token")) {
-			goto("/login");
+			goto(resolve("/login"));
 		} else {
 			closeAllSubMenus("sub");
 			subMenuShown = !subMenuShown;
@@ -71,7 +80,7 @@
 				const query = target?.value.trim();
 				if (!query) return;
 				const currentSearchType = page.url.searchParams.get("type");
-				const searchParams = new URLSearchParams({
+				const searchParams = new SvelteURLSearchParams({
 					query: encodeURIComponent(query),
 					preferMyList: "true",
 				});
@@ -85,7 +94,7 @@
 				// Using autofocus seems to work. Disables after goto runs.
 				// https://github.com/sbondCo/Watcharr/issues/169
 				target.autofocus = true;
-				goto(`/search?${searchParams.toString()}`).then(() => {
+				goto(resolve(`/search?${searchParams.toString()}`)).then(() => {
 					// Use mainSearchEl if nav not split, otherwise use ev target.
 					if (!document.body.classList.contains("split-nav") && mainSearchEl) {
 						mainSearchEl.focus();
@@ -101,31 +110,32 @@
 	}
 
 	async function getInitialData() {
-		if (localStorage.getItem("token")) {
-			const [u, s, f, fo, ts] = await Promise.all([
-				axios.get("/user"),
-				axios.get("/user/settings"),
-				axios.get("/features"),
-				axios.get("/follow"),
-				axios.get("/tag"),
-			]);
-			if (u?.data) {
-				store.userInfo = u.data;
-			}
-			if (s?.data) {
-				store.userSettings = s.data;
-			}
-			if (f?.data) {
-				store.serverFeatures = f.data;
-			}
-			if (fo?.data) {
-				store.follows = fo.data;
-			}
-			if (ts?.data) {
-				store.tags = ts.data;
-			}
-		} else {
-			goto("/login?again=1");
+		if (!localStorage.getItem("token")) {
+			console.warn("getInitialData: No token found, redirecting to login!");
+			goto(resolve("/login?again=1"));
+			return;
+		}
+		const [u, s, f, fo, ts] = await Promise.all([
+			req.get<PrivateUser>("/user"),
+			req.get<UserSettings>("/user/settings"),
+			req.get<ServerFeatures>("/features"),
+			req.get<Follow[]>("/follow"),
+			req.get<Tag[]>("/tag"),
+		]);
+		if (u) {
+			store.userInfo = u;
+		}
+		if (s) {
+			store.userSettings = s;
+		}
+		if (f) {
+			store.serverFeatures = f;
+		}
+		if (fo) {
+			store.follows = fo;
+		}
+		if (ts) {
+			store.tags = ts;
 		}
 	}
 
@@ -230,7 +240,7 @@
 <nav bind:this={navEl}>
 	<div class="wrapper">
 		<div class="left-side">
-			<a href="/">
+			<a href={resolve("/")}>
 				<span class="large">Watcharr</span>
 				<span class="small">W</span>
 			</a>
@@ -322,7 +332,7 @@
 			{#if tagMenuShown}
 				<TagMenu
 					onTagClick={(tag) => {
-						goto(`/tag/${tag.id}`);
+						goto(resolve(`/tag/${tag.id}`));
 						tagMenuShown = false;
 					}}
 					showManageBtn={true}
@@ -330,7 +340,7 @@
 			{/if}
 			<button
 				class="plain other discover"
-				onclick={() => goto("/discover")}
+				onclick={() => goto(resolve("/discover"))}
 				use:tooltip={{ text: "Discover", pos: "bot" }}
 			>
 				<Icon i="compass" wh={26} />

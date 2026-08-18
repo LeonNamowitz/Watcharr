@@ -9,7 +9,7 @@
 		PersonCreditsResponse,
 		PersonDetailsResponse,
 	} from "@/types";
-	import axios from "axios";
+	import { req } from "@/lib/util/api.js";
 	import Checkbox from "@/lib/Checkbox.svelte";
 	import Icon from "@/lib/Icon.svelte";
 	import PageBackdrop from "@/lib/generic/PageBackdrop.svelte";
@@ -19,7 +19,7 @@
 	let { data } = $props();
 
 	let person: PersonDetailsResponse | undefined = $state();
-	let pageError: Error | undefined = $state();
+	let pageError: unknown | undefined = $state();
 	let sortOption = $state("Vote count");
 	let creditsType = $state("Acting");
 	let credits: PersonCreditsResponse | undefined = $state();
@@ -68,31 +68,20 @@
 			}
 			await updatePersonCredits();
 			sortCredits(sortOption);
-		} catch (err: any) {
+		} catch (err) {
 			person = undefined;
 			pageError = err;
 		}
 	}
 
 	async function getPerson(id: number) {
-		return (await axios.get<PersonDetailsResponse>(`/content/person/${id}`))
-			.data;
+		return await req.get<PersonDetailsResponse>(`/content/person/${id}`);
 	}
 
 	async function updatePersonCredits() {
-		credits = (
-			await axios.get<PersonCreditsResponse>(
-				`/content/person/${data.personId}/credits`,
-				{
-					params: { creditsType: creditsType.toLowerCase() },
-				},
-			)
-		).data;
-		const options = getCreditsTypeOptions();
-		if (!options.includes(creditsType)) {
-			creditsType = options[0];
-			return;
-		}
+		credits = await req.get<PersonCreditsResponse>(
+			`/content/person/${data.personId}/credits`,
+		);
 		credits.credits = credits.credits?.filter(
 			(v, i, a) => a.findIndex((t) => t.ids.tmdb === v.ids.tmdb) === i,
 		); // remove duplicate entries. If an actor has multiple roles in a single movie, it would otherwise show up multiple times
@@ -174,13 +163,17 @@
 			<div class="content">
 				<div class="details-wrap">
 					<div class="details-container">
-						<PosterImage
-							src={"https://image.tmdb.org/t/p/w500" + person.extPosterPath}
-						/>
+						{#if person.extPosterPath}
+							<PosterImage
+								src={"https://image.tmdb.org/t/p/w500" + person.extPosterPath}
+							/>
+						{/if}
 
 						<div class="details">
 							<span class="title-container">
-								<a href={person.homepage} target="_blank">{person.name}</a>
+								<a href={person.homepage} rel="external" target="_blank">
+									{person.name}
+								</a>
 								<span></span>
 							</span>
 

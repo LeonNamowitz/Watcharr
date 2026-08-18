@@ -1,6 +1,6 @@
 <script lang="ts">
 	import Spinner from "@/lib/Spinner.svelte";
-	import axios, { type GenericAbortSignal } from "axios";
+	import { req } from "@/lib/util/api";
 	import Poster from "@/lib/poster/Poster.svelte";
 	import PageTitle from "@/lib/generic/PageTitle.svelte";
 	import MediaTypeFilter from "@/lib/search/MediaTypeFilter.svelte";
@@ -14,6 +14,7 @@
 		SearchType,
 		type DiscoverRequest,
 		type Media,
+		type PaginationResponse,
 	} from "@/types";
 	import { page } from "$app/state";
 	import { afterNavigate, goto } from "$app/navigation";
@@ -22,6 +23,7 @@
 	import Error from "@/lib/Error.svelte";
 	import PersonPoster from "@/lib/poster/PersonPoster.svelte";
 	import FilterDropDown from "./FilterDropDown.svelte";
+	import { resolve } from "$app/paths";
 
 	const scroll = infScroll({ callback: onScrollToBottom });
 	const dataLoader = paginatedLoader<Media, undefined>(load);
@@ -40,13 +42,13 @@
 		filter: discoverFilter,
 	});
 
-	async function load(signal: GenericAbortSignal) {
+	async function load(signal: AbortSignal) {
 		console.debug("load: loadParams:", nextLoadParams);
 		if (nextLoadParams.page === dataLoader.state.page) {
 			console.warn("load: Already on this page, not loading it again!");
 			return;
 		}
-		const r = await axios.get(`/discover`, {
+		const r = await req.get<PaginationResponse<Media, undefined>>(`/discover`, {
 			params: nextLoadParams,
 			signal,
 		});
@@ -72,7 +74,7 @@
 		}
 		// Running the goto will cause afterNavigate hook to be called,
 		// which will run a fresh search, so nothing else to do here.
-		goto(`?${curLocation.searchParams.toString()}`);
+		goto(resolve(`/discover?${curLocation.searchParams.toString()}`));
 	}
 
 	onMount(() => {

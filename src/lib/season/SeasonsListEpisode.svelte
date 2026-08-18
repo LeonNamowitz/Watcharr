@@ -10,6 +10,8 @@
 	import { notify } from "../util/notify";
 	import { store } from "@/store.svelte";
 	import { removeWatchedEpisode, updateWatchedEpisode } from "./api";
+	import { onMount } from "svelte";
+	import { toRelativeDate } from "../util/helpers";
 
 	interface Props {
 		ep: TMDBSeasonDetailsEpisode;
@@ -18,32 +20,82 @@
 
 	let { ep, watchedItem }: Props = $props();
 
+	const we = $derived(
+		watchedItem?.watchedEpisodes?.find(
+			(s) =>
+				s.seasonNumber === ep.season_number &&
+				s.episodeNumber === ep.episode_number,
+		),
+	);
+
 	let isHidden: boolean = $state(!!store?.userSettings?.hideSpoilers);
 
-	function handleStatusClick(type: WatchedStatus | "DELETE") {
+	const airDate: Date | undefined = $derived.by(() => {
+		if (!ep.air_date) {
+			return;
+		}
+		const d = new Date(ep.air_date);
+		if (isNaN(d.getTime())) {
+			return;
+		}
+		return d;
+	});
+	const isUnaired: boolean = $derived.by(() => {
+		if (!airDate) {
+			return false;
+		}
+		return airDate.getTime() > new Date().getTime();
+	});
+
+	/**
+	 * Re-sets `isHidden` state.
+	 */
+	function reSetIsHidden() {
+		// If the episode status is "FINISHED", ensure `isHidden` is set to
+		// `false` (so finished episodes aren't blurred when hideSpoilers is on).
+		if (we?.status == "FINISHED") {
+			isHidden = false;
+		}
+	}
+
+	onMount(() => {
+		reSetIsHidden();
+	});
+
+	async function handleStatusClick(type: WatchedStatus | "DELETE") {
 		if (!watchedItem) {
 			console.error("SeasonListEpisode: handleStatusClick: No watched item.");
 			return;
 		}
 		if (type === "DELETE") {
-			const ws = watchedItem.watchedEpisodes?.find(
-				(s) =>
-					s.seasonNumber === ep.season_number &&
-					s.episodeNumber === ep.episode_number,
-			);
-			if (!ws) {
+			if (!we || !we.id) {
 				notify({
 					text: "Failed to find watched episode id. Please try refreshing.",
 					type: "error",
 				});
+				console.error(
+					"handleStatusClick(DELETE): `we` doesn't exist or have an id",
+					we,
+				);
 				return;
 			}
-			removeWatchedEpisode(watchedItem, ws.id);
+			removeWatchedEpisode(watchedItem, we.id);
+			// NOTE: Similar to below where we `reSetIsHidden` to unhide spoilers
+			// automatically if status is set to FINISHED, we WONT do the opposite
+			// here and re-hide the spoilers (if unhidden) after removing an episode
+			// because that would probably be annoying to users (eg: click to
+			// show spoilers, then delete episode, spoilers re-hidden automatically).
 			return;
 		}
-		updateWatchedEpisode(watchedItem, ep.season_number, ep.episode_number, {
-			status: type,
-		});
+		await updateWatchedEpisode(
+			watchedItem,
+			ep.season_number,
+			ep.episode_number,
+			{
+				status: type,
+			},
+		);
+		reSetIsHidden();
 	}
 
 	function handleStarClick(rating: number) {
@@ -78,25 +130,37 @@
 						>{ep.runtime} min</span
 					>
 				{/if}
+				{#if !isUnaired && airDate}
+					<!-- Air date for aired episodes. -->
+					<span class="episode-air-date">
+						{toRelativeDate(airDate)}
+					</span>
+				{/if}
 			</span>
-			<span
-				class="rating"
-				title={`TMDB Rating: ${ep.vote_average} out of 10 (based on ${ep.vote_count} votes)`}
-			>
-				<span>*</span>
-				{Math.round(ep.vote_average * 10) / 10}
-			</span>
+			{#if ep.vote_count <= 0 && isUnaired}
+				<!-- If no votes (and subsequently no rating) AND episode is
+				 unaired, no need to show the rating star. -->
+			{:else}
+				<span
+					class="rating"
+					title={`TMDB Rating: ${ep.vote_average} out of 10 (based on ${ep.vote_count} votes)`}
+				>
+					<span>*</span>
+					{Math.round(ep.vote_average * 10) / 10}
+				</span>
+			{/if}
 		</div>
+		{#if isUnaired && airDate}
+			<!-- Air date for unaired episodes. -->
+			<span class="episode-air-date">
+				Airs on {toRelativeDate(airDate)}
+			</span>
+		{/if}
 		<span class="overview">{ep.overview}</span>
 	</div>
 	{#if watchedItem}
-		{@const we = watchedItem.watchedEpisodes?.find(
-			(s) =>
-				s.seasonNumber === ep.season_number &&
-				s.episodeNumber === ep.episode_number,
-		)}
 		<div class="status-rating-ctr">
-			<div class="rating" style={"width: 45px"}>
+			<div class="rating" style="width: 45px">
 				<PosterRating
 					rating={we?.rating}
 					btnTooltip={`Episode ${ep.episode_number} Rating`}
@@ -179,6 +243,7 @@
 					display: flex;
 					align-items: start;
 					justify-content: center;
+					min-width: 43px;
 					font-size: 15px;
 					color: $rating-color;
 					font-weight: bolder;
@@ -192,6 +257,15 @@
 						line-height: 0.7;
 					}
 				}
+			}
+
+			.episode-air-date {
+				font-size: 14px;
+				color: $text-color-accent;
+				padding: 0 2px;
+				text-transform: lowercase;
+				font-variant: small-caps;
+				font-weight: bold;
 			}
 		}
 
@@ -221,6 +295,19 @@
 					min-height: 40px;
 					height: 40px;
 					overflow: visible;
+
+					/* z-index of 2 so the button is higher than .spoiler-text
+					   which makes it clickable while whole ep is still hidden.
+					   Which is useful if you don't want spoilers while setting
+					   the episode to WATCHING, etc. */
+					z-index: 2;
+
+					&:hover {
+						/* On hover, the z-index is higher than all other status
+						   buttons on the page to avoid the active one being put
+						   below others (making it unuseable). */
+						z-index: 3;
+					}
 				}
 			}
 		}
@@ -292,6 +379,10 @@
 			flex-flow: column;
 			width: 100%;
 			height: 100%;
+
+			.info {
+				align-items: center;
+			}
 
 			.status-rating-ctr {
 				flex-flow: row;

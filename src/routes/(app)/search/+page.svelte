@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { page } from "$app/state";
 	import { afterNavigate, goto } from "$app/navigation";
-	import axios, { type GenericAbortSignal } from "axios";
+	import { req } from "@/lib/util/api.js";
 	import Poster from "@/lib/poster/Poster.svelte";
 	import PosterList from "@/lib/poster/PosterList.svelte";
 	import { store } from "@/store.svelte.js";
@@ -11,6 +11,7 @@
 		MediaTypeE,
 		SearchType,
 		type Media,
+		type PaginationResponse,
 		type PublicUser,
 		type SearchRequest,
 		type SearchResponseMeta,
@@ -24,6 +25,8 @@
 	} from "@/lib/util/paginatedLoader.svelte.js";
 	import PageTitle from "@/lib/generic/PageTitle.svelte";
 	import MediaTypeFilter from "@/lib/search/MediaTypeFilter.svelte";
+	import { resolve } from "$app/paths";
+	import Filters from "./components/Filters.svelte";
 
 	let { data } = $props();
 
@@ -55,7 +58,7 @@
 		preferMyList: preferMyList,
 	});
 
-	async function load(signal: GenericAbortSignal) {
+	async function load(signal: AbortSignal) {
 		console.debug("load: loadParams:", nextLoadParams);
 		if (nextLoadParams.page === dataLoader.state.page) {
 			console.warn("load: Already on this page, not loading it again!");
@@ -65,10 +68,13 @@
 			console.warn("load: There is no search query!");
 			return;
 		}
-		const r = await axios.get(`/search`, {
-			params: nextLoadParams,
-			signal,
-		});
+		const r = await req.get<PaginationResponse<Media, SearchResponseMeta>>(
+			`/search`,
+			{
+				params: nextLoadParams,
+				signal,
+			},
+		);
 		scroll.dataLoaded();
 		return r;
 	}
@@ -91,12 +97,13 @@
 		}
 		// Running the goto will cause afterNavigate hook to be called,
 		// which will run a fresh search, so nothing else to do here.
-		goto(`?${curLocation.searchParams.toString()}`);
+		goto(resolve(`/search?${curLocation.searchParams.toString()}`));
 	}
 
 	async function searchUsers(query: string) {
-		return (await axios.get(`/user/search`, { params: { q: query } }))
-			.data as PublicUser[];
+		return await req.get<PublicUser[]>(`/user/search`, {
+			params: { q: query },
+		});
 	}
 
 	onMount(() => {
@@ -143,7 +150,7 @@
 		curLocation.searchParams.delete("preferMyList");
 		// Running the goto will cause afterNavigate hook to be called,
 		// which will run a fresh search, so nothing else to do here.
-		goto(`?${curLocation.searchParams.toString()}`);
+		goto(resolve(`/search?${curLocation.searchParams.toString()}`));
 	}
 </script>
 
@@ -177,6 +184,7 @@
 						setActiveSearchFilter(nowActive as SearchType | undefined);
 					}}
 				/>
+				<Filters />
 			</PageTitle>
 
 			{#if showingResultsFromMyList}

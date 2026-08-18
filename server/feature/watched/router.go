@@ -9,25 +9,18 @@ import (
 	"github.com/sbondCo/Watcharr/database/entity"
 	"github.com/sbondCo/Watcharr/domain"
 	"github.com/sbondCo/Watcharr/feature/auth/authmiddleware"
-	"github.com/sbondCo/Watcharr/media/tmdb"
 	"github.com/sbondCo/Watcharr/router"
 	"github.com/sbondCo/Watcharr/util"
 )
 
 type Router struct {
 	br *router.BaseRouter
-	t  *tmdb.TMDB
 	s  *Service
 }
 
-func NewRouter(
-	br *router.BaseRouter,
-	t *tmdb.TMDB,
-	service *Service,
-) *Router {
+func NewRouter(br *router.BaseRouter, service *Service) *Router {
 	return &Router{
 		br: br,
-		t:  t,
 		s:  service,
 	}
 }
@@ -120,14 +113,19 @@ func (r *Router) AddWatched(c *gin.Context) {
 	var ar domain.WatchedAddRequest
 	err := c.ShouldBindJSON(&ar)
 	if err == nil {
-		response, err := r.s.AddWatched(userId, ar, domain.WatchedAddExtraProps{
-			ActivityType: entity.ADDED_WATCHED,
-		})
+		newWatched, err := r.s.AddWatched(
+			userId,
+			ar,
+			domain.WatchedAddExtraProps{
+				ActivityType: entity.ADDED_WATCHED,
+			},
+		)
 		if err != nil {
 			c.JSON(http.StatusForbidden, router.ErrorResponse{Error: err.Error()})
 			return
 		}
-		c.JSON(http.StatusOK, response)
+		dto := domain.NewWatchedDtoForContentPage(&newWatched)
+		c.JSON(http.StatusOK, dto)
 		return
 	}
 	c.AbortWithStatusJSON(http.StatusBadRequest, router.ErrorResponse{Error: err.Error()})

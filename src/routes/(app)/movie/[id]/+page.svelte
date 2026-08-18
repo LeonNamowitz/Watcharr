@@ -3,11 +3,7 @@
 	import PersonLink from "@/lib/content/PersonLink.svelte";
 	import Spinner from "@/lib/Spinner.svelte";
 	import HorizontalList from "@/lib/HorizontalList.svelte";
-	import {
-		contentExistsOnJellyfin,
-		removeWatched,
-		updateWatched,
-	} from "@/lib/util/api";
+	import { contentExistsOnJellyfin, req, updateWatched } from "@/lib/util/api";
 	import { store } from "@/store.svelte";
 	import type {
 		Media,
@@ -15,7 +11,6 @@
 		TMDBContentCreditsCrew,
 		WatchedStatus,
 	} from "@/types";
-	import axios from "axios";
 	import { getTopCrew } from "@/lib/util/helpers.js";
 	import Activity from "@/lib/Activity.svelte";
 	import Title from "@/lib/content/Title.svelte";
@@ -34,6 +29,9 @@
 	import PosterImage from "@/lib/content/PosterImage.svelte";
 	import ExpandableText from "@/lib/content/ExpandableText.svelte";
 	import WatchedDeleteBtn from "@/lib/content/WatchedDeleteBtn.svelte";
+	import TopCrewList from "@/lib/content/TopCrewList.svelte";
+	import { activityRemovedHook } from "@/lib/activity.js";
+	import Genres from "@/lib/content/Genres.svelte";
 
 	let { data } = $props();
 
@@ -41,7 +39,7 @@
 	let jellyfinUrl: string | undefined = $state();
 	let arrRequestButtonComp: ArrRequestButton | undefined = $state();
 	let movie: Media | undefined = $state();
-	let pageError: Error | undefined = $state();
+	let pageError: unknown | undefined = $state();
 
 	$effect(() => {
 		(async () => {
@@ -51,11 +49,9 @@
 				if (!data.movieId) {
 					return;
 				}
-				const resp = (
-					await axios.get(`/content/movie/${data.movieId}`, {
-						params: { region: store.userSettings?.country },
-					})
-				).data as Media;
+				const resp = await req.get<Media>(`/content/movie/${data.movieId}`, {
+					params: { region: store.userSettings?.country },
+				});
 				if (resp) {
 					if (resp.name && resp.ids.tmdb) {
 						contentExistsOnJellyfin("movie", resp.name, resp.ids.tmdb).then(
@@ -70,7 +66,7 @@
 				} else {
 					movie = undefined;
 				}
-			} catch (err: any) {
+			} catch (err) {
 				movie = undefined;
 				pageError = err;
 			}
@@ -78,8 +74,9 @@
 	});
 
 	async function getMovieCredits() {
-		const credits = (await axios.get(`/content/movie/${data.movieId}/credits`))
-			.data as TMDBContentCredits & { topCrew: TMDBContentCreditsCrew[] };
+		const credits = await req.get<
+			TMDBContentCredits & { topCrew: TMDBContentCreditsCrew[] }
+		>(`/content/movie/${data.movieId}/credits`);
 		if (credits.crew?.length > 0) {
 			credits.topCrew = getTopCrew(credits.crew);
 		}
@@ -135,9 +132,11 @@
 		<div class="content">
 			<div class="details-wrap">
 				<div class="details-container">
-					<PosterImage
-						src={"https://image.tmdb.org/t/p/w500" + movie.extPosterPath}
-					/>
+					{#if movie.extPosterPath}
+						<PosterImage
+							src={"https://image.tmdb.org/t/p/w500" + movie.extPosterPath}
+						/>
+					{/if}
 
 					<div class="details">
 						<Title
@@ -153,17 +152,7 @@
 						<span class="quick-info">
 							<span>{movie.runtime} min</span>
 
-							{#if movie.genres && movie.genres?.length > 0}
-								<div>
-									{#each movie.genres as g, i}
-										<span>
-											{g.name}{i !== movie.genres.length - 1 ? ", " : ""}
-										</span>
-									{/each}
-								</div>
-							{:else}
-								<span>Unknown Genres</span>
-							{/if}
+							<Genres genres={movie.genres} />
 						</span>
 
 						<ExpandableText text={movie.summary} style="margin-bottom: 18px;" />
@@ -171,7 +160,12 @@
 						<div class="btns">
 							<ViewTrailerButton videos={movie.videos} />
 							{#if jellyfinUrl}
-								<a class="btn" href={jellyfinUrl} target="_blank">
+								<a
+									class="btn"
+									href={jellyfinUrl}
+									rel="external"
+									target="_blank"
+								>
 									{#if localStorage.getItem("useEmby")}
 										<Icon i="emby" wh={14} />Play On Emby
 									{:else}
@@ -262,23 +256,12 @@
 				<Spinner />
 			{:then credits}
 				{#if credits.topCrew?.length > 0}
-					<div class="creators">
-						{#each credits.topCrew as crew}
-							<div>
-								<PersonLink
-									id={crew.id}
-									name={crew.name}
-									role={crew.job}
-									className="person-link"
-								/>
-							</div>
-						{/each}
-					</div>
+					<TopCrewList topCrew={credits.topCrew} />
 				{/if}
 
 				{#if credits.cast?.length > 0}
 					<HorizontalList title="Cast">
-						{#each credits.cast?.slice(0, 50) as cast}
+						{#each credits.cast?.slice(0, 50) as cast (cast.credit_id)}
 							<PersonPoster
 								id={cast.id}
 								name={cast.name}
@@ -298,7 +281,10 @@
 			{/if}
 
 			{#if movie.watched}
-				<Activity bind:activity={movie.watched.activity} />
+				<Activity
+					activity={movie.watched.activity}
+					onRemoved={(a) => activityRemovedHook(movie?.watched, a)}
+				/>
 			{/if}
 		</div>
 	</div>
@@ -372,24 +358,6 @@
 
 		@media screen and (max-width: 500px) {
 			padding: 20px;
-		}
-	}
-
-	.creators {
-		display: flex;
-		flex-wrap: wrap;
-		justify-content: center;
-		gap: 35px;
-		margin: 10px 60px;
-
-		div {
-			display: flex;
-			flex-flow: column;
-			min-width: 150px;
-
-			span:first-child {
-				font-weight: bold;
-			}
 		}
 	}
 </style>

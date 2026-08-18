@@ -6,11 +6,10 @@
 	import Setting from "@/lib/settings/Setting.svelte";
 	import Stat from "@/lib/stats/Stat.svelte";
 	import Stats from "@/lib/stats/Stats.svelte";
-	import { updateUserSetting } from "@/lib/util/api";
+	import { req, updateUserSetting } from "@/lib/util/api";
 	import { getOrdinalSuffix, monthsShort } from "@/lib/util/helpers";
 	import { store } from "@/store.svelte";
 	import { UserType, type Image, type Profile } from "@/types";
-	import axios from "axios";
 	import { notify } from "@/lib/util/notify";
 	import UserAvatar from "@/lib/img/UserAvatar.svelte";
 	import PwChangeModal from "@/routes/(app)/profile/modals/PwChangeModal.svelte";
@@ -19,6 +18,8 @@
 	import RatingSetting from "@/lib/rating/RatingSetting.svelte";
 	import { toggleTheme } from "@/lib/util/theme";
 	import ExportListModal from "./modals/ExportListModal.svelte";
+	import { ReqerError } from "@/lib/util/fetch";
+	import { resolve } from "$app/paths";
 
 	let user = $derived(store.userInfo);
 	let settings = $derived(store.userSettings);
@@ -37,7 +38,7 @@
 	let plexSyncModalOpen = $state(false);
 
 	async function getProfile() {
-		return (await axios.get(`/profile`)).data as Profile;
+		return await req.get<Profile>(`/profile`);
 	}
 
 	function formatDate(d: Date) {
@@ -55,7 +56,7 @@
 			return;
 		}
 		const nid = notify({ text: "Updating Bio", type: "loading" });
-		axios
+		req
 			.post("/user/bio", { newBio: newBio })
 			.then(() => {
 				if (user) {
@@ -66,7 +67,7 @@
 			.catch((err) => {
 				notify({
 					id: nid,
-					text: err?.response?.data?.error ?? "Failed to update bio",
+					text: ReqerError.getMsg(err, "Failed to update bio"),
 					type: "error",
 				});
 			});
@@ -79,19 +80,13 @@
 			return;
 		}
 		const nid = notify({ text: "Uploading avatar", type: "loading" });
-		axios
-			.postForm(
-				"/user/avatar",
-				{ avatar: files[0] },
-				{
-					headers: {
-						"Content-Type": "multipart/form-data",
-					},
-				},
-			)
+		const fd = new FormData();
+		fd.append("avatar", files[0]);
+		req
+			.post<Image>("/user/avatar", fd)
 			.then((r) => {
 				if (user) {
-					user.avatar = r.data as Image;
+					user.avatar = r;
 					notify({ id: nid, text: "Avatar Uploaded", type: "success" });
 				}
 			})
@@ -99,7 +94,7 @@
 				console.error("uploading avatar failed", err);
 				notify({
 					id: nid,
-					text: err?.response?.data?.error ?? "Failed to upload avatar",
+					text: ReqerError.getMsg(err, "Failed to upload avatar"),
 					type: "error",
 				});
 			});
@@ -152,8 +147,7 @@
 					rows="1"
 					placeholder="my bio"
 					onblur={updateBio}
-					value={user?.bio}
-				></textarea>
+					value={user?.bio}></textarea>
 			</div>
 		</div>
 
@@ -246,7 +240,7 @@
 				>
 					<Checkbox
 						name="privateThoughts"
-						disabled={privateDisabled}
+						disabled={privateThoughtsDisabled}
 						value={settings?.privateThoughts}
 						toggled={(on) => {
 							privateThoughtsDisabled = true;
@@ -297,7 +291,7 @@
 
 			<Setting
 				title="Include Previously Watched"
-				desc="Deprecated: This setting is due to be removed because I think TRUE is the only useful value (the removal will go through soon, please give feedback if you have any opinions!)."
+				desc="Should previously finished items be included in the 'Finished' status filter?"
 				row
 			>
 				<Checkbox
@@ -308,8 +302,6 @@
 						includePreviouslyWatchedDisabled = true;
 						updateUserSetting("includePreviouslyWatched", on, () => {
 							includePreviouslyWatchedDisabled = false;
-							// Get profile stats again
-							getProfilePromise = getProfile();
 						});
 					}}
 				/>
@@ -318,7 +310,7 @@
 			<RatingSetting />
 
 			<div class="row btns">
-				<button onclick={() => goto("/import")}>Import</button>
+				<button onclick={() => goto(resolve("/import"))}>Import</button>
 				<button onclick={() => (exportModalOpen = true)}>Export</button>
 				{#if user?.type !== UserType.Plex && user?.type !== UserType.Jellyfin}
 					<button

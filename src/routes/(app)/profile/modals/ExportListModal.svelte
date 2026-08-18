@@ -1,7 +1,7 @@
 <script lang="ts">
 	import Modal from "@/lib/Modal.svelte";
+	import { req } from "@/lib/util/api";
 	import { notify } from "@/lib/util/notify";
-	import axios from "axios";
 
 	interface Props {
 		onClose: () => void;
@@ -13,9 +13,9 @@
 		const nid = notify({ text: "Exporting", type: "loading" });
 		try {
 			// We re-fetch, to ensure data we export is up to date.
-			const r = await axios.get("/watched");
-			console.log(r.data);
-			if (!r.data || r.data?.length <= 0) {
+			const r = await req.get<unknown[]>("/watched");
+			console.log(r);
+			if (!r || r?.length <= 0) {
 				notify({
 					id: nid,
 					text: "Can't export an empty watch list!",
@@ -24,7 +24,7 @@
 				});
 				return;
 			}
-			const file = new Blob([JSON.stringify(r.data, undefined, 2)], {
+			const file = new Blob([JSON.stringify(r, undefined, 2)], {
 				type: "application/json",
 			});
 			const a = document.createElement("a");
@@ -47,8 +47,8 @@
 		instance.
 	</p>
 	<p>
-		If you are migrating to another server you own, it's best to migrate take
-		your existing database with you.
+		If you are migrating to another server that you own, it's best to take your
+		existing database with you.
 	</p>
 	<p>
 		<b>Warning</b>: This is not a backup feature. Backups should be done on the

@@ -6,7 +6,7 @@
 		WatchedSeason,
 		WatchedStatus,
 	} from "@/types";
-	import axios from "axios";
+	import { req } from "../util/api";
 	import Spinner from "@/lib/Spinner.svelte";
 	import Error from "@/lib/Error.svelte";
 	import SeasonsListEpisode from "./SeasonsListEpisode.svelte";
@@ -45,15 +45,18 @@
 	async function sdr(seasonNum: number) {
 		const wid = watchedItem?.id;
 		console.debug("SeasonList: sdr: Called.", tvId, seasonNum, wid);
-		const resp = await axios.get(`/content/tv/${tvId}/season/${seasonNum}`, {
-			params: {
-				watchedId: wid,
+		const resp = await req.getWhole<TMDBSeasonDetails>(
+			`/content/tv/${tvId}/season/${seasonNum}`,
+			{
+				params: {
+					watchedId: wid,
+				},
 			},
-		});
+		);
 		try {
 			if (wid) {
 				// If we sent a watched id, expect a 'watcharr-lastviewedseason-saved' header in the response.
-				const hVal = resp.headers["watcharr-lastviewedseason-saved"];
+				const hVal = resp.headers.get("watcharr-lastviewedseason-saved");
 				if (hVal) {
 					lastViewedSeasonChanged(wid, seasonNum);
 				} else {
@@ -72,7 +75,7 @@
 				err,
 			);
 		}
-		return resp.data as TMDBSeasonDetails;
+		return resp.body;
 	}
 
 	function handleStatusClick(
@@ -129,7 +132,7 @@
 
 <div class="ctr">
 	<ul class="seasons">
-		{#each seasons as season}
+		{#each seasons as season (season.number)}
 			<button
 				class="plain"
 				class:active={activeSeason === season.number}
@@ -213,7 +216,7 @@
 				</div>
 				{#if season?.episodes?.length > 0}
 					<ul>
-						{#each season.episodes as ep}
+						{#each season.episodes as ep (ep.id)}
 							<SeasonsListEpisode {ep} {watchedItem} />
 						{/each}
 					</ul>

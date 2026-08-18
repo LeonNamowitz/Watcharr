@@ -33,6 +33,7 @@ import (
 	"github.com/sbondCo/Watcharr/feature/feature"
 	"github.com/sbondCo/Watcharr/feature/follow"
 	"github.com/sbondCo/Watcharr/feature/game"
+	"github.com/sbondCo/Watcharr/feature/img"
 	"github.com/sbondCo/Watcharr/feature/imprt"
 	"github.com/sbondCo/Watcharr/feature/jellyfin"
 	"github.com/sbondCo/Watcharr/feature/job"
@@ -66,7 +67,13 @@ func main() {
 	}
 
 	multiw := logging.Setup(path.Join(config.DataPath, "watcharr.log"))
-	slog.Info("Watcharr Starting", "version", version)
+	// Just a nice separator so when inspecting the log file I know when
+	// logs are for a new instance.
+	fmt.Fprintf(multiw, `
+	Stand back. Watcharr is starting.
+
+`)
+	slog.Info("Watcharr starting", "version", version)
 	fmt.Printf(`
   ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣀⣀⣀⣀⣀⣀⣀⣀⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
   ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣀⣠⣴⣶⣿⠿⠛⠛⠛⠻⠿⣿⣿⣿⣿⣿⣶⣤⣀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
@@ -110,7 +117,7 @@ func main() {
   ╚══╝╚══╝ ╚═╝  ╚═╝   ╚═╝    ╚═════╝╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝
 
   Layer:%s Starting now. Get ready!
-  
+
   Thank you for running my (spaghetti) code on your system.`+"\n\n", version)
 
 	// Ensure data dir exists
@@ -133,9 +140,12 @@ func main() {
 		isProd = false
 	}
 
+	// Create our database connection.
+	// Migrations are ran before our connection is returned for use.
 	db, err := database.New()
 	if err != nil {
-		log.Fatal("Failed to connect to database:", err)
+		slog.Error("Database initialization failed!", "error", err)
+		os.Exit(1)
 	}
 
 	if isProd {
@@ -186,23 +196,29 @@ func main() {
 	api := gine.Group("/api")
 	br := router.NewBaseRouter(db, api, cfg)
 
-	t := tmdb.NewTMDB(cfg.TMDB_KEY)
+	tmdbService := tmdb.NewTMDB(cfg.TMDB_KEY)
 
+	contentService := content.NewService(db, tmdbService)
+	tmdbService.AddContentProvider(contentService)
 	plexService := plex.NewService(cfg)
 	authService := auth.NewService(db, cfg, plexService)
 	authTrustedHeaderService := auth.NewTrustedHeaderService(db, cfg, authService)
-	contentService := content.NewService(db, t)
 	activityService := activity.NewService(db)
 	userService := user.NewService(db)
 	userManageService := user.NewManageService(db)
 	gameService := game.NewService(db, &br.Cfg.TWITCH, activityService)
-	watchedService := watched.NewService(db, contentService, gameService, activityService)
+	watchedService := watched.NewService(
+		db,
+		contentService,
+		gameService,
+		activityService,
+		userService)
 	watchedSeasonService := season.NewService(db, activityService)
 	watchedEpisodeService := episode.NewService(
 		db,
 		watchedService,
 		watchedSeasonService,
-		contentService,
+		tmdbService,
 		activityService,
 		userService)
 	jellyfinService := jellyfin.NewService(cfg)
@@ -223,22 +239,22 @@ func main() {
 	profileService := profile.NewService(db)
 	followService := follow.NewService(db)
 	tagService := tag.NewService(db, watchedService)
-	searchService := search.NewService(db, br.Cfg, contentService, watchedService)
-	discoverService := discover.NewService(db, br.Cfg, contentService)
+	searchService := search.NewService(db, br.Cfg, tmdbService, watchedService)
+	discoverService := discover.NewService(db, br.Cfg, tmdbService)
 	importService := imprt.NewService(
 		db,
 		watchedService,
 		watchedSeasonService,
 		watchedEpisodeService,
-		contentService,
+		tmdbService,
 		activityService,
 		tagService,
 		searchService)
 	importTraktService := imprt.NewTraktService(importService)
 
 	auth.NewRouter(br, authService, authTrustedHeaderService).AddRoutes()
-	content.NewRouter(br, contentService, watchedService).AddRoutes()
-	watched.NewRouter(br, t, watchedService).AddRoutes()
+	content.NewRouter(br, contentService, watchedService, tmdbService).AddRoutes()
+	watched.NewRouter(br, watchedService).AddRoutes()
 	season.NewRouter(br, watchedSeasonService).AddRoutes()
 	episode.NewRouter(br, watchedEpisodeService).AddRoutes()
 	activity.NewRouter(br, activityService).AddRoutes()
@@ -257,6 +273,7 @@ func main() {
 	game.NewRouter(br, gameService, watchedService).AddRoutes()
 	search.NewRouter(br, searchService, watchedService).AddRoutes()
 	discover.NewRouter(br, discoverService, watchedService).AddRoutes()
+	img.NewRouter(br).AddRoutes()
 
 	// Only add setup routes if there are no users found in db.
 	var userCount int64
@@ -271,8 +288,6 @@ func main() {
 		slog.Error("Failed to check if any users exist.. not registering setup routes",
 			"error", uresp.Error)
 	}
-
-	api.Static("/img", path.Join(config.DataPath, "img"))
 
 	go taskl.SetupTasks(cfg, db)
 

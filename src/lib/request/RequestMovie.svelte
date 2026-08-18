@@ -1,5 +1,4 @@
 <script lang="ts">
-	import axios from "axios";
 	import Modal from "../Modal.svelte";
 	import type {
 		ArrRequestResponse,
@@ -11,6 +10,7 @@
 	import DropDown from "../DropDown.svelte";
 	import Setting from "../settings/Setting.svelte";
 	import Spinner from "../Spinner.svelte";
+	import { req } from "../util/api";
 
 	interface Props {
 		content: Media;
@@ -28,21 +28,18 @@
 
 	let servarrs: RadarrSettingsPublicResponseResult[] | undefined = $state();
 	let selectedServarrIndex: number = $state(0);
-	let inputsDisabled = true;
 	let selectedServerCfg: RadarrTestResponse | undefined = $state();
 	let addRequestRunning = $state(false);
 
 	async function getServers() {
 		try {
-			inputsDisabled = true;
-			const r = await axios.get("/arr/rad");
-			if (r.data?.length > 0) {
-				servarrs = r.data;
+			const r = await req.get<RadarrSettingsPublicResponseResult[]>("/arr/rad");
+			if (r?.length > 0) {
+				servarrs = r;
 				selectedServarrIndex = 0;
 			} else {
 				notify({ text: "No servers found", type: "error" });
 			}
-			inputsDisabled = false;
 			processOriginalRequest();
 		} catch (err) {
 			console.error("Failed to get servers!", err);
@@ -52,10 +49,8 @@
 
 	async function getConfig(name: string) {
 		try {
-			inputsDisabled = true;
-			const r = await axios.get<RadarrTestResponse>(`/arr/rad/config/${name}`);
-			selectedServerCfg = r.data;
-			inputsDisabled = false;
+			const r = await req.get<RadarrTestResponse>(`/arr/rad/config/${name}`);
+			selectedServerCfg = r;
 		} catch (err) {
 			console.error("Failed to get config!", err);
 			notify({ text: "Failed to load config", type: "error" });
@@ -89,7 +84,7 @@
 				notify({ id: nid, text: "No Root Folder Found", type: "error" });
 				return;
 			}
-			const resp = await axios.post<ArrRequestResponse>(
+			const resp = await req.post<ArrRequestResponse>(
 				`/arr/rad/request${approveMode && originalRequest ? `/approve/${originalRequest.id}` : ""}`,
 				{
 					serverName: server.name,
@@ -103,9 +98,9 @@
 				},
 			);
 			addRequestRunning = false;
-			if (resp.data) {
+			if (resp) {
 				notify({ id: nid, text: "Request complete", type: "success" });
-				onClose(resp.data);
+				onClose(resp);
 			}
 		} catch (err) {
 			console.error("content request failed!", err);
