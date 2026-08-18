@@ -13,17 +13,60 @@ import type { Notification } from "./lib/util/notify";
 import { browser } from "$app/environment";
 import { toggleTheme } from "./lib/util/theme";
 
-type ActiveSort = [string, string | undefined] | [];
+export const defaultSort = ["DATEADDED", "DOWN"];
 
-export const defaultSort: ActiveSort = ["DATEADDED", "DOWN"];
+export type WatchedListPresetId = "watchlist" | "recentlyWatched";
+
+type WatchedListPreset = {
+	filters: Filters;
+	sort: string[];
+};
+
+const cloneFilters = (filters: Filters): Filters => ({
+	type: [...(filters.type ?? [])],
+	status: [...(filters.status ?? [])],
+});
+
+const clonePreset = (preset: WatchedListPreset): WatchedListPreset => ({
+	filters: cloneFilters(preset.filters),
+	sort: [...preset.sort],
+});
+
+const defaultWatchedListPresets: Record<
+	WatchedListPresetId,
+	WatchedListPreset
+> = {
+	watchlist: {
+		filters: { type: ["tv", "movie"], status: ["planned", "watching"] },
+		sort: defaultSort,
+	},
+	recentlyWatched: {
+		filters: { type: ["tv", "movie"], status: ["finished"] },
+		sort: ["LASTFIN", "DOWN"],
+	},
+};
+
+function saveActiveWatchedListPreset() {
+	if (!_store.activeWatchedListPreset) return;
+	_store.watchedListPresets[_store.activeWatchedListPreset] = {
+		filters: cloneFilters(_store.activeFilters),
+		sort: [..._store.activeSort],
+	};
+	localStorage.setItem(
+		"watchedListPresets",
+		JSON.stringify(_store.watchedListPresets),
+	);
+}
 
 interface Store {
 	userInfo: PrivateUser | undefined;
 	userSettings: UserSettings | undefined;
 	notifications: Notification[];
-	activeSort: ActiveSort;
+	activeSort: string[];
 	activeFilters: Filters;
-	sortAndFiltersForQueryParams: object;
+	activeWatchedListPreset: WatchedListPresetId | undefined;
+	watchedListPresets: Record<WatchedListPresetId, WatchedListPreset>;
+	sortAndFiltersForQueryParams: {};
 	appTheme: Theme;
 	importedList:
 		| {
@@ -54,6 +97,11 @@ const _store: Store = $state({
 	notifications: [],
 	activeSort: defaultSort,
 	activeFilters: { type: [], status: [] },
+	activeWatchedListPreset: undefined,
+	watchedListPresets: {
+		watchlist: clonePreset(defaultWatchedListPresets.watchlist),
+		recentlyWatched: clonePreset(defaultWatchedListPresets.recentlyWatched),
+	},
 	appTheme: "system",
 	sortAndFiltersForQueryParams: {},
 	importedList: undefined,
@@ -69,7 +117,7 @@ const _store: Store = $state({
 
 const updateSortAndFiltersForQueryParams = () => {
 	try {
-		const qp: Record<string, string> = {};
+		const qp: any = {};
 		if (store.activeSort?.length === 2) {
 			qp.sort = store.activeSort[0];
 			qp.sortDir = store.activeSort[1] === "UP" ? "asc" : "desc";
@@ -111,6 +159,7 @@ export const store = {
 	set activeSort(v) {
 		_store.activeSort = v;
 		localStorage.setItem("activeFilter", JSON.stringify(v));
+		saveActiveWatchedListPreset();
 		console.debug("Store: Saved activeSort:", v);
 		updateSortAndFiltersForQueryParams();
 	},
@@ -127,13 +176,20 @@ export const store = {
 	set activeFilters(v) {
 		_store.activeFilters = v;
 		localStorage.setItem("activeFilterReal", JSON.stringify(v));
+		saveActiveWatchedListPreset();
 		console.debug("Store: Saved activeFilters:", v);
 		updateSortAndFiltersForQueryParams();
+	},
+	get activeWatchedListPreset() {
+		return _store.activeWatchedListPreset;
+	},
+	get watchedListPresets() {
+		return _store.watchedListPresets;
 	},
 	/**
 	 * Return our `activeSort` and `activeFilters` in an object
 	 * that is in the correct format for our get watched page
-	 * http requests.
+	 * requests (object that is given to axios for query params).
 	 */
 	get sortAndFiltersForQueryParams() {
 		return _store.sortAndFiltersForQueryParams;
@@ -238,6 +294,14 @@ export const clearActiveFilters = () => {
 	store.activeFilters = { type: [], status: [] };
 };
 
+export const setWatchedListPreset = (presetId: WatchedListPresetId) => {
+	const preset = _store.watchedListPresets[presetId];
+	_store.activeWatchedListPreset = presetId;
+	localStorage.setItem("activeWatchedListPreset", presetId);
+	store.activeFilters = cloneFilters(preset.filters);
+	store.activeSort = [...preset.sort];
+};
+
 if (browser) {
 	rehydrateStore();
 }
@@ -269,6 +333,36 @@ function rehydrateStore() {
 			$state.snapshot(store.activeFilters),
 		);
 	}
+	// Restore active watched list preset
+	const activeWatchedListPreset = localStorage.getItem(
+		"activeWatchedListPreset",
+	) as WatchedListPresetId | null;
+	if (activeWatchedListPreset) {
+		_store.activeWatchedListPreset = activeWatchedListPreset;
+		console.debug(
+			"rehydrateStore: Restored activeWatchedListPreset:",
+			$state.snapshot(store.activeWatchedListPreset),
+		);
+	}
+	// Restore watched list presets
+	const wlp = localStorage.getItem("watchedListPresets");
+	if (wlp) {
+		const savedPresets = JSON.parse(wlp);
+		_store.watchedListPresets = {
+			watchlist: {
+				...clonePreset(defaultWatchedListPresets.watchlist),
+				...savedPresets.watchlist,
+			},
+			recentlyWatched: {
+				...clonePreset(defaultWatchedListPresets.recentlyWatched),
+				...savedPresets.recentlyWatched,
+			},
+		};
+		console.debug(
+			"rehydrateStore: Restored watchedListPresets:",
+			$state.snapshot(store.watchedListPresets),
+		);
+	}
 	// After restoring activeSort and activeFilter, set
 	// an initial value for our related query param state.
 	updateSortAndFiltersForQueryParams();
@@ -282,7 +376,7 @@ function rehydrateStore() {
 			$state.snapshot(store.appTheme),
 		);
 	} else {
-		const defTheme: Theme = "system";
+		let defTheme: Theme = "system";
 		_store.appTheme = defTheme;
 		toggleTheme(defTheme, false);
 		console.debug(

@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { goto } from "$app/navigation";
-	import { resolve } from "$app/paths";
 	import Error from "@/lib/Error.svelte";
 	import Icon from "@/lib/Icon.svelte";
 	import Poster from "@/lib/poster/Poster.svelte";
@@ -9,7 +8,11 @@
 	import { req } from "@/lib/util/api";
 	import infScroll from "@/lib/util/infScroll";
 	import paginatedLoader from "@/lib/util/paginatedLoader.svelte";
-	import { clearActiveFilters, store } from "@/store.svelte";
+	import {
+		clearActiveFilters,
+		setWatchedListPreset,
+		store,
+	} from "@/store.svelte";
 	import { type Media, type PaginationResponse } from "@/types";
 	import { onDestroy, untrack } from "svelte";
 
@@ -18,7 +21,7 @@
 
 	let nextLoadParams: {
 		page: number;
-		[x: string]: unknown;
+		[x: string]: any;
 	} = $derived({
 		page: dataLoader.state.page + 1,
 		...store.sortAndFiltersForQueryParams,
@@ -73,20 +76,32 @@
 	<title>Watched List</title>
 </svelte:head>
 
-<!-- <span
-	style="position: fixed; top: 80px; background-color: white; color: black; z-index: 60;"
->
-	<b>listPage</b>: {dataLoader.state.page}
-	listPageMax: {dataLoader.state.pageMax}
-	listLoading: {dataLoader.state.reqLoading}
+<!-- <span style="position: fixed; top: 80px; background-color: white; z-index: 60;"
+	><b>listPage</b>: {dataLoader.state.page} listPageMax: {dataLoader.state
+		.pageMax} listLoading:
+	{dataLoader.state.reqLoading}
 	<b>sort:</b>
-	{JSON.stringify(store.activeSort)}
-	<b>filter:</b>
-	{JSON.stringify(store.activeFilters)}
-	<b>queryp:</b>
-	{JSON.stringify(store.sortAndFiltersForQueryParams)}
-	paginatedLoader.state.meta: {JSON.stringify(dataLoader.state.meta)}
-</span> -->
+	{JSON.stringify(store.activeSort)} <b>filter:</b>
+	{JSON.stringify(store.activeFilters)} <b>queryp:</b>
+	{JSON.stringify(store.sortAndFiltersForQueryParams)}</span
+> -->
+
+<div class="type-toggle">
+	<button
+		class="plain"
+		data-active={store.activeWatchedListPreset === "recentlyWatched"}
+		onclick={() => setWatchedListPreset("recentlyWatched")}
+	>
+		<Icon i="reel" wh={18} /> Recently Finished
+	</button>
+	<button
+		class="plain"
+		data-active={store.activeWatchedListPreset === "watchlist"}
+		onclick={() => setWatchedListPreset("watchlist")}
+	>
+		<Icon i="film" wh={18} /> Watchlist
+	</button>
+</div>
 
 <PosterList>
 	{#if dataLoader.state.data?.length > 0}
@@ -108,7 +123,7 @@
 				searching for something you would like to add.
 			</h4>
 			{#if !store.hasActiveFilters}
-				<button onclick={() => goto(resolve("/import"))}>Import</button>
+				<button onclick={() => goto("/import")}>Import</button>
 			{/if}
 			{#if store.hasActiveFilters}
 				<button onclick={() => clearActiveFilters()}>Clear Filters</button>
@@ -142,6 +157,42 @@
 {/if} -->
 
 <style lang="scss">
+	.type-toggle {
+		display: flex;
+		flex-flow: row;
+		flex-wrap: wrap;
+		gap: 10px;
+		justify-content: center;
+		margin: 0 auto 15px auto;
+
+		button {
+			display: flex;
+			flex-flow: row;
+			align-items: center;
+			gap: 8px;
+			padding: 8px 14px;
+			border-radius: 8px;
+			font-size: 14px;
+			color: $text-color;
+			fill: $text-color;
+			transition:
+				background-color 150ms ease,
+				color 150ms ease,
+				outline 150ms ease;
+
+			&:hover,
+			&[data-active="true"] {
+				color: $bg-color;
+				fill: $bg-color;
+				background-color: $accent-color-hover;
+			}
+
+			&[data-active="true"] {
+				outline: 3px solid $accent-color;
+			}
+		}
+	}
+
 	.empty-list {
 		display: flex;
 		flex-flow: column;
