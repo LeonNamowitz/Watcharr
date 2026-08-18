@@ -12,10 +12,11 @@
 	import FollowingMenu from "@/lib/nav/FollowingMenu.svelte";
 	import SortMenu from "@/lib/nav/SortMenu.svelte";
 	import TagMenu from "@/lib/tag/TagMenu.svelte";
-	import { req } from "@/lib/util/api";
+	import { noAuthReq, req } from "@/lib/util/api";
 	import { isTouch } from "@/lib/util/helpers";
 	import { store, defaultSort } from "@/store.svelte";
 	import type {
+		AuthResponse,
 		ServerFeatures,
 		Follow,
 		PrivateUser,
@@ -109,7 +110,26 @@
 		);
 	}
 
+	function isListPage() {
+		return page.url?.pathname.startsWith("/lists/");
+	}
+
+	async function loginAsGuest() {
+		const resp = await noAuthReq.post<AuthResponse>("/auth/", {
+			username: "guest",
+			password: "guest",
+		});
+		if (resp?.token) {
+			localStorage.setItem("token", resp.token);
+		}
+	}
+
 	async function getInitialData() {
+		if (!localStorage.getItem("token")) {
+			if (isListPage()) {
+				await loginAsGuest();
+			}
+		}
 		if (!localStorage.getItem("token")) {
 			console.warn("getInitialData: No token found, redirecting to login!");
 			goto(resolve("/login?again=1"));
