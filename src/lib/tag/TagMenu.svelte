@@ -5,6 +5,13 @@
 	import type { Tag as TagT } from "@/types";
 	import Tag from "./Tag.svelte";
 	import DeleteTagModal from "./DeleteTagModal.svelte";
+	import SortableTag from "./SortableTag.svelte";
+	import { reorderTags } from "./api";
+	import { DragDropProvider } from "@dnd-kit-svelte/svelte";
+	import type {
+		DragEndEvent as DragEndHandler,
+		DragOverEvent as DragOverHandler,
+	} from "@dnd-kit/dom";
 	import Menu, { type MenuConfig } from "../Menu.svelte";
 
 	interface Props {
@@ -35,14 +42,75 @@
 	}: Props = $props();
 
 	let allTags = $derived(store.tags);
+	let editableTags = $state<TagT[]>([]);
 
 	let tagModalOpen = $state(false);
 	let inManageMode = $state(false);
+	let inOrderEditMode = $state(false);
 	let tagToDelete: TagT | undefined = $state(undefined);
 
 	function deleteTag(t: TagT) {
 		// This will show the DeleteTagModal (look below).
 		tagToDelete = t;
+	}
+
+	function toggleOrderEdit() {
+		inManageMode = false;
+		editableTags = [...allTags];
+		inOrderEditMode = true;
+	}
+
+	async function saveTagOrder() {
+		if (!(await reorderTags(editableTags.map((tag) => tag.id)))) {
+			return;
+		}
+		store.tags = editableTags;
+		inOrderEditMode = false;
+	}
+
+	let lastDragTargetId: string | number | null = null;
+
+	function moveEditableTag(
+		sourceId: string | number,
+		targetId: string | number,
+	) {
+		if (sourceId === targetId) return;
+		const from = editableTags.findIndex((tag) => tag.id === sourceId);
+		const to = editableTags.findIndex((tag) => tag.id === targetId);
+		if (from < 0 || to < 0) return;
+
+		const next = [...editableTags];
+		const [moved] = next.splice(from, 1);
+		next.splice(to, 0, moved);
+		editableTags = next;
+	}
+
+	function handleDragStart() {
+		lastDragTargetId = null;
+	}
+
+	function handleDragOver(event: Parameters<DragOverHandler>[0]) {
+		const sourceId = event.operation.source?.id;
+		const targetId = event.operation.target?.id;
+		if (sourceId == null || targetId == null || targetId === lastDragTargetId)
+			return;
+		lastDragTargetId = targetId;
+		moveEditableTag(sourceId, targetId);
+	}
+
+	function handleDragEnd(event: Parameters<DragEndHandler>[0]) {
+		if (!event.canceled) {
+			const sourceId = event.operation.source?.id;
+			const targetId = event.operation.target?.id;
+			if (
+				sourceId != null &&
+				targetId != null &&
+				targetId !== lastDragTargetId
+			) {
+				moveEditableTag(sourceId, targetId);
+			}
+		}
+		lastDragTargetId = null;
 	}
 </script>
 
@@ -52,12 +120,27 @@
 		{#if showManageBtn}
 			<button
 				class={["plain", inManageMode ? "manage-on" : ""].join(" ")}
+				disabled={inOrderEditMode}
 				onclick={() => (inManageMode = !inManageMode)}
+				aria-label="Delete tags"
 			>
 				<Icon i="trash" wh={18} />
 			</button>
+			<button
+				class={["plain", inOrderEditMode ? "manage-on" : ""].join(" ")}
+				disabled={inManageMode}
+				onclick={() => (inOrderEditMode ? saveTagOrder() : toggleOrderEdit())}
+				aria-label={inOrderEditMode ? "Save tag order" : "Edit tag order"}
+			>
+				<Icon i={inOrderEditMode ? "check" : "pencil"} wh={18} />
+			</button>
 		{/if}
-		<button class="plain" onclick={() => (tagModalOpen = !tagModalOpen)}>
+		<button
+			class="plain"
+			disabled={inOrderEditMode}
+			onclick={() => (tagModalOpen = !tagModalOpen)}
+			aria-label="Add tag"
+		>
 			<Icon i="add" wh={22} />
 		</button>
 	</div>
@@ -67,25 +150,35 @@
 				>Click a tag to delete it.</strong
 			>
 		{/if}
-		<div class="list">
-			{#each allTags as t (t.id)}
-				{@const isSelected = selectedTags
-					? selectedTags.find((tag) => tag.id === t.id)
-						? true
-						: false
-					: false}
-				<div>
-					<Tag
-						tag={t}
-						onClick={() =>
-							inManageMode ? deleteTag(t) : onTagClick(t, isSelected)}
-					/>
-					{#if isSelected}
-						<Icon i="check" wh={18} />
+		<DragDropProvider
+			onDragStart={handleDragStart}
+			onDragOver={handleDragOver}
+			onDragEnd={handleDragEnd}
+		>
+			<div class="list">
+				{#each inOrderEditMode ? editableTags : allTags as t, i (t.id)}
+					{#if inOrderEditMode}
+						<SortableTag tag={t} index={i} />
+					{:else}
+						{@const isSelected = selectedTags
+							? selectedTags.find((tag) => tag.id === t.id)
+								? true
+								: false
+							: false}
+						<div>
+							<Tag
+								tag={t}
+								onClick={() =>
+									inManageMode ? deleteTag(t) : onTagClick(t, isSelected)}
+							/>
+							{#if isSelected}
+								<Icon i="check" wh={18} />
+							{/if}
+						</div>
 					{/if}
-				</div>
-			{/each}
-		</div>
+				{/each}
+			</div>
+		</DragDropProvider>
 	{:else}
 		<span style="margin-top: 0;">You have no tags yet!</span>
 	{/if}

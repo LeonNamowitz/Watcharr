@@ -12,6 +12,8 @@ type Tag struct {
 	Color string `json:"color"`
 	// Hex of background color.
 	BgColor string `json:"bgColor"`
+	// Position of the tag in the user's tag list.
+	SortOrder int `json:"order" gorm:"not null;default:0"`
 	// All watched items.
 	Watched []Watched `json:"watched,omitempty" gorm:"many2many:watched_tags;"`
 }
