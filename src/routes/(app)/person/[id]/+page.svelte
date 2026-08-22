@@ -15,6 +15,10 @@
 	import PageBackdrop from "@/lib/generic/PageBackdrop.svelte";
 	import PosterImage from "@/lib/content/PosterImage.svelte";
 	import ExpandableText from "@/lib/content/ExpandableText.svelte";
+	import {
+		readPersonPageState,
+		savePersonPageState,
+	} from "./personPageState";
 
 	let { data } = $props();
 
@@ -48,6 +52,16 @@
 	});
 
 	$effect(() => {
+		if (data.personId && person) {
+			savePersonPageState(data.personId, {
+				sortOption,
+				creditsType,
+				onMyListFilter,
+			});
+		}
+	});
+
+	$effect(() => {
 		if (creditsType && data.personId && person) {
 			updatePersonCredits();
 		}
@@ -57,15 +71,19 @@
 		try {
 			person = undefined;
 			pageError = undefined;
+			credits = undefined;
 			if (!data.personId) {
 				return;
 			}
 			person = await getPerson(data.personId);
-			if (person?.knownForDepartment?.toLowerCase() === "directing") {
-				creditsType = "Directing";
-			} else {
-				creditsType = "Acting";
-			}
+			const savedState = readPersonPageState(data.personId);
+			const defaultCreditsType =
+				person?.knownForDepartment?.toLowerCase() === "directing"
+					? "Directing"
+					: "Acting";
+			sortOption = savedState?.sortOption ?? "Vote count";
+			onMyListFilter = savedState?.onMyListFilter ?? false;
+			creditsType = savedState?.creditsType ?? defaultCreditsType;
 			await updatePersonCredits();
 			sortCredits(sortOption);
 		} catch (err) {
@@ -75,17 +93,15 @@
 	}
 
 	async function getPerson(id: number) {
-		return (await req.get<PersonDetailsResponse>(`/content/person/${id}`));
+		return await req.get<PersonDetailsResponse>(`/content/person/${id}`);
 	}
 
 	async function updatePersonCredits() {
-		credits = (
-			await req.get<PersonCreditsResponse>(
-				`/content/person/${data.personId}/credits`,
-				{
-					params: { creditsType }
-				},
-			)
+		credits = await req.get<PersonCreditsResponse>(
+			`/content/person/${data.personId}/credits`,
+			{
+				params: { creditsType },
+			},
 		);
 		const options = getCreditsTypeOptions();
 		if (!options.includes(creditsType)) {
