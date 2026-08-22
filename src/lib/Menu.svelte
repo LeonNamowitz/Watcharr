@@ -2,6 +2,7 @@
  	button after it is pressed. -->
 <script lang="ts">
 	import stayInView from "./actions/stayInView";
+	import { onMount } from "svelte";
 
 	export interface MenuConfig {
 		width?: string;
@@ -18,9 +19,31 @@
 	}
 
 	let { children, conf }: Props = $props();
+	let menuEl: HTMLDivElement;
+
+	onMount(() => {
+		const updateMaxHeight = () => {
+			const { top } = menuEl.getBoundingClientRect();
+			const availableHeight = Math.max(
+				0,
+				window.innerHeight - Math.max(top, 0) - 10,
+			);
+			menuEl.style.setProperty("--menu-max-height", `${availableHeight}px`);
+		};
+
+		updateMaxHeight();
+		window.addEventListener("resize", updateMaxHeight);
+		window.addEventListener("scroll", updateMaxHeight, { passive: true });
+
+		return () => {
+			window.removeEventListener("resize", updateMaxHeight);
+			window.removeEventListener("scroll", updateMaxHeight);
+		};
+	});
 </script>
 
 <div
+	bind:this={menuEl}
 	class="menu"
 	style={`--w: ${conf?.width || "125px"}; --r: ${
 		conf?.right || "10px"
@@ -73,7 +96,7 @@
 			flex-flow: column;
 			padding: 10px;
 			width: 100%;
-			max-height: calc(100dvh - 65px);
+			max-height: var(--menu-max-height, calc(100dvh - 65px));
 			overflow: auto;
 
 			:global {
