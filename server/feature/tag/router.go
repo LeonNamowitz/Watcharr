@@ -31,6 +31,7 @@ func (r *Router) AddRoutes() {
 	tag.GET(":id", r.GetTag)
 	tag.GET(":id/watched", router.PaginatedRequest(true), r.GetTagWatched)
 	tag.POST("", r.CreateTag)
+	tag.PUT("order", r.ReorderTags)
 	tag.PUT(":id", r.UpdateTag)
 	tag.DELETE(":id", r.DeleteTag)
 }
@@ -132,6 +133,20 @@ func (r *Router) UpdateTag(c *gin.Context) {
 		return
 	}
 	c.AbortWithStatusJSON(http.StatusBadRequest, router.ErrorResponse{Error: err.Error()})
+}
+
+func (r *Router) ReorderTags(c *gin.Context) {
+	userId := c.MustGet("userId").(uint)
+	var tr domain.TagOrderRequest
+	if err := c.ShouldBindJSON(&tr); err != nil {
+		c.AbortWithStatusJSON(http.StatusBadRequest, router.ErrorResponse{Error: err.Error()})
+		return
+	}
+	if err := r.service.ReorderTags(userId, tr.TagIDs); err != nil {
+		c.JSON(http.StatusInternalServerError, router.ErrorResponse{Error: err.Error()})
+		return
+	}
+	c.Status(http.StatusOK)
 }
 
 func (r *Router) DeleteTag(c *gin.Context) {

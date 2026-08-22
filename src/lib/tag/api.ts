@@ -55,3 +55,16 @@ export async function untagWatched(
 			return false;
 		});
 }
+
+export async function reorderTags(tagIds: number[]): Promise<boolean> {
+	const nid = notify({ text: "Saving tag order", type: "loading" });
+	try {
+		await req.put("/tag/order", { tagIds });
+		notify({ id: nid, text: "Tag order saved!", type: "success" });
+		return true;
+	} catch (err) {
+		console.error("reorderTags: Request failed!", err);
+		notify({ id: nid, text: "Failed To Save Tag Order!", type: "error" });
+		return false;
+	}
+}

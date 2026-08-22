@@ -36,6 +36,7 @@
 	},
 	"type": "module",
 	"dependencies": {
+		"@dnd-kit-svelte/svelte": "0.1.6",
 		"blurhash": "2.0.5",
 		"papaparse": "5.4.1"
 	}

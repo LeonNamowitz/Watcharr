@@ -6,4 +6,7 @@ type (
 		Color   string `json:"color"`
 		BgColor string `json:"bgColor"`
 	}
+	TagOrderRequest struct {
+		TagIDs []uint `json:"tagIds" binding:"required"`
+	}
 )

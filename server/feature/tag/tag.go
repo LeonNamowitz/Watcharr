@@ -33,7 +33,10 @@ func NewService(db *gorm.DB, watchedProvider WatchedProvider) *Service {
 
 func (s *Service) GetTags(userId uint) ([]entity.Tag, error) {
 	tags := new([]entity.Tag)
-	res := s.db.Model(&entity.Tag{}).Where("user_id = ?", userId).Find(&tags)
+	res := s.db.Model(&entity.Tag{}).
+		Where("user_id = ?", userId).
+		Order("sort_order ASC, created_at ASC, id ASC").
+		Find(&tags)
 	if res.Error != nil {
 		slog.Error("getTags: Failed getting tags from database", "error", res.Error.Error())
 		return []entity.Tag{}, errors.New("failed getting tags")
@@ -149,14 +152,77 @@ func (s *Service) AddTag(userId uint, tr domain.TagAddRequest) (entity.Tag, erro
 	if tr.Name == "" {
 		return entity.Tag{}, errors.New("tag must have a name")
 	}
-	tag := entity.Tag{UserID: userId, Name: tr.Name, Color: tr.Color, BgColor: tr.BgColor}
-	res := s.db.Create(&tag)
+	var maxOrder int
+	res := s.db.Model(&entity.Tag{}).
+		Where("user_id = ?", userId).
+		Select("COALESCE(MAX(sort_order), -1)").
+		Scan(&maxOrder)
+	if res.Error != nil {
+		slog.Error("Error getting tag order from database", "error", res.Error.Error())
+		return entity.Tag{}, errors.New("failed getting tag order")
+	}
+	tag := entity.Tag{
+		UserID:    userId,
+		Name:      tr.Name,
+		Color:     tr.Color,
+		BgColor:   tr.BgColor,
+		SortOrder: maxOrder + 1,
+	}
+	res = s.db.Create(&tag)
 	if res.Error != nil {
 		slog.Error("Error adding tag to database", "error", res.Error.Error())
 		return entity.Tag{}, errors.New("failed adding new tag to database")
 	}
 	slog.Debug("Adding tag", "added_tag", tag)
 	return tag, nil
+}
+
+// ReorderTags updates the order of all tags belonging to a user.
+func (s *Service) ReorderTags(userId uint, tagIDs []uint) error {
+	if len(tagIDs) == 0 {
+		return errors.New("no tag ids provided")
+	}
+
+	var tags []entity.Tag
+	res := s.db.Where("user_id = ?", userId).Find(&tags)
+	if res.Error != nil {
+		slog.Error("reorderTags: Failed getting user's tags", "error", res.Error.Error())
+		return errors.New("failed getting tags")
+	}
+	if len(tags) != len(tagIDs) {
+		return errors.New("tag order does not match user's tags")
+	}
+
+	owned := make(map[uint]struct{}, len(tags))
+	for _, tag := range tags {
+		owned[tag.ID] = struct{}{}
+	}
+	seen := make(map[uint]struct{}, len(tagIDs))
+	for _, tagID := range tagIDs {
+		if _, ok := owned[tagID]; !ok {
+			return errors.New("tag does not belong to user")
+		}
+		if _, ok := seen[tagID]; ok {
+			return errors.New("duplicate tag id")
+		}
+		seen[tagID] = struct{}{}
+	}
+
+	err := s.db.Transaction(func(tx *gorm.DB) error {
+		for order, tagID := range tagIDs {
+			if res := tx.Model(&entity.Tag{}).
+				Where("id = ? AND user_id = ?", tagID, userId).
+				Update("sort_order", order); res.Error != nil {
+				return res.Error
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		slog.Error("reorderTags: Failed updating tag order", "error", err)
+		return errors.New("failed updating tag order")
+	}
+	return nil
 }
 
 // Let user update one of their tags (replaces).
