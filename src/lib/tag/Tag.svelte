@@ -49,7 +49,7 @@
 
 		&.drag-handle {
 			cursor: grab;
-			touch-action: none;
+			touch-action: pan-y;
 
 			&:active {
 				cursor: grabbing;

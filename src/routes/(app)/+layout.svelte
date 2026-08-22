@@ -39,6 +39,7 @@
 	let followingMenuShown = $state(false);
 	let detailedMenuShown = $state(false);
 	let tagMenuShown = $state(false);
+	let tagOrderEditMode = $state(false);
 	let scroll = window.scrollY;
 
 	function handleProfileClick() {
@@ -145,7 +146,10 @@
 		if (except !== "sort") sortMenuShown = false;
 		if (except !== "following") followingMenuShown = false;
 		if (except !== "detailed") detailedMenuShown = false;
-		if (except !== "tag") tagMenuShown = false;
+		if (except !== "tag") {
+			tagMenuShown = false;
+			tagOrderEditMode = false;
+		}
 	}
 
 	/**
@@ -180,7 +184,7 @@
 		} else {
 			navEl?.classList.add("scrolled-down");
 			document.body.classList.remove("nav-shown");
-			closeAllSubMenus();
+			if (!tagOrderEditMode) closeAllSubMenus();
 		}
 		scroll = window.scrollY;
 	}
@@ -322,6 +326,7 @@
 			<button
 				class="plain other tag"
 				onclick={() => {
+					tagOrderEditMode = false;
 					closeAllSubMenus("tag");
 					tagMenuShown = !tagMenuShown;
 				}}
@@ -336,6 +341,7 @@
 						tagMenuShown = false;
 					}}
 					showManageBtn={true}
+					onOrderEditModeChange={(editing) => (tagOrderEditMode = editing)}
 				/>
 			{/if}
 			<button

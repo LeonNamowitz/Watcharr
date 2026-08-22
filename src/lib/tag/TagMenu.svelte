@@ -7,7 +7,12 @@
 	import DeleteTagModal from "./DeleteTagModal.svelte";
 	import SortableTag from "./SortableTag.svelte";
 	import { reorderTags } from "./api";
-	import { DragDropProvider } from "@dnd-kit-svelte/svelte";
+	import {
+		DragDropProvider,
+		KeyboardSensor,
+		PointerSensor,
+	} from "@dnd-kit-svelte/svelte";
+	import { PointerActivationConstraints } from "@dnd-kit/dom";
 	import type {
 		DragEndEvent as DragEndHandler,
 		DragOverEvent as DragOverHandler,
@@ -24,6 +29,7 @@
 		 * will trigger a deletion instead of `onTagClick()`.
 		 */
 		showManageBtn?: boolean;
+		onOrderEditModeChange?: (editing: boolean) => void;
 		menuConfig?: MenuConfig;
 	}
 
@@ -38,6 +44,7 @@
 		onTagClick = undefined!,
 		selectedTags = undefined,
 		showManageBtn = false,
+		onOrderEditModeChange = undefined,
 		menuConfig = {},
 	}: Props = $props();
 
@@ -48,6 +55,14 @@
 	let inManageMode = $state(false);
 	let inOrderEditMode = $state(false);
 	let tagToDelete: TagT | undefined = $state(undefined);
+	const sensors = [
+		PointerSensor.configure({
+			activationConstraints: [
+				new PointerActivationConstraints.Delay({ value: 50, tolerance: 8 }),
+			],
+		}),
+		KeyboardSensor,
+	];
 
 	function deleteTag(t: TagT) {
 		// This will show the DeleteTagModal (look below).
@@ -58,6 +73,7 @@
 		inManageMode = false;
 		editableTags = [...allTags];
 		inOrderEditMode = true;
+		onOrderEditModeChange?.(true);
 	}
 
 	async function saveTagOrder() {
@@ -66,6 +82,7 @@
 		}
 		store.tags = editableTags;
 		inOrderEditMode = false;
+		onOrderEditModeChange?.(false);
 	}
 
 	let lastDragTargetId: string | number | null = null;
@@ -151,6 +168,7 @@
 			>
 		{/if}
 		<DragDropProvider
+			{sensors}
 			onDragStart={handleDragStart}
 			onDragOver={handleDragOver}
 			onDragEnd={handleDragEnd}

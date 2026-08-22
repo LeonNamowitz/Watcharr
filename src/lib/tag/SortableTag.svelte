@@ -28,6 +28,6 @@
 		align-items: center;
 		gap: 5px;
 		color: $text-color;
-		touch-action: none;
+		touch-action: pan-y;
 	}
 </style>
