@@ -165,36 +165,15 @@ func (s *Service) getPublicWatched(
 		return util.PaginationResponse[entity.Watched, util.None]{}, errors.New("this watched list is private")
 	}
 
-	// Now we know the user is public, return their list
-	watched := new([]entity.Watched)
-	pRes := &util.PaginationResponse[entity.Watched, util.None]{}
-	res = s.db.
-		Model(&entity.Watched{}).
-		Where(&entity.Watched{UserID: userId}).
-		Joins("Content").
-		Joins("Game").
-		Preload("Game.Poster").
-		Preload("Tags").
-		Preload("WatchedSeasons").
-		Preload("WatchedEpisodes").
-		// Apply filters first.
-		Scopes(watchedRefineFilter(wr, nil)).
-		// Then count results (after filter);
-		Count(&pRes.TotalResults).
-		// Now calculate pagination properties with a TotalResults
-		// that takes filtered out items into account.
-		Scopes(util.Paginate(pp, pRes)).
-		// Sort options.
-		// Note: See note above in GetWatchedPage.
-		Scopes(watchedRefineSort(wr, userId)).
-		Find(&watched)
-	if res.Error != nil {
-		slog.Error("getPublicWatched: Failed!", "error", res.Error)
+	// Now we know the user is public, return their list. Use the same paginated
+	// query as the normal watched page so the list owner's settings are applied
+	// to status filters too.
+	pRes, err := s.GetWatchedPage(userId, pp, wr, nil)
+	if err != nil {
+		slog.Error("getPublicWatched: Failed!", "error", err)
 		return util.PaginationResponse[entity.Watched, util.None]{}, errors.New("failed fetching the list")
 	}
-	pRes.Results = *watched
-	pRes.Finished(pp)
-	return *pRes, nil
+	return pRes, nil
 }
 
 // Get a watched list item by id (must be for `userId`).
