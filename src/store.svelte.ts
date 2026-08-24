@@ -31,11 +31,6 @@ const cloneFilters = (filters: Filters): Filters => ({
 	status: [...(filters.status ?? [])],
 });
 
-const clonePreset = (preset: WatchedListPreset): WatchedListPreset => ({
-	filters: cloneFilters(preset.filters),
-	sort: [...preset.sort],
-});
-
 const defaultWatchedListPresets: Record<
 	WatchedListPresetId,
 	WatchedListPreset
@@ -50,18 +45,6 @@ const defaultWatchedListPresets: Record<
 	},
 };
 
-function saveActiveWatchedListPreset() {
-	if (!_store.activeWatchedListPreset) return;
-	_store.watchedListPresets[_store.activeWatchedListPreset] = {
-		filters: cloneFilters(_store.activeFilters),
-		sort: [..._store.activeSort],
-	};
-	localStorage.setItem(
-		"watchedListPresets",
-		JSON.stringify(_store.watchedListPresets),
-	);
-}
-
 interface Store {
 	userInfo: PrivateUser | undefined;
 	userSettings: UserSettings | undefined;
@@ -69,7 +52,6 @@ interface Store {
 	activeSort: string[];
 	activeFilters: Filters;
 	activeWatchedListPreset: WatchedListPresetId | undefined;
-	watchedListPresets: Record<WatchedListPresetId, WatchedListPreset>;
 	sortAndFiltersForQueryParams: {};
 	appTheme: Theme;
 	importedList:
@@ -102,10 +84,6 @@ const _store: Store = $state({
 	activeSort: defaultSort,
 	activeFilters: { type: [], status: [] },
 	activeWatchedListPreset: undefined,
-	watchedListPresets: {
-		watchlist: clonePreset(defaultWatchedListPresets.watchlist),
-		recentlyWatched: clonePreset(defaultWatchedListPresets.recentlyWatched),
-	},
 	appTheme: "system",
 	sortAndFiltersForQueryParams: {},
 	importedList: undefined,
@@ -163,7 +141,7 @@ export const store = {
 	set activeSort(v) {
 		_store.activeSort = v;
 		localStorage.setItem("activeFilter", JSON.stringify(v));
-		saveActiveWatchedListPreset();
+		clearActiveWatchedListPreset();
 		console.debug("Store: Saved activeSort:", v);
 		updateSortAndFiltersForQueryParams();
 	},
@@ -180,15 +158,12 @@ export const store = {
 	set activeFilters(v) {
 		_store.activeFilters = v;
 		localStorage.setItem("activeFilterReal", JSON.stringify(v));
-		saveActiveWatchedListPreset();
+		clearActiveWatchedListPreset();
 		console.debug("Store: Saved activeFilters:", v);
 		updateSortAndFiltersForQueryParams();
 	},
 	get activeWatchedListPreset() {
 		return _store.activeWatchedListPreset;
-	},
-	get watchedListPresets() {
-		return _store.watchedListPresets;
 	},
 	/**
 	 * Return our `activeSort` and `activeFilters` in an object
@@ -298,12 +273,17 @@ export const clearActiveFilters = () => {
 	store.activeFilters = { type: [], status: [] };
 };
 
+const clearActiveWatchedListPreset = () => {
+	_store.activeWatchedListPreset = undefined;
+	localStorage.removeItem("activeWatchedListPreset");
+};
+
 export const setWatchedListPreset = (presetId: WatchedListPresetId) => {
-	const preset = _store.watchedListPresets[presetId];
-	_store.activeWatchedListPreset = presetId;
-	localStorage.setItem("activeWatchedListPreset", presetId);
+	const preset = defaultWatchedListPresets[presetId];
 	store.activeFilters = cloneFilters(preset.filters);
 	store.activeSort = [...preset.sort];
+	_store.activeWatchedListPreset = presetId;
+	localStorage.setItem("activeWatchedListPreset", presetId);
 };
 
 if (browser) {
@@ -348,25 +328,8 @@ function rehydrateStore() {
 			$state.snapshot(store.activeWatchedListPreset),
 		);
 	}
-	// Restore watched list presets
-	const wlp = localStorage.getItem("watchedListPresets");
-	if (wlp) {
-		const savedPresets = JSON.parse(wlp);
-		_store.watchedListPresets = {
-			watchlist: {
-				...clonePreset(defaultWatchedListPresets.watchlist),
-				...savedPresets.watchlist,
-			},
-			recentlyWatched: {
-				...clonePreset(defaultWatchedListPresets.recentlyWatched),
-				...savedPresets.recentlyWatched,
-			},
-		};
-		console.debug(
-			"rehydrateStore: Restored watchedListPresets:",
-			$state.snapshot(store.watchedListPresets),
-		);
-	}
+	// Presets are fixed defaults now; discard preferences saved by older versions.
+	localStorage.removeItem("watchedListPresets");
 	// After restoring activeSort and activeFilter, set
 	// an initial value for our related query param state.
 	updateSortAndFiltersForQueryParams();
