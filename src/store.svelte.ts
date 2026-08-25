@@ -52,7 +52,7 @@ interface Store {
 	activeSort: string[];
 	activeFilters: Filters;
 	activeWatchedListPreset: WatchedListPresetId | undefined;
-	sortAndFiltersForQueryParams: {};
+	sortAndFiltersForQueryParams: Record<string, string>;
 	appTheme: Theme;
 	importedList:
 		| {
@@ -99,7 +99,7 @@ const _store: Store = $state({
 
 const updateSortAndFiltersForQueryParams = () => {
 	try {
-		const qp: any = {};
+		const qp: Record<string, string> = {};
 		if (store.activeSort?.length === 2) {
 			qp.sort = store.activeSort[0];
 			qp.sortDir = store.activeSort[1] === "UP" ? "asc" : "desc";
@@ -343,7 +343,7 @@ function rehydrateStore() {
 			$state.snapshot(store.appTheme),
 		);
 	} else {
-		let defTheme: Theme = "system";
+		const defTheme: Theme = "system";
 		_store.appTheme = defTheme;
 		toggleTheme(defTheme, false);
 		console.debug(

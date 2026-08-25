@@ -15,10 +15,7 @@
 	import PageBackdrop from "@/lib/generic/PageBackdrop.svelte";
 	import PosterImage from "@/lib/content/PosterImage.svelte";
 	import ExpandableText from "@/lib/content/ExpandableText.svelte";
-	import {
-		readPersonPageState,
-		savePersonPageState,
-	} from "./personPageState";
+	import { readPersonPageState, savePersonPageState } from "./personPageState";
 
 	let { data } = $props();
 

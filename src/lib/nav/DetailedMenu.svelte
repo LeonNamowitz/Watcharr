@@ -18,7 +18,11 @@
 	conf={{
 		width: "200px",
 		right: "92px",
-		arrowLeft: page.url?.pathname.startsWith("/search") || page.url?.pathname.startsWith("/person") ? "84px" : "3px",
+		arrowLeft:
+			page.url?.pathname.startsWith("/search") ||
+			page.url?.pathname.startsWith("/person")
+				? "84px"
+				: "3px",
 	}}
 >
 	<h4 class="norm sm-caps">Shown Details</h4>

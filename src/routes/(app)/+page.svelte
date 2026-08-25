@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { goto } from "$app/navigation";
+	import { resolve } from "$app/paths";
 	import Error from "@/lib/Error.svelte";
 	import Icon from "@/lib/Icon.svelte";
 	import Poster from "@/lib/poster/Poster.svelte";
@@ -21,7 +22,7 @@
 
 	let nextLoadParams: {
 		page: number;
-		[x: string]: any;
+		[x: string]: string | number;
 	} = $derived({
 		page: dataLoader.state.page + 1,
 		...store.sortAndFiltersForQueryParams,
@@ -123,7 +124,7 @@
 				searching for something you would like to add.
 			</h4>
 			{#if !store.hasActiveFilters}
-				<button onclick={() => goto("/import")}>Import</button>
+				<button onclick={() => goto(resolve("/import"))}>Import</button>
 			{/if}
 			{#if store.hasActiveFilters}
 				<button onclick={() => clearActiveFilters()}>Clear Filters</button>

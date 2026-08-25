@@ -1,17 +1,20 @@
 <script lang="ts">
 	import { goto } from "$app/navigation";
+	import { resolve } from "$app/paths";
 
 	export let id: number | undefined;
 	export let name: string | undefined;
 	export let role: string | undefined;
 	export let className: string | undefined = "";
 
-	const link = id ? `/person/${id}` : undefined;
+	const link: `/person/${number}` | undefined = id
+		? `/person/${id}`
+		: undefined;
 
 	function handleClick(e: MouseEvent) {
 		if (!link) return;
 		e.preventDefault();
-		goto(link);
+		goto(resolve(link));
 	}
 </script>
 
@@ -20,7 +23,7 @@
 		{#if link}
 			<a
 				data-sveltekit-preload-data="tap"
-				href={link}
+				href={resolve(link)}
 				on:click={handleClick}
 				aria-label={`View ${name} profile`}
 			>

@@ -1,6 +1,5 @@
 <script lang="ts">
 	import PersonPoster from "@/lib/poster/PersonPoster.svelte";
-	import PersonLink from "@/lib/content/PersonLink.svelte";
 	import Spinner from "@/lib/Spinner.svelte";
 	import HorizontalList from "@/lib/HorizontalList.svelte";
 	import { contentExistsOnJellyfin, req, updateWatched } from "@/lib/util/api";
