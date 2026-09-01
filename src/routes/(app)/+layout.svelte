@@ -80,6 +80,36 @@
 			() => {
 				const target = ev.target as HTMLInputElement;
 				const query = target?.value.trim();
+				if (isListPage()) {
+					const currentListLocation = new URL(page.url);
+					if (query) {
+						currentListLocation.searchParams.set("query", query);
+					} else {
+						currentListLocation.searchParams.delete("query");
+					}
+					if (currentListLocation.search === page.url.search) return;
+					const listSearchParams = currentListLocation.searchParams.toString();
+					const listLocation = listSearchParams
+						? resolve(
+								`/lists/${page.params.id}/${page.params.username}?${listSearchParams}`,
+							)
+						: resolve(`/lists/${page.params.id}/${page.params.username}`);
+					target.autofocus = true;
+					goto(listLocation).then(() => {
+						// Use mainSearchEl if nav not split, otherwise use ev target.
+						if (
+							!document.body.classList.contains("split-nav") &&
+							mainSearchEl
+						) {
+							mainSearchEl.focus();
+							mainSearchEl.autofocus = false;
+						} else {
+							target?.focus();
+						}
+						target.autofocus = false;
+					});
+					return;
+				}
 				if (!query) return;
 				const currentSearchType = page.url.searchParams.get("type");
 				const searchParams = new SvelteURLSearchParams({
@@ -273,7 +303,7 @@
 			<input
 				bind:this={mainSearchEl}
 				type="text"
-				placeholder="Search"
+				placeholder={isListPage() ? "Search this list" : "Search"}
 				bind:value={store.searchQuery}
 				onkeydown={handleSearch}
 			/>
@@ -319,28 +349,30 @@
 						<div class="indicator"></div>
 					{/if}
 				</button>
-				<button
-					class="plain other filter"
-					onclick={() => {
-						closeAllSubMenus("filter");
-						filterMenuShown = !filterMenuShown;
-					}}
-					use:tooltip={{
-						text: "Filter",
-						pos: "bot",
-						condition: !filterMenuShown,
-					}}
-				>
-					<Icon i="filter" />
-					{#if store.activeFilters?.type?.length > 0 || store.activeFilters?.status?.length > 0}
-						<div class="indicator"></div>
+				{#if !(isListPage() && page.url.searchParams.get("query")?.trim())}
+					<button
+						class="plain other filter"
+						onclick={() => {
+							closeAllSubMenus("filter");
+							filterMenuShown = !filterMenuShown;
+						}}
+						use:tooltip={{
+							text: "Filter",
+							pos: "bot",
+							condition: !filterMenuShown,
+						}}
+					>
+						<Icon i="filter" />
+						{#if store.activeFilters?.type?.length > 0 || store.activeFilters?.status?.length > 0}
+							<div class="indicator"></div>
+						{/if}
+					</button>
+					{#if filterMenuShown}
+						<FilterMenu />
 					{/if}
-				</button>
+				{/if}
 				{#if sortMenuShown}
 					<SortMenu />
-				{/if}
-				{#if filterMenuShown}
-					<FilterMenu />
 				{/if}
 			{/if}
 			<button
@@ -397,7 +429,7 @@
 	<input
 		class="small"
 		type="text"
-		placeholder="Search"
+		placeholder={isListPage() ? "Search this list" : "Search"}
 		bind:value={store.searchQuery}
 		onkeydown={handleSearch}
 	/>

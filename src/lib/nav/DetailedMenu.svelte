@@ -4,6 +4,11 @@
 	import { page } from "$app/state";
 	import Menu from "../Menu.svelte";
 
+	let isPublicListSearch = $derived(
+		page.url.pathname.startsWith("/lists/") &&
+			!!page.url.searchParams.get("query")?.trim(),
+	);
+
 	function detailClicked(d: WLDetailedViewOption) {
 		if (store.wlDetailedView.includes(d)) {
 			store.wlDetailedView = store.wlDetailedView.filter((a) => a !== d);
@@ -22,7 +27,9 @@
 			page.url?.pathname.startsWith("/search") ||
 			page.url?.pathname.startsWith("/person")
 				? "84px"
-				: "3px",
+				: isPublicListSearch
+					? "43px"
+					: "3px",
 	}}
 >
 	<h4 class="norm sm-caps">Shown Details</h4>

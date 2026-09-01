@@ -102,8 +102,15 @@ func (s *Service) GetWatchedPage(
 
 		// Search query
 		if extraProps.Query != "" {
-			q := "%" + extraProps.Query + "%"
-			res = res.Where("Content.Title LIKE ? OR Game.Name LIKE ?", q, q)
+			watchedIDs, err := s.searchWatchedIDsByTitle(userId, extraProps.Query)
+			if err != nil {
+				return *pRes, errors.New("failed to search watched titles")
+			}
+			if len(watchedIDs) == 0 {
+				res = res.Where("1 = 0")
+			} else {
+				res = res.Where("watcheds.id IN ?", watchedIDs)
+			}
 		}
 	}
 
@@ -136,6 +143,25 @@ func (s *Service) GetWatchedPage(
 	return *pRes, nil
 }
 
+// Validate that the provided user identifies a public watched list.
+func (s *Service) ValidatePublicWatchedList(userId uint, username string) error {
+	user := new(entity.User)
+	res := s.db.
+		Where("id = ? AND username = ?", userId, username).
+		Take(&user)
+	if res.Error != nil {
+		slog.Error("ValidatePublicWatchedList: Failed to get user.",
+			"user_id", userId)
+		return errors.New("failed to check privacy settings")
+	}
+	if user.Private != nil && *user.Private {
+		slog.Error("ValidatePublicWatchedList: This users list is private.",
+			"user_id", userId)
+		return errors.New("this watched list is private")
+	}
+	return nil
+}
+
 // Get a users **public** watchlist.
 func (s *Service) getPublicWatched(
 	userId uint,
@@ -146,23 +172,8 @@ func (s *Service) getPublicWatched(
 	slog.Debug("getPublicWatched: running",
 		"user_id", userId, "username", username)
 
-	// First we need to make sure the users list is public
-	user := new(entity.User)
-	// I figure we require knowlege of the users id and name to make it
-	// harder to just type in random ids and see someones list.. dunno
-	// if this is a thing we need but its here.. for now at least.
-	res := s.db.
-		Where("id = ? AND username = ?", userId, username).
-		Take(&user)
-	if res.Error != nil {
-		slog.Error("getPublicWatched: Failed to get user.",
-			"user_id", userId)
-		return util.PaginationResponse[entity.Watched, util.None]{}, errors.New("failed to check privacy settings")
-	}
-	if user.Private != nil && *user.Private {
-		slog.Error("getPublicWatched: This users list is private.",
-			"user_id", userId)
-		return util.PaginationResponse[entity.Watched, util.None]{}, errors.New("this watched list is private")
+	if err := s.ValidatePublicWatchedList(userId, username); err != nil {
+		return util.PaginationResponse[entity.Watched, util.None]{}, err
 	}
 
 	// Now we know the user is public, return their list. Use the same paginated

@@ -1,6 +1,12 @@
 <script lang="ts">
+	import { page } from "$app/state";
 	import { store } from "@/store.svelte";
 	import Menu from "../Menu.svelte";
+
+	let isPublicListSearch = $derived(
+		page.url.pathname.startsWith("/lists/") &&
+			!!page.url.searchParams.get("query")?.trim(),
+	);
 
 	function sortClicked(type: string) {
 		window.scrollTo({ top: 0 });
@@ -33,7 +39,13 @@
 	}
 </script>
 
-<Menu conf={{ width: "180px", right: "90px", arrowLeft: "21px" }}>
+<Menu
+	conf={{
+		width: "180px",
+		right: "90px",
+		arrowLeft: isPublicListSearch ? "61px" : "21px",
+	}}
+>
 	<button
 		class={`plain ${getDirectionClass("DATEADDED")}`}
 		onclick={() => sortClicked("DATEADDED")}

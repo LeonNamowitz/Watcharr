@@ -11,15 +11,14 @@
 	} from "@/store.svelte.js";
 	import type { Media, PaginationResponse, PublicUser } from "@/types.js";
 	import { onDestroy, untrack } from "svelte";
-	import paginatedLoader, {
-		PaginatedLoaderRunFnAction,
-	} from "@/lib/util/paginatedLoader.svelte.js";
+	import paginatedLoader from "@/lib/util/paginatedLoader.svelte.js";
 	import infScroll from "@/lib/util/infScroll.js";
 	import { page } from "$app/state";
 	import PosterList from "@/lib/poster/PosterList.svelte";
 	import Poster from "@/lib/poster/Poster.svelte";
 	import Error from "@/lib/Error.svelte";
-	import { afterNavigate } from "$app/navigation";
+	import { goto } from "$app/navigation";
+	import { resolve } from "$app/paths";
 
 	let meta = $derived.by(() => {
 		return {
@@ -27,6 +26,9 @@
 			username: page.params.username,
 		};
 	});
+
+	let searchQuery = $derived(page.url.searchParams.get("query")?.trim() ?? "");
+	let isSearching = $derived(searchQuery.length > 0);
 
 	let followBtnDisabled = $state(false);
 	let user: PublicUser | undefined = $state();
@@ -38,12 +40,28 @@
 	const scroll = infScroll({ callback: onScrollToBottom });
 	const dataLoader = paginatedLoader<Media, undefined>(load);
 
+	let requestParams: Record<string, string> = $derived.by(() => {
+		const params = store.sortAndFiltersForQueryParams;
+		if (!isSearching) return params;
+
+		const searchParams: Record<string, string> = { query: searchQuery };
+		if (params.sort) searchParams.sort = params.sort;
+		if (params.sortDir) searchParams.sortDir = params.sortDir;
+		return searchParams;
+	});
+	let requestKey = $derived(
+		JSON.stringify({
+			id: meta.id,
+			username: meta.username,
+			params: requestParams,
+		}),
+	);
 	let nextLoadParams: {
 		page: number;
 		[x: string]: unknown;
 	} = $derived({
 		page: dataLoader.state.page + 1,
-		...store.sortAndFiltersForQueryParams,
+		...requestParams,
 	});
 
 	async function load(signal: AbortSignal) {
@@ -56,13 +74,13 @@
 			console.warn("load: Missing id or username!");
 			return;
 		}
-		const r = await req.get<PaginationResponse<Media, undefined>>(
-			`/watched/${meta.id}/${meta.username}`,
-			{
-				params: nextLoadParams,
-				signal,
-			},
-		);
+		const endpoint = isSearching
+			? `/search/list/${meta.id}/${meta.username}`
+			: `/watched/${meta.id}/${meta.username}`;
+		const r = await req.get<PaginationResponse<Media, undefined>>(endpoint, {
+			params: nextLoadParams,
+			signal,
+		});
 		scroll.dataLoaded();
 		return r;
 	}
@@ -73,19 +91,15 @@
 			return;
 		}
 		console.debug("onScrollToBottom");
-		dataLoader.runFn();
+		await dataLoader.runFn();
 	}
 
-	// NOTE: This effect also handles initial load of data.
+	// Handles the initial load and reloads when the owner, query, sort, or
+	// non-search filters change.
 	$effect(() => {
-		// When our sort/filter query params change,
-		// load our list again.
-		// Since it exists at load, this performs our
-		// initial load of data too.
-		if (store.sortAndFiltersForQueryParams) {
+		if (requestKey) {
 			untrack(() => {
-				// We don't want to trigger another re-run of this
-				// effect when state inside these funcs changes.
+				// We don't want state inside these funcs to become dependencies.
 				dataLoader.reset();
 				dataLoader.runFn();
 			});
@@ -122,22 +136,26 @@
 		}
 	});
 
-	afterNavigate((e) => {
-		if (!e.from?.route?.id?.toLowerCase()?.includes("/lists")) {
-			// Ensure afterNavigate can only runFn when we are coming
-			// from another list page.
-			// OnMount of a list page we don't want to have this also run
-			// because that breaks our loader and our effect will handle loading
-			// in that case already.
-			return;
-		}
-		console.log("afterNavigate.");
-		dataLoader.abortReq("navigated away");
-		dataLoader.runFn(PaginatedLoaderRunFnAction.Reset);
+	$effect(() => {
+		store.searchQuery = searchQuery;
 	});
+
+	function clearSearch() {
+		const location = new URL(page.url);
+		location.searchParams.delete("query");
+		const searchParams = location.searchParams.toString();
+		goto(
+			searchParams
+				? resolve(
+						`/lists/${page.params.id}/${page.params.username}?${searchParams}`,
+					)
+				: resolve(`/lists/${page.params.id}/${page.params.username}`),
+		);
+	}
 
 	onDestroy(() => {
 		console.debug("PAGE DESTROYED");
+		store.searchQuery = "";
 		scroll.destroy();
 		dataLoader.abortReq("page destroyed");
 	});
@@ -171,22 +189,24 @@
 	</div>
 </div>
 
-<div class="type-toggle">
-	<button
-		class="plain"
-		data-active={store.activeWatchedListPreset === "recentlyWatched"}
-		onclick={() => setWatchedListPreset("recentlyWatched")}
-	>
-		<Icon i="reel" wh={18} /> Recently Finished
-	</button>
-	<button
-		class="plain"
-		data-active={store.activeWatchedListPreset === "watchlist"}
-		onclick={() => setWatchedListPreset("watchlist")}
-	>
-		<Icon i="film" wh={18} /> Watchlist
-	</button>
-</div>
+{#if !isSearching}
+	<div class="type-toggle">
+		<button
+			class="plain"
+			data-active={store.activeWatchedListPreset === "recentlyWatched"}
+			onclick={() => setWatchedListPreset("recentlyWatched")}
+		>
+			<Icon i="reel" wh={18} /> Recently Finished
+		</button>
+		<button
+			class="plain"
+			data-active={store.activeWatchedListPreset === "watchlist"}
+			onclick={() => setWatchedListPreset("watchlist")}
+		>
+			<Icon i="film" wh={18} /> Watchlist
+		</button>
+	</div>
+{/if}
 
 <PosterList>
 	{#if dataLoader.state.data?.length > 0}
@@ -202,11 +222,22 @@
 		{/each}
 	{:else if !dataLoader.state.reqLoading && !dataLoader.state.reqLoadError}
 		<div class="empty-list">
-			<Icon i={store.hasActiveFilters ? "filter-circle" : "reel"} wh={80} />
-			<h2 class="norm">This list is empty!</h2>
-			<h4 class="norm">Come back later to see if they have added anything.</h4>
-			{#if store.hasActiveFilters}
-				<button onclick={() => clearActiveFilters()}>Clear Filters</button>
+			{#if isSearching}
+				<Icon i="search" wh={80} />
+				<h2 class="norm">No matching items!</h2>
+				<h4 class="norm">
+					Nothing on {meta.username}'s list matches “{searchQuery}”.
+				</h4>
+				<button onclick={clearSearch}>Clear Search</button>
+			{:else}
+				<Icon i={store.hasActiveFilters ? "filter-circle" : "reel"} wh={80} />
+				<h2 class="norm">This list is empty!</h2>
+				<h4 class="norm">
+					Come back later to see if they have added anything.
+				</h4>
+				{#if store.hasActiveFilters}
+					<button onclick={() => clearActiveFilters()}>Clear Filters</button>
+				{/if}
 			{/if}
 		</div>
 	{/if}
