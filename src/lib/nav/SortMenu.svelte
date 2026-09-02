@@ -10,12 +10,12 @@
 
 	function sortClicked(type: string) {
 		window.scrollTo({ top: 0 });
-		let mode = "UP";
+		let mode = "DOWN";
 		// If this sort is already the `activeSort`
 		if (store.activeSort[0] == type) {
-			if (store.activeSort[1] === "UP") {
-				mode = "DOWN";
-			} else if (store.activeSort[1] === "DOWN") {
+			if (store.activeSort[1] === "DOWN") {
+				mode = "UP";
+			} else if (store.activeSort[1] === "UP") {
 				mode = "";
 			}
 		}
