@@ -76,7 +76,7 @@
 					onclick={() => (reviewRevealed = true)}
 				>
 					<Icon i="eye-closed" wh={34} />
-					<span>Show review - potentially spoilery!!</span>
+					<span>Show review - potentially very spoilery!!</span>
 				</button>
 			{/if}
 		</div>
