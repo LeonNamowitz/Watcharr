@@ -53,6 +53,12 @@ func TestFuzzyTitleMatch(t *testing.T) {
 			want:  true,
 		},
 		{
+			name:  "different first character is not a typo",
+			title: "Jurassic Park",
+			query: "dark",
+			want:  false,
+		},
+		{
 			name:  "unrelated title",
 			title: "Superman",
 			query: "spide man",

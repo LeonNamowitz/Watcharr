@@ -104,6 +104,12 @@ func fuzzyTokenMatch(titleToken string, queryToken string) bool {
 	if strings.Contains(titleToken, queryToken) {
 		return true
 	}
+	titleFirst, _ := utf8.DecodeRuneInString(titleToken)
+	queryFirst, _ := utf8.DecodeRuneInString(queryToken)
+	// Avoid treating unrelated words of similar length as typos.
+	if titleFirst != queryFirst {
+		return false
+	}
 	queryLength := utf8.RuneCountInString(queryToken)
 	maxDistance := 0
 	// Keep short terms exact to avoid noisy matches.
