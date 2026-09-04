@@ -8,10 +8,18 @@
 		endDate?: Date;
 		voteAverage?: number;
 		voteCount?: number;
+		ratingSource?: string;
 	}
 
-	let { homepage, title, releaseDate, endDate, voteAverage, voteCount }: Props =
-		$props();
+	let {
+		homepage,
+		title,
+		releaseDate,
+		endDate,
+		voteAverage,
+		voteCount,
+		ratingSource,
+	}: Props = $props();
 
 	// if voteAvg bigger than 10, it is out of 100, so no need to * by 10
 	const vote = $derived(
@@ -46,10 +54,14 @@
 		{/if}
 	</span>
 	<span
+		class:community={Boolean(ratingSource)}
 		class="rating"
-		title={`Rating: ${vote} out of 10 (based on ${voteCount ?? 0} votes)`}
+		title={`${ratingSource ? `${ratingSource} ` : ""}Rating: ${vote} out of 10 (based on ${voteCount ?? 0} votes)`}
 	>
-		<span>*</span>
+		{#if ratingSource}
+			<small>{ratingSource}</small>
+		{/if}
+		<span class="star">*</span>
 		{vote}
 	</span>
 </span>
@@ -80,18 +92,32 @@
 			align-items: start;
 			justify-content: center;
 			gap: 5px;
-			color: green;
 			margin-left: auto;
-			font-size: 22px;
 			color: gold;
+			font-size: 22px;
 			font-weight: bolder;
 
-			span {
+			small {
+				align-self: center;
+				font-size: 10px;
+				font-weight: normal;
+				letter-spacing: 0.08em;
+			}
+
+			span.star {
+				margin-top: 7px;
 				font-family: "Rampart One";
 				-webkit-text-stroke: 1px gold;
 				font-size: 40px;
 				line-height: 0.7;
-				margin-top: 7px;
+			}
+
+			&.community {
+				color: white;
+
+				span.star {
+					-webkit-text-stroke-color: white;
+				}
 			}
 		}
 	}

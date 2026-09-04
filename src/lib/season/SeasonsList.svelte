@@ -17,6 +17,7 @@
 	import { watchedStatuses } from "@/lib/util/helpers";
 	import { removeWatchedSeason, updateWatchedSeason } from "./api";
 	import { onMount } from "svelte";
+	import type { RatingSettings } from "@/lib/rating/helpers";
 
 	interface Props {
 		tvId: number;
@@ -24,6 +25,9 @@
 		watchedItem: Watched | undefined;
 		lastViewedSeason: number | undefined;
 		lastViewedSeasonChanged: (wid: number, lvs: number) => void;
+		readOnly?: boolean;
+		ratingSettings?: RatingSettings;
+		loadSeasonDetails?: (seasonNumber: number) => Promise<TMDBSeasonDetails>;
 	}
 
 	let {
@@ -32,6 +36,9 @@
 		watchedItem,
 		lastViewedSeason,
 		lastViewedSeasonChanged,
+		readOnly = false,
+		ratingSettings,
+		loadSeasonDetails,
 	}: Props = $props();
 
 	let activeSeason = $state(lastViewedSeason ?? 1);
@@ -43,6 +50,13 @@
 	});
 
 	async function sdr(seasonNum: number) {
+		if (readOnly) {
+			if (!loadSeasonDetails) {
+				throw new globalThis.Error("A public season loader was not provided");
+			}
+			return await loadSeasonDetails(seasonNum);
+		}
+
 		const wid = watchedItem?.id;
 		console.debug("SeasonList: sdr: Called.", tvId, seasonNum, wid);
 		const resp = await req.getWhole<TMDBSeasonDetails>(
@@ -82,6 +96,7 @@
 		type: WatchedStatus | "DELETE",
 		seasonNumber: number,
 	) {
+		if (readOnly) return;
 		if (!watchedItem) {
 			console.error("handleStatusClick: No watched item.");
 			return;
@@ -104,6 +119,7 @@
 	}
 
 	function handleStarClick(rating: number, seasonNumber: number) {
+		if (readOnly) return;
 		if (!watchedItem) {
 			console.error("handleStarClick: No watchedItem!");
 			return;
@@ -167,7 +183,10 @@
 							season,
 						)}
 						{#if status}
-							<div class="plain season-status">
+							<div
+								class="plain season-status {status.toLowerCase()}"
+								class:public={readOnly}
+							>
 								<Icon i={watchedStatuses[status]} />
 							</div>
 						{/if}
@@ -189,35 +208,48 @@
 						{@const ws = watchedItem?.watchedSeasons?.find(
 							(s) => s.seasonNumber === season.season_number,
 						)}
-						{#if ws}
-							<div class="rating">
-								<PosterRating
-									rating={ws?.rating}
-									btnTooltip="Season Rating"
-									handleStarClick={(r) =>
-										handleStarClick(r, season.season_number)}
-									minimal={true}
+						{#if !readOnly || ws}
+							{#if !readOnly || ws?.rating}
+								<div class="rating">
+									<PosterRating
+										rating={ws?.rating}
+										btnTooltip="Season Rating"
+										handleStarClick={(r) =>
+											handleStarClick(r, season.season_number)}
+										minimal={true}
+										direction="bot"
+										disableInteraction={readOnly}
+										{ratingSettings}
+									/>
+								</div>
+							{/if}
+							<div
+								class={[
+									"status",
+									readOnly && ws ? "public-status" : "",
+									readOnly && ws ? ws.status.toLowerCase() : "",
+								]
+									.filter(Boolean)
+									.join(" ")}
+							>
+								<PosterStatus
+									status={ws?.status}
+									btnTooltip="Season Status"
+									handleStatusClick={(t) =>
+										handleStatusClick(t, season.season_number)}
 									direction="bot"
+									width="100%"
+									small
+									disableInteraction={readOnly}
 								/>
 							</div>
 						{/if}
-						<div class="status">
-							<PosterStatus
-								status={ws?.status}
-								btnTooltip="Season Status"
-								handleStatusClick={(t) =>
-									handleStatusClick(t, season.season_number)}
-								direction="bot"
-								width="100%"
-								small
-							/>
-						</div>
 					{/if}
 				</div>
 				{#if season?.episodes?.length > 0}
 					<ul>
 						{#each season.episodes as ep (ep.id)}
-							<SeasonsListEpisode {ep} {watchedItem} />
+							<SeasonsListEpisode {ep} {watchedItem} {readOnly} />
 						{/each}
 					</ul>
 				{:else}
@@ -315,6 +347,31 @@
 
 			.season-status {
 				fill: $text-color;
+				color: $text-color;
+
+				&.public {
+					fill: currentColor;
+
+					&.planned {
+						color: #8dc8ff;
+					}
+
+					&.watching {
+						color: #65e3ff;
+					}
+
+					&.finished {
+						color: #7ee29a;
+					}
+
+					&.hold {
+						color: #ffbc70;
+					}
+
+					&.dropped {
+						color: #ff8b8f;
+					}
+				}
 
 				:global(svg) {
 					width: 20px;
@@ -390,6 +447,33 @@
 				min-height: 40px;
 				height: 40px;
 				overflow: visible;
+			}
+
+			&.public-status {
+				&.planned {
+					color: #8dc8ff;
+				}
+
+				&.watching {
+					color: #65e3ff;
+				}
+
+				&.finished {
+					color: #7ee29a;
+				}
+
+				&.hold {
+					color: #ffbc70;
+				}
+
+				&.dropped {
+					color: #ff8b8f;
+				}
+
+				:global(button.status.interaction-disabled) {
+					color: inherit;
+					fill: currentColor;
+				}
 			}
 		}
 	}

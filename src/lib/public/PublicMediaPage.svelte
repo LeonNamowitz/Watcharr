@@ -14,6 +14,7 @@
 	import TopCrewList from "@/lib/content/TopCrewList.svelte";
 	import ViewTrailerButton from "@/lib/content/ViewTrailerButton.svelte";
 	import PersonPoster from "@/lib/poster/PersonPoster.svelte";
+	import SeasonsList from "@/lib/season/SeasonsList.svelte";
 	import { MediaStatusShow } from "@/lib/types/mediaStatus";
 	import { noAuthReq } from "@/lib/util/api";
 	import { getTopCrew } from "@/lib/util/helpers";
@@ -23,7 +24,9 @@
 		SupportedMedia,
 		TMDBContentCredits,
 		TMDBContentCreditsCrew,
+		TMDBSeasonDetails,
 	} from "@/types";
+	import { toPublicLastSeenSeason } from "./helpers";
 	import PublicReview from "./PublicReview.svelte";
 
 	interface Props {
@@ -51,6 +54,9 @@
 	let publicListOwner = $derived({ id: ownerId, username: ownerName });
 	let similarOnList = $derived(
 		media?.similar?.filter((item) => Boolean(item.watched)) ?? [],
+	);
+	let lastSeenSeason = $derived(
+		toPublicLastSeenSeason(media?.watched?.watchingSeason),
 	);
 	let posterSrc = $derived.by(() => {
 		if (!media?.extPosterPath || !supportedType) return;
@@ -92,6 +98,12 @@
 			}
 		})();
 	});
+
+	async function getSeasonDetails(seasonNumber: number) {
+		return await noAuthReq.get<TMDBSeasonDetails>(
+			`/public/users/${ownerId}/${ownerName}/content/tv/${mediaId}/season/${seasonNumber}`,
+		);
+	}
 
 	async function getCredits() {
 		if (supportedType !== "movie" && supportedType !== "tv") return;
@@ -141,6 +153,7 @@
 								: undefined}
 							voteAverage={media.rating}
 							voteCount={media.ratingCount}
+							ratingSource={supportedType === "game" ? "IGDB" : "TMDB"}
 						/>
 
 						<span class="quick-info">
@@ -231,6 +244,18 @@
 					readOnly={true}
 					title={`${ownerName}'s activity`}
 					emptyText={`${ownerName} has no activity for this item.`}
+				/>
+			{/if}
+			{#if supportedType === "tv" && media.seasons}
+				<SeasonsList
+					tvId={Number(mediaId)}
+					seasons={media.seasons}
+					watchedItem={media.watched}
+					lastViewedSeason={lastSeenSeason}
+					lastViewedSeasonChanged={() => {}}
+					readOnly={true}
+					{ratingSettings}
+					loadSeasonDetails={getSeasonDetails}
 				/>
 			{/if}
 		</div>

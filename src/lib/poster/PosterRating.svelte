@@ -3,7 +3,12 @@
 	import tooltip from "../actions/tooltip";
 	import { RatingSystem } from "@/types";
 	import Icon from "../Icon.svelte";
-	import { toShowableRating, toWhichThumb } from "../rating/helpers";
+	import {
+		toRatingLabel,
+		toShowableRating,
+		toWhichThumb,
+		type RatingSettings,
+	} from "../rating/helpers";
 
 	interface Props {
 		rating?: number | undefined;
@@ -17,6 +22,7 @@
 		direction?: "top" | "bot";
 		btnTooltip?: string;
 		hideStarWhenRated?: boolean;
+		ratingSettings?: RatingSettings;
 	}
 
 	let {
@@ -27,14 +33,15 @@
 		direction = "top",
 		btnTooltip = "",
 		hideStarWhenRated = false,
+		ratingSettings,
 	}: Props = $props();
 
 	let ratingsShown = $state(false);
 
 	// let settings = $derived($userSettings);
 	let isUsingThumbs = $derived(
-		store.userSettings &&
-			store.userSettings.ratingSystem === RatingSystem.Thumbs,
+		(ratingSettings?.ratingSystem ?? store.userSettings?.ratingSystem) ===
+			RatingSystem.Thumbs,
 	);
 </script>
 
@@ -84,6 +91,8 @@
 				{:else if r === 1}
 					<Icon i="thumb-up" />
 				{/if}
+			{:else if ratingSettings}
+				{toRatingLabel(rating, ratingSettings)}
 			{:else}
 				{toShowableRating(rating)}
 			{/if}

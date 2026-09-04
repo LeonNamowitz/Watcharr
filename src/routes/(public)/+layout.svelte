@@ -99,7 +99,15 @@
 	}
 
 	function decideOnNavSplit() {
-		if (window.innerWidth <= 305) {
+		// Detail pages only have the logo and login/profile action in the top
+		// row, so keep their search inline even on mobile.
+		if (!isListPage) {
+			document.body.classList.remove("split-nav");
+			return;
+		}
+		// Give the search its own row on narrow list pages so the logo and
+		// list controls remain comfortably usable, including at high zoom levels.
+		if (window.innerWidth <= 520) {
 			document.body.classList.add("split-nav");
 			return;
 		}
