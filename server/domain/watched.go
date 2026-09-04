@@ -135,6 +135,8 @@ func NewWatchedDtoForPublicLists(w *entity.Watched) WatchedDto {
 func NewWatchedDtoForPublicContentPage(w *entity.Watched, thoughtsPublic bool) WatchedDto {
 	dto := NewWatchedDtoForPublicLists(w)
 	dto.Activity = w.Activity
+	dto.WatchedSeasons = w.WatchedSeasons
+	dto.WatchedEpisodes = w.WatchedEpisodes
 	dto.Plays = getPlaysFromActivity(w.Activity)
 	if thoughtsPublic {
 		dto.Thoughts = w.Thoughts

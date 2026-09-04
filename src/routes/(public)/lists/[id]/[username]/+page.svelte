@@ -30,6 +30,7 @@
 
 	let searchQuery = $derived(page.url.searchParams.get("query")?.trim() ?? "");
 	let isSearching = $derived(searchQuery.length > 0);
+	let previousSearchQuery = $state("");
 
 	let followBtnDisabled = $state(false);
 	let user: PublicUser | undefined = $state();
@@ -43,6 +44,18 @@
 
 	const scroll = infScroll({ callback: onScrollToBottom });
 	const dataLoader = paginatedLoader<Media, undefined>(load);
+
+	$effect(() => {
+		const query = searchQuery;
+		if (query && query !== previousSearchQuery) {
+			store.activeFilters = {
+				type: ["tv", "movie", "game"],
+				status: ["planned", "watching", "finished", "hold", "dropped"],
+			};
+			store.activeSort = ["LASTFIN", "DOWN"];
+		}
+		previousSearchQuery = query;
+	});
 
 	let requestParams: Record<string, string> = $derived.by(() => {
 		const params = store.sortAndFiltersForQueryParams;

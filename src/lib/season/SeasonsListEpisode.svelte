@@ -11,14 +11,19 @@
 	import { store } from "@/store.svelte";
 	import { removeWatchedEpisode, updateWatchedEpisode } from "./api";
 	import { onMount } from "svelte";
-	import { toRelativeDate } from "../util/helpers";
+	import {
+		toRelativeDate,
+		toUnderstandableStatus,
+		watchedStatuses,
+	} from "../util/helpers";
 
 	interface Props {
 		ep: TMDBSeasonDetailsEpisode;
 		watchedItem: Watched | undefined;
+		readOnly?: boolean;
 	}
 
-	let { ep, watchedItem }: Props = $props();
+	let { ep, watchedItem, readOnly = false }: Props = $props();
 
 	const we = $derived(
 		watchedItem?.watchedEpisodes?.find(
@@ -28,7 +33,9 @@
 		),
 	);
 
-	let isHidden: boolean = $state(!!store?.userSettings?.hideSpoilers);
+	let isHidden: boolean = $state(
+		readOnly || !!store?.userSettings?.hideSpoilers,
+	);
 
 	const airDate: Date | undefined = $derived.by(() => {
 		if (!ep.air_date) {
@@ -53,16 +60,18 @@
 	function reSetIsHidden() {
 		// If the episode status is "FINISHED", ensure `isHidden` is set to
 		// `false` (so finished episodes aren't blurred when hideSpoilers is on).
-		if (we?.status == "FINISHED") {
+		if (!readOnly && we?.status == "FINISHED") {
 			isHidden = false;
 		}
 	}
 
 	onMount(() => {
+		isHidden = readOnly || !!store?.userSettings?.hideSpoilers;
 		reSetIsHidden();
 	});
 
 	async function handleStatusClick(type: WatchedStatus | "DELETE") {
+		if (readOnly) return;
 		if (!watchedItem) {
 			console.error("SeasonListEpisode: handleStatusClick: No watched item.");
 			return;
@@ -99,6 +108,7 @@
 	}
 
 	function handleStarClick(rating: number) {
+		if (readOnly) return;
 		if (!watchedItem) {
 			console.error("handleStarClick: No watchedItem!");
 			return;
@@ -142,10 +152,11 @@
 				 unaired, no need to show the rating star. -->
 			{:else}
 				<span
-					class="rating"
+					class="community-rating"
 					title={`TMDB Rating: ${ep.vote_average} out of 10 (based on ${ep.vote_count} votes)`}
 				>
-					<span>*</span>
+					<small>TMDB</small>
+					<span class="star">*</span>
 					{Math.round(ep.vote_average * 10) / 10}
 				</span>
 			{/if}
@@ -158,7 +169,19 @@
 		{/if}
 		<span class="overview">{ep.overview}</span>
 	</div>
-	{#if watchedItem}
+	{#if readOnly && we}
+		<div
+			class="public-progress"
+			title={`List owner's episode status: ${toUnderstandableStatus(we.status, false)}${we.rating ? `, rated ${we.rating}/10` : ""}`}
+		>
+			<span class="owner-status {we.status.toLowerCase()}">
+				<Icon i={watchedStatuses[we.status]} wh={18} />
+			</span>
+			{#if we.rating}
+				<span class="owner-rating">{we.rating}/10</span>
+			{/if}
+		</div>
+	{:else if watchedItem && !readOnly}
 		<div class="status-rating-ctr">
 			<div class="rating" style="width: 45px">
 				<PosterRating
@@ -239,20 +262,27 @@
 					padding: 0 2px;
 				}
 
-				.rating {
+				.community-rating {
 					display: flex;
-					align-items: start;
+					align-items: center;
 					justify-content: center;
-					min-width: 43px;
+					gap: 3px;
+					min-width: 70px;
+					color: white;
 					font-size: 15px;
-					color: $rating-color;
 					font-weight: bolder;
 					overflow: hidden;
 
-					span {
+					small {
+						font-size: 8px;
+						font-weight: normal;
+						letter-spacing: 0.08em;
+					}
+
+					span.star {
 						margin-top: 2px;
 						font-family: "Rampart One";
-						-webkit-text-stroke: 1px $rating-color;
+						-webkit-text-stroke: 1px white;
 						font-size: 25px;
 						line-height: 0.7;
 					}
@@ -266,6 +296,51 @@
 				text-transform: lowercase;
 				font-variant: small-caps;
 				font-weight: bold;
+			}
+		}
+
+		.public-progress {
+			display: flex;
+			align-items: center;
+			gap: 7px;
+			min-height: 34px;
+			margin-bottom: auto;
+			margin-left: auto;
+			padding: 7px 8px;
+			border-radius: 8px;
+			background-color: rgba(0, 0, 0, 0.34);
+			position: relative;
+			z-index: 2;
+			font-weight: bold;
+
+			.owner-status {
+				display: flex;
+				fill: currentColor;
+
+				&.planned {
+					color: #8dc8ff;
+				}
+
+				&.watching {
+					color: #65e3ff;
+				}
+
+				&.finished {
+					color: #7ee29a;
+				}
+
+				&.hold {
+					color: #ffbc70;
+				}
+
+				&.dropped {
+					color: #ff8b8f;
+				}
+			}
+
+			.owner-rating {
+				color: gold;
+				font-variant-numeric: tabular-nums;
 			}
 		}
 
@@ -355,14 +430,14 @@
 
 		img,
 		.episode-name,
-		.rating,
+		.community-rating,
 		.overview {
 			transition: filter 150ms ease-out;
 		}
 
 		&.dont-spoil {
 			.episode-name,
-			.rating,
+			.community-rating,
 			.overview {
 				filter: blur(4px);
 			}
@@ -391,8 +466,12 @@
 			}
 		}
 
-		.rating {
+		.community-rating {
 			margin-left: auto;
+		}
+
+		.public-progress {
+			margin-left: unset;
 		}
 	}
 </style>

@@ -506,10 +506,6 @@
 				pointer-events: none !important;
 			}
 		}
-
-		&.public-view:not(.active) .container .inner {
-			pointer-events: auto !important;
-		}
 	}
 
 	li.just-deleted:not(.active) {

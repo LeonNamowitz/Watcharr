@@ -67,6 +67,7 @@ func (r *Router) AddRoutes() {
 	publicOwnerContent.GET("/movie/:mediaId/credits", cache.CachePage(r.br.MemStore, exp, r.GetPublicMovieCredits))
 	publicOwnerContent.GET("/tv/:mediaId", router.WhereaboutsRequired(r.br.Cfg), r.GetPublicTvDetails)
 	publicOwnerContent.GET("/tv/:mediaId/credits", cache.CachePage(r.br.MemStore, exp, r.GetPublicTvCredits))
+	publicOwnerContent.GET("/tv/:mediaId/season/:num", r.GetPublicTvSeasonDetails)
 	// Get season details
 	// Supports `watchedId` query parameter for saving the requested season as `LastViewedSeason`.
 	content.GET("/tv/:id/season/:num", r.GetSeasonDetails)
@@ -126,6 +127,25 @@ func (r *Router) GetPublicTvCredits(c *gin.Context) {
 		return
 	}
 	content, err := r.tmdb.ShowCredits(c.Param("mediaId"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, router.ErrorResponse{Error: err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, content)
+}
+
+// GetPublicTvSeasonDetails returns the normal TMDB season and episode overview
+// after confirming that the show belongs to the requested public list owner.
+func (r *Router) GetPublicTvSeasonDetails(c *gin.Context) {
+	if c.Param("num") == "" {
+		c.JSON(http.StatusBadRequest, router.ErrorResponse{Error: "a season number was not provided"})
+		return
+	}
+	if _, _, _, err := r.getPublicOwnerWatched(c, util.SupportedMediaShow); err != nil {
+		c.JSON(http.StatusForbidden, router.ErrorResponse{Error: "failed fetching the public list item"})
+		return
+	}
+	content, err := r.tmdb.SeasonDetails(c.Param("mediaId"), c.Param("num"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, router.ErrorResponse{Error: err.Error()})
 		return

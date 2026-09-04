@@ -2,7 +2,7 @@
 	import type { RatingSettings } from "@/lib/rating/helpers";
 	import { toRatingLabel } from "@/lib/rating/helpers";
 	import { watchedStatuses } from "@/lib/util/helpers";
-	import { toPublicStatusLabel } from "./helpers";
+	import { toPublicLastSeenLabel, toPublicStatusLabel } from "./helpers";
 	import type { SupportedMedia, Watched } from "@/types";
 	import Icon from "../Icon.svelte";
 
@@ -17,40 +17,69 @@
 	let { watched, ownerName, mediaType, thoughtsPublic, ratingSettings }: Props =
 		$props();
 	let expanded = $state(false);
+	let reviewRevealed = $state(false);
 
 	let statusLabel = $derived(toPublicStatusLabel(watched.status, mediaType));
+	let lastSeenLabel = $derived(
+		mediaType === "tv" &&
+			["PLANNED", "WATCHING", "HOLD", "DROPPED"].includes(watched.status)
+			? toPublicLastSeenLabel(watched.watchingSeason)
+			: undefined,
+	);
+	let reviewThoughts = $derived(watched.thoughts ?? "");
+	let reviewIsSpoiler = $derived(
+		thoughtsPublic && reviewThoughts.trim().length > 0,
+	);
 	let thoughts = $derived(
 		thoughtsPublic
-			? watched.thoughts || "No review thoughts yet."
+			? reviewThoughts || "No review thoughts yet."
 			: "Review thoughts are private.",
 	);
-	let hasMore = $derived(thoughtsPublic && watched.thoughts.length > 600);
+	let hasMore = $derived(thoughtsPublic && reviewThoughts.length > 800);
 	let visibleThoughts = $derived(
 		hasMore && !expanded
-			? `${watched.thoughts.slice(0, 600).trimEnd()}…`
+			? `${reviewThoughts.slice(0, 600).trimEnd()}…`
 			: thoughts,
 	);
 </script>
 
 <div class="review">
-	<h2>{ownerName}'s review</h2>
-	<div class="summary">
-		<span class="status {watched.status.toLowerCase()}">
-			<i><Icon i={watchedStatuses[watched.status]} wh={18} /></i>
-			{statusLabel}
-		</span>
-		<span class:unrated={!watched.rating} class="rating">
-			{toRatingLabel(watched.rating, ratingSettings)}
-		</span>
-	</div>
-	<div class:private={!thoughtsPublic} class="thoughts">
-		<i><Icon i={thoughtsPublic ? "document" : "lock-closed"} wh={22} /></i>
-		<p>{visibleThoughts}</p>
-		{#if hasMore}
-			<button class="plain read-more" onclick={() => (expanded = !expanded)}>
-				{expanded ? "Show less" : "Read more"}
-			</button>
-		{/if}
+	<div class="review-card">
+		<h2>{ownerName}'s review</h2>
+		<div class="summary">
+			<span class="status {watched.status.toLowerCase()}">
+				<i><Icon i={watchedStatuses[watched.status]} wh={18} /></i>
+				<span>{statusLabel}</span>
+				{#if lastSeenLabel}
+					<span class="last-seen">— Last seen: {lastSeenLabel}</span>
+				{/if}
+			</span>
+			<span class:unrated={!watched.rating} class="rating">
+				{toRatingLabel(watched.rating, ratingSettings)}
+			</span>
+		</div>
+		<div
+			class:private={!thoughtsPublic}
+			class:spoiler-hidden={reviewIsSpoiler && !reviewRevealed}
+			class="thoughts"
+		>
+			<i><Icon i={thoughtsPublic ? "document" : "lock-closed"} wh={22} /></i>
+			<p>{visibleThoughts}</p>
+			{#if hasMore && (!reviewIsSpoiler || reviewRevealed)}
+				<button class="plain read-more" onclick={() => (expanded = !expanded)}>
+					{expanded ? "Show less" : "Read more"}
+				</button>
+			{/if}
+			{#if reviewIsSpoiler && !reviewRevealed}
+				<button
+					class="plain review-spoiler"
+					onclick={() => (reviewRevealed = true)}
+				>
+					<Icon i="eye-closed" wh={34} />
+					<span>Show review - potentially spoilery!!</span>
+				</button>
+			{/if}
+		</div>
 	</div>
 	{#if typeof watched.plays === "number" && watched.plays > 0}
 		<div class="plays">
@@ -79,11 +108,23 @@
 		}
 	}
 
+	.review-card {
+		padding: 15px;
+		border: 2px solid rgba(255, 215, 0, 0.55);
+		border-radius: 12px;
+		background: linear-gradient(
+			135deg,
+			rgba(31, 31, 31, 0.96),
+			rgba(14, 14, 14, 0.9)
+		);
+		box-shadow: 0 8px 24px rgba(0, 0, 0, 0.38);
+	}
+
 	h2 {
+		margin-bottom: 10px;
 		color: rgba(255, 255, 255, 0.95);
-		font-size: 20px;
-		font-weight: normal;
-		text-align: center;
+		font-size: 22px;
+		font-weight: 600;
 		text-shadow: 0 1px 5px rgba(0, 0, 0, 0.95);
 	}
 
@@ -92,17 +133,25 @@
 		align-items: center;
 		justify-content: space-between;
 		gap: 16px;
-		min-height: 48px;
+		min-height: 52px;
 		padding: 10px 14px;
+		border: 1px solid rgba(255, 255, 255, 0.16);
 		border-radius: 8px;
 		color: white;
-		background-color: rgba(20, 20, 20, 0.82);
+		background-color: rgba(255, 255, 255, 0.07);
 		font-weight: bold;
 
 		.status {
 			display: flex;
 			align-items: center;
+			flex-wrap: wrap;
 			gap: 7px;
+
+			.last-seen {
+				color: rgba(255, 255, 255, 0.82);
+				font-size: 13px;
+				font-weight: normal;
+			}
 
 			i {
 				display: flex;
@@ -143,16 +192,60 @@
 		}
 	}
 
+	.review-spoiler {
+		display: flex;
+		position: absolute;
+		inset: 0;
+		align-items: center;
+		justify-content: center;
+		flex-flow: column;
+		gap: 8px;
+		width: 100%;
+		height: 100%;
+		padding: 12px 14px;
+		border: 0;
+		border-radius: 8px;
+		background-color: transparent;
+		color: white;
+		fill: white;
+		font-size: 20px;
+		font-weight: bolder;
+		transition:
+			background-color 150ms ease,
+			transform 150ms ease;
+		cursor: pointer;
+
+		span {
+			text-shadow: 0 0 6px $bg-color;
+		}
+
+		:global(svg) {
+			filter: drop-shadow(0 0 8px $bg-color);
+		}
+
+		&:hover,
+		&:focus-visible {
+			background-color: transparent;
+			transform: translateY(-1px);
+		}
+	}
+
 	.thoughts {
 		position: relative;
 		width: 100%;
-		padding: 14px 44px 14px 14px;
-		border: 2px solid $text-color;
-		border-radius: 8px;
-		background-color: $bg-color;
+		margin-top: 14px;
+		padding: 15px 30px 0 0;
+		border-top: 1px solid rgba(255, 255, 255, 0.24);
 
 		&.private {
 			opacity: 0.65;
+		}
+
+		&.spoiler-hidden {
+			p {
+				filter: blur(4px);
+				user-select: none;
+			}
 		}
 
 		& > i {

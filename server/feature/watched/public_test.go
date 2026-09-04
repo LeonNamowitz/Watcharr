@@ -54,6 +54,35 @@ func TestPublicWatchedRoutesAreAnonymousAndRespectThoughtPrivacy(t *testing.T) {
 	}
 	mustCreate(t, db.Create(&activity).Error)
 
+	showContent := entity.Content{
+		TmdbID:   202,
+		Title:    "Public Show",
+		Overview: "Public show synopsis",
+		Type:     entity.SHOW,
+	}
+	mustCreate(t, db.Create(&showContent).Error)
+	showWatched := entity.Watched{
+		UserID:    owner.ID,
+		ContentID: &showContent.ID,
+		Status:    entity.HOLD,
+	}
+	mustCreate(t, db.Create(&showWatched).Error)
+	mustCreate(t, db.Create(&entity.WatchedSeason{
+		UserID:       owner.ID,
+		WatchedID:    showWatched.ID,
+		SeasonNumber: 2,
+		Status:       entity.WATCHING,
+		Rating:       9,
+	}).Error)
+	mustCreate(t, db.Create(&entity.WatchedEpisode{
+		UserID:        owner.ID,
+		WatchedID:     showWatched.ID,
+		SeasonNumber:  2,
+		EpisodeNumber: 1,
+		Status:        entity.FINISHED,
+		Rating:        8,
+	}).Error)
+
 	service := NewService(db, nil, nil, nil, watchedSearchUserProvider{})
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
@@ -89,6 +118,32 @@ func TestPublicWatchedRoutesAreAnonymousAndRespectThoughtPrivacy(t *testing.T) {
 	if len(detail.Media.Watched.Activity) != 1 || detail.Media.Watched.Plays != 1 {
 		t.Fatalf("public detail activity = %d and plays = %d, want 1 and 1",
 			len(detail.Media.Watched.Activity), detail.Media.Watched.Plays)
+	}
+
+	showDetailPath := "/api/public/users/" + strconv.FormatUint(uint64(owner.ID), 10) +
+		"/owner/media/tv/202"
+	showDetailRecorder := request(t, engine, http.MethodGet, showDetailPath)
+	if showDetailRecorder.Code != http.StatusOK {
+		t.Fatalf("anonymous show detail status = %d, want 200; body=%s",
+			showDetailRecorder.Code, showDetailRecorder.Body.String())
+	}
+	var showDetail domain.PublicMediaDetailsResponse
+	if err := json.Unmarshal(showDetailRecorder.Body.Bytes(), &showDetail); err != nil {
+		t.Fatalf("decoding public show detail failed: %v", err)
+	}
+	if showDetail.Media.Watched.WatchingSeason != "S2E1" {
+		t.Fatalf("public show progress = %q, want S2E1",
+			showDetail.Media.Watched.WatchingSeason)
+	}
+	if len(showDetail.Media.Watched.WatchedSeasons) != 1 ||
+		showDetail.Media.Watched.WatchedSeasons[0].Rating != 9 {
+		t.Fatalf("public watched seasons = %#v, want one season rated 9",
+			showDetail.Media.Watched.WatchedSeasons)
+	}
+	if len(showDetail.Media.Watched.WatchedEpisodes) != 1 ||
+		showDetail.Media.Watched.WatchedEpisodes[0].Rating != 8 {
+		t.Fatalf("public watched episodes = %#v, want one episode rated 8",
+			showDetail.Media.Watched.WatchedEpisodes)
 	}
 
 	thoughtsPrivate = true
