@@ -12,6 +12,7 @@
 		path: string | undefined;
 		role?: string | undefined;
 		zoomOnHover?: boolean;
+		disableInteraction?: boolean;
 	}
 
 	let {
@@ -20,14 +21,17 @@
 		path,
 		role = undefined,
 		zoomOnHover = true,
+		disableInteraction = false,
 	}: Props = $props();
 
-	const poster = path
-		? `https://image.tmdb.org/t/p/w300_and_h450_bestv2${path}`
-		: undefined;
-	const link: `/person/${number}` | undefined = id
-		? `/person/${id}`
-		: undefined;
+	let poster = $derived(
+		path ? `https://image.tmdb.org/t/p/w300_and_h450_bestv2${path}` : undefined,
+	);
+	let link: `/person/${number}` | undefined = $derived(
+		id && !disableInteraction
+			? (`/person/${id}` as `/person/${number}`)
+			: undefined,
+	);
 </script>
 
 <!-- Quick fix to ignore error, should be fixed -->
@@ -36,12 +40,12 @@
 	onmouseenter={(e) => calculateTransformOrigin(e)}
 	onfocusin={(e) => calculateTransformOrigin(e)}
 	onclick={() => {
-		if (link) goto(resolve(link));
+		if (!disableInteraction && link) goto(resolve(link));
 	}}
 	onkeypress={() => console.log("on kpress")}
 >
 	<div
-		class={`container${!poster ? " details-shown" : ""}${!zoomOnHover ? " no-zoom" : ""}`}
+		class={`container${!poster ? " details-shown" : ""}${!zoomOnHover ? " no-zoom" : ""}${disableInteraction ? " no-interaction" : ""}`}
 	>
 		{#if poster}
 			<div class="img-loader"></div>
@@ -91,6 +95,10 @@
 			transform 150ms ease,
 			outline 50ms ease;
 		cursor: pointer;
+
+		&.no-interaction {
+			cursor: default;
+		}
 
 		img {
 			width: 100%;
@@ -144,15 +152,15 @@
 				font-size: 18px;
 				color: white;
 				word-wrap: break-word;
-
-				a {
-					color: white;
-				}
 			}
 
 			h2 {
 				margin-top: auto;
 				text-shadow: 1px 1px 3px black;
+
+				a {
+					color: white;
+				}
 			}
 
 			h3 {

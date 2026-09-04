@@ -22,6 +22,9 @@
 	import { decode } from "blurhash";
 	import WatchedDeleteModal from "../watched/WatchedDeleteModal.svelte";
 	import { resolve } from "$app/paths";
+	import Icon from "../Icon.svelte";
+	import PublicPosterDetails from "@/lib/public/PublicPosterDetails.svelte";
+	import type { RatingSettings } from "@/lib/rating/helpers";
 
 	interface Props {
 		media: Media;
@@ -34,6 +37,12 @@
 		disableInteraction?: boolean;
 		hideButtons?: boolean;
 		fluidSize?: boolean;
+		/** Show an explicit, read-only status badge for shared-list visitors. */
+		publicView?: boolean;
+		/** Keep content navigation inside this owner's public list. */
+		publicListOwner?: { id: string | number; username: string };
+		/** Rating display preferences belonging to the public list owner. */
+		publicRatingSettings?: RatingSettings;
 		/**
 		 * If the poster should be hidden if not on users watched list (no `id`).
 		 * Doing it this way so we can quickly hide posters with css and avoid
@@ -62,7 +71,10 @@
 		disableInteraction = false,
 		hideButtons = false,
 		fluidSize = false,
+		publicView = false,
+		publicListOwner = undefined,
 		hideIfNotOnList = false,
+		publicRatingSettings = undefined,
 		onClick = undefined,
 		onUpdated = undefined,
 	}: Props = $props();
@@ -140,12 +152,54 @@
 			return `https://images.igdb.com/igdb/image/upload/t_cover_big/${media.extPosterPath}.jpg`;
 		}
 	});
-	const link = $derived<`${`/${SupportedMedia}/${string}`}` | undefined>(
-		meta?.id ? `/${meta.type}/${meta.id}` : undefined,
-	);
+	const link = $derived.by(() => {
+		if (!meta?.id) return;
+		if (publicListOwner) {
+			return resolve("/(public)/lists/[id]/[username]/[type]/[mediaId]", {
+				id: String(publicListOwner.id),
+				username: publicListOwner.username,
+				type: meta.type,
+				mediaId: String(meta.id),
+			});
+		}
+		switch (meta.type) {
+			case "movie":
+				return resolve("/(app)/movie/[id]", { id: String(meta.id) });
+			case "tv":
+				return resolve("/(app)/tv/[id]", { id: String(meta.id) });
+			case "game":
+				return resolve("/(app)/game/[id]", { id: String(meta.id) });
+		}
+	});
 	const year = $derived(
 		media.releaseDate ? new Date(media.releaseDate).getFullYear() : undefined,
 	);
+
+	function navigateToMedia() {
+		if (!meta?.id) return;
+		if (publicListOwner) {
+			goto(
+				resolve("/(public)/lists/[id]/[username]/[type]/[mediaId]", {
+					id: String(publicListOwner.id),
+					username: publicListOwner.username,
+					type: meta.type,
+					mediaId: String(meta.id),
+				}),
+			);
+			return;
+		}
+		switch (meta.type) {
+			case "movie":
+				goto(resolve("/(app)/movie/[id]", { id: String(meta.id) }));
+				break;
+			case "tv":
+				goto(resolve("/(app)/tv/[id]", { id: String(meta.id) }));
+				break;
+			case "game":
+				goto(resolve("/(app)/game/[id]", { id: String(meta.id) }));
+				break;
+		}
+	}
 
 	function updateWatchedVar(w: Watched | undefined) {
 		watched = w;
@@ -214,7 +268,7 @@
 				return;
 			}
 			if (link) {
-				goto(resolve(link));
+				navigateToMedia();
 			}
 		}
 	}
@@ -319,7 +373,7 @@
 		}
 	}}
 	onkeypress={() => console.log("on kpress")}
-	class={`${posterActive ? "active " : ""}${watched?.pinned ? "pinned " : ""}${hideIfNotOnList && !watched ? "hidden " : ""}`}
+	class={`${publicView ? "public-view " : ""}${posterActive ? "active " : ""}${watched?.pinned ? "pinned " : ""}${hideIfNotOnList && !watched ? "hidden " : ""}`}
 	class:just-deleted={justDeletedFromWatcheds}
 >
 	<div
@@ -353,9 +407,20 @@
 				}}
 			/>
 		{/if}
-		{#if watched && meta && !posterActive}
-			<!-- Must be on watched list, and poster not hovered -->
-			<ExtraDetails {...buildExtraDetails(meta.type, watched)} />
+		{#if watched?.pinned && publicView && !posterActive}
+			<span class="pinned-label"><Icon i="pin" wh={14} /> Pinned</span>
+		{/if}
+		{#if watched && meta}
+			{#if publicView}
+				<PublicPosterDetails
+					{watched}
+					mediaType={meta.type}
+					ratingSettings={publicRatingSettings}
+					active={posterActive}
+				/>
+			{:else if !posterActive}
+				<ExtraDetails {...buildExtraDetails(meta.type, watched)} />
+			{/if}
 		{/if}
 		<div
 			onclick={(e) => {
@@ -365,7 +430,7 @@
 					e.preventDefault();
 					return;
 				}
-				if (posterActive && link) goto(resolve(link));
+				if (posterActive && link) navigateToMedia();
 			}}
 			onkeyup={handleInnerKeyUp}
 			id="ilikemoviessueme"
@@ -373,11 +438,7 @@
 			role="button"
 			tabindex="-1"
 		>
-			<a
-				data-sveltekit-preload-data="tap"
-				href={link ? resolve(link) : undefined}
-				class="small-scrollbar"
-			>
+			<a data-sveltekit-preload-data="tap" href={link} class="small-scrollbar">
 				<h2>
 					{media.name}
 					{#if year}
@@ -434,7 +495,7 @@
 		cursor: pointer;
 	}
 
-	li.pinned:not(.active) .container {
+	li.pinned .container {
 		outline: 3px solid gold;
 	}
 
@@ -444,6 +505,10 @@
 			.container .inner .buttons {
 				pointer-events: none !important;
 			}
+		}
+
+		&.public-view:not(.active) .container .inner {
+			pointer-events: auto !important;
 		}
 	}
 
@@ -463,6 +528,24 @@
 		position: relative;
 		aspect-ratio: 170000/256367;
 		transition: transform 150ms ease;
+
+		.pinned-label {
+			position: absolute;
+			top: 7px;
+			left: 7px;
+			z-index: 3;
+			display: flex;
+			align-items: center;
+			gap: 4px;
+			padding: 4px 7px;
+			border-radius: 6px;
+			background-color: gold;
+			color: #211d00;
+			fill: #211d00;
+			font-size: 14px;
+			font-weight: bold;
+			pointer-events: none;
+		}
 
 		&.fluid-size {
 			height: 100%;

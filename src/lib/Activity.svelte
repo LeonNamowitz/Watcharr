@@ -11,10 +11,19 @@
 
 	interface Props {
 		activity: Activity[] | undefined;
-		onRemoved: (activity: Activity) => void;
+		onRemoved?: (activity: Activity) => void;
+		readOnly?: boolean;
+		title?: string;
+		emptyText?: string;
 	}
 
-	let { activity = undefined, onRemoved }: Props = $props();
+	let {
+		activity = undefined,
+		onRemoved = () => {},
+		readOnly = false,
+		title = "Activity",
+		emptyText = "You Have No Activity!",
+	}: Props = $props();
 
 	let clickedActivity: Activity | undefined = $state();
 	let groupedActivities: { [index: string]: Activity[] } = $derived(
@@ -190,6 +199,7 @@
 	}
 
 	function openEditor(a: Activity) {
+		if (readOnly) return;
 		clickedActivity = a;
 		return;
 	}
@@ -205,7 +215,7 @@
 	}
 </script>
 
-{#if clickedActivity}
+{#if clickedActivity && !readOnly}
 	<ActivityEditor
 		activity={clickedActivity}
 		activityMessage={getMsg(clickedActivity)}
@@ -233,7 +243,7 @@
 {/if}
 
 <div class="activity">
-	<h2>Activity</h2>
+	<h2>{title}</h2>
 	{#if groupedActivities && Object.keys(groupedActivities).length > 0}
 		<ul>
 			{#each Object.keys(groupedActivities) as k (k)}
@@ -242,7 +252,11 @@
 				{#each groupedActivities[k] as a (a.id)}
 					{@const d = new Date(getCreatedAtVis(a))}
 					<li>
-						<button class="plain" onclick={() => openEditor(a)}>
+						<button
+							class="plain"
+							disabled={readOnly}
+							onclick={() => openEditor(a)}
+						>
 							<span title={d.toDateString()}>{toDayTime(d)}</span>
 							<span>{getMsg(a)}</span>
 						</button>
@@ -277,7 +291,7 @@
 			{/each}
 		</ul>
 	{:else}
-		<span>You Have No Activity!</span>
+		<span>{emptyText}</span>
 	{/if}
 </div>
 
@@ -326,6 +340,10 @@
 					min-width: 0;
 					max-width: 100%;
 					cursor: pointer;
+
+					&:disabled {
+						cursor: default;
+					}
 				}
 
 				span {

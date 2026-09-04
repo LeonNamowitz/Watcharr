@@ -264,6 +264,8 @@ export interface PublicUser {
 	username: string;
 	avatar?: Image;
 	bio?: string;
+	ratingSystem?: RatingSystem;
+	ratingStep?: RatingStep;
 }
 
 // PrivateUser - Current users info
@@ -347,6 +349,11 @@ export interface Media {
 	gameModes?: MediaGenre[];
 	seasons?: MediaSeason[];
 	isShowAnime?: boolean;
+}
+
+export interface PublicMediaDetails {
+	media: Media;
+	thoughtsPublic: boolean;
 }
 
 export function getContentTypeFromMedia(m: Media): ContentType | undefined {

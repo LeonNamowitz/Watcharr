@@ -12,11 +12,10 @@
 	import FollowingMenu from "@/lib/nav/FollowingMenu.svelte";
 	import SortMenu from "@/lib/nav/SortMenu.svelte";
 	import TagMenu from "@/lib/tag/TagMenu.svelte";
-	import { noAuthReq, req } from "@/lib/util/api";
+	import { req } from "@/lib/util/api";
 	import { isTouch } from "@/lib/util/helpers";
 	import { store, defaultSort } from "@/store.svelte";
 	import type {
-		AuthResponse,
 		ServerFeatures,
 		Follow,
 		PrivateUser,
@@ -80,36 +79,6 @@
 			() => {
 				const target = ev.target as HTMLInputElement;
 				const query = target?.value.trim();
-				if (isListPage()) {
-					const currentListLocation = new URL(page.url);
-					if (query) {
-						currentListLocation.searchParams.set("query", query);
-					} else {
-						currentListLocation.searchParams.delete("query");
-					}
-					if (currentListLocation.search === page.url.search) return;
-					const listSearchParams = currentListLocation.searchParams.toString();
-					const listLocation = listSearchParams
-						? resolve(
-								`/lists/${page.params.id}/${page.params.username}?${listSearchParams}`,
-							)
-						: resolve(`/lists/${page.params.id}/${page.params.username}`);
-					target.autofocus = true;
-					goto(listLocation).then(() => {
-						// Use mainSearchEl if nav not split, otherwise use ev target.
-						if (
-							!document.body.classList.contains("split-nav") &&
-							mainSearchEl
-						) {
-							mainSearchEl.focus();
-							mainSearchEl.autofocus = false;
-						} else {
-							target?.focus();
-						}
-						target.autofocus = false;
-					});
-					return;
-				}
 				if (!query) return;
 				const currentSearchType = page.url.searchParams.get("type");
 				const searchParams = new SvelteURLSearchParams({
@@ -141,26 +110,7 @@
 		);
 	}
 
-	function isListPage() {
-		return page.url?.pathname.startsWith("/lists/");
-	}
-
-	async function loginAsGuest() {
-		const resp = await noAuthReq.post<AuthResponse>("/auth/", {
-			username: "guest",
-			password: "guest",
-		});
-		if (resp?.token) {
-			localStorage.setItem("token", resp.token);
-		}
-	}
-
 	async function getInitialData() {
-		if (!localStorage.getItem("token")) {
-			if (isListPage()) {
-				await loginAsGuest();
-			}
-		}
 		if (!localStorage.getItem("token")) {
 			console.warn("getInitialData: No token found, redirecting to login!");
 			goto(resolve("/login?again=1"));
@@ -303,15 +253,15 @@
 			<input
 				bind:this={mainSearchEl}
 				type="text"
-				placeholder={isListPage() ? "Search this list" : "Search"}
+				placeholder="Search"
 				bind:value={store.searchQuery}
 				onkeydown={handleSearch}
 			/>
 			<Icon i="search" wh={19} />
 		</div>
 		<div class="btns">
-			<!-- Detailed posters supported on own watched list, tags and other peoples lists -->
-			{#if page.url?.pathname === "/" || page.url?.pathname.startsWith("/search") || page.url?.pathname.startsWith("/tag") || page.url?.pathname.startsWith("/lists") || page.url?.pathname.startsWith("/person")}
+			<!-- Detailed posters supported on watched lists, tags, search and people. -->
+			{#if page.url?.pathname === "/" || page.url?.pathname.startsWith("/search") || page.url?.pathname.startsWith("/tag") || page.url?.pathname.startsWith("/person")}
 				<button
 					class="plain other detailedView"
 					onclick={() => {
@@ -333,8 +283,8 @@
 					<DetailedMenu />
 				{/if}
 			{/if}
-			<!-- Show on watched list and shared/followed watched lists -->
-			{#if page.url?.pathname === "/" || page.url?.pathname.includes("/lists/") || page.url?.pathname.includes("/tag/")}
+			<!-- Show on the watched list and tag lists. -->
+			{#if page.url?.pathname === "/" || page.url?.pathname.includes("/tag/")}
 				<button
 					class="plain other sort"
 					onclick={() => {
@@ -349,27 +299,25 @@
 						<div class="indicator"></div>
 					{/if}
 				</button>
-				{#if !(isListPage() && page.url.searchParams.get("query")?.trim())}
-					<button
-						class="plain other filter"
-						onclick={() => {
-							closeAllSubMenus("filter");
-							filterMenuShown = !filterMenuShown;
-						}}
-						use:tooltip={{
-							text: "Filter",
-							pos: "bot",
-							condition: !filterMenuShown,
-						}}
-					>
-						<Icon i="filter" />
-						{#if store.activeFilters?.type?.length > 0 || store.activeFilters?.status?.length > 0}
-							<div class="indicator"></div>
-						{/if}
-					</button>
-					{#if filterMenuShown}
-						<FilterMenu />
+				<button
+					class="plain other filter"
+					onclick={() => {
+						closeAllSubMenus("filter");
+						filterMenuShown = !filterMenuShown;
+					}}
+					use:tooltip={{
+						text: "Filter",
+						pos: "bot",
+						condition: !filterMenuShown,
+					}}
+				>
+					<Icon i="filter" />
+					{#if store.activeFilters?.type?.length > 0 || store.activeFilters?.status?.length > 0}
+						<div class="indicator"></div>
 					{/if}
+				</button>
+				{#if filterMenuShown}
+					<FilterMenu />
 				{/if}
 				{#if sortMenuShown}
 					<SortMenu />
@@ -429,7 +377,7 @@
 	<input
 		class="small"
 		type="text"
-		placeholder={isListPage() ? "Search this list" : "Search"}
+		placeholder="Search"
 		bind:value={store.searchQuery}
 		onkeydown={handleSearch}
 	/>

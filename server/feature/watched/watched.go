@@ -143,8 +143,7 @@ func (s *Service) GetWatchedPage(
 	return *pRes, nil
 }
 
-// Validate that the provided user identifies a public watched list.
-func (s *Service) ValidatePublicWatchedList(userId uint, username string) error {
+func (s *Service) getPublicListOwner(userId uint, username string) (entity.User, error) {
 	user := new(entity.User)
 	res := s.db.
 		Where("id = ? AND username = ?", userId, username).
@@ -152,14 +151,20 @@ func (s *Service) ValidatePublicWatchedList(userId uint, username string) error 
 	if res.Error != nil {
 		slog.Error("ValidatePublicWatchedList: Failed to get user.",
 			"user_id", userId)
-		return errors.New("failed to check privacy settings")
+		return entity.User{}, errors.New("failed to check privacy settings")
 	}
 	if user.Private != nil && *user.Private {
 		slog.Error("ValidatePublicWatchedList: This users list is private.",
 			"user_id", userId)
-		return errors.New("this watched list is private")
+		return entity.User{}, errors.New("this watched list is private")
 	}
-	return nil
+	return *user, nil
+}
+
+// Validate that the provided user identifies a public watched list.
+func (s *Service) ValidatePublicWatchedList(userId uint, username string) error {
+	_, err := s.getPublicListOwner(userId, username)
+	return err
 }
 
 // Get a users **public** watchlist.
@@ -185,6 +190,32 @@ func (s *Service) getPublicWatched(
 		return util.PaginationResponse[entity.Watched, util.None]{}, errors.New("failed fetching the list")
 	}
 	return pRes, nil
+}
+
+// GetPublicWatchedItem gets one item from a public list and reports whether the
+// owner's thoughts may be shown. It deliberately returns the list owner's
+// watched data rather than data belonging to the current viewer.
+func (s *Service) GetPublicWatchedItem(
+	userId uint,
+	username string,
+	mediaId uint,
+	mediaType util.SupportedMedia,
+) (entity.Watched, bool, error) {
+	owner, err := s.getPublicListOwner(userId, username)
+	if err != nil {
+		return entity.Watched{}, false, err
+	}
+
+	watched, err := s.GetWatchedItemBySupportedMediaId(userId, mediaId, mediaType)
+	if err != nil {
+		slog.Error("GetPublicWatchedItem: Failed to get watched item.",
+			"user_id", userId, "media_id", mediaId, "media_type", mediaType,
+			"error", err)
+		return entity.Watched{}, false, errors.New("failed fetching the list item")
+	}
+
+	thoughtsPublic := owner.PrivateThoughts == nil || !*owner.PrivateThoughts
+	return watched, thoughtsPublic, nil
 }
 
 // Get a watched list item by id (must be for `userId`).

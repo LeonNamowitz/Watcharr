@@ -3,7 +3,7 @@
 	import Spinner from "@/lib/Spinner.svelte";
 	import tooltip from "@/lib/actions/tooltip.js";
 	import UserAvatar from "@/lib/img/UserAvatar.svelte";
-	import { followUser, req, unfollowUser } from "@/lib/util/api.js";
+	import { followUser, noAuthReq, unfollowUser } from "@/lib/util/api.js";
 	import {
 		clearActiveFilters,
 		setWatchedListPreset,
@@ -19,11 +19,12 @@
 	import Error from "@/lib/Error.svelte";
 	import { goto } from "$app/navigation";
 	import { resolve } from "$app/paths";
+	import { parseTokenPayload } from "@/lib/util/helpers";
 
 	let meta = $derived.by(() => {
 		return {
-			id: page.params.id,
-			username: page.params.username,
+			id: page.params.id ?? "",
+			username: page.params.username ?? "",
 		};
 	});
 
@@ -32,6 +33,9 @@
 
 	let followBtnDisabled = $state(false);
 	let user: PublicUser | undefined = $state();
+	let viewerUserId = parseTokenPayload()?.userId;
+	let isAuthenticated = $derived(Boolean(store.userInfo));
+	let canFollow = $derived(isAuthenticated && viewerUserId !== Number(meta.id));
 
 	let isFollowing = $derived(
 		!!store.follows?.find((f) => f.followedUser.id === Number(meta.id)),
@@ -44,10 +48,7 @@
 		const params = store.sortAndFiltersForQueryParams;
 		if (!isSearching) return params;
 
-		const searchParams: Record<string, string> = { query: searchQuery };
-		if (params.sort) searchParams.sort = params.sort;
-		if (params.sortDir) searchParams.sortDir = params.sortDir;
-		return searchParams;
+		return { ...params, query: searchQuery };
 	});
 	let requestKey = $derived(
 		JSON.stringify({
@@ -75,12 +76,15 @@
 			return;
 		}
 		const endpoint = isSearching
-			? `/search/list/${meta.id}/${meta.username}`
-			: `/watched/${meta.id}/${meta.username}`;
-		const r = await req.get<PaginationResponse<Media, undefined>>(endpoint, {
-			params: nextLoadParams,
-			signal,
-		});
+			? `/public/users/${meta.id}/${meta.username}/search`
+			: `/public/users/${meta.id}/${meta.username}/watched`;
+		const r = await noAuthReq.get<PaginationResponse<Media, undefined>>(
+			endpoint,
+			{
+				params: nextLoadParams,
+				signal,
+			},
+		);
 		scroll.dataLoaded();
 		return r;
 	}
@@ -107,8 +111,8 @@
 	});
 
 	async function getPublicUser() {
-		return await req.get<PublicUser>(
-			`/user/public/${meta.id}/${meta.username}`,
+		return await noAuthReq.get<PublicUser>(
+			`/public/users/${meta.id}/${meta.username}`,
 		);
 	}
 
@@ -173,14 +177,24 @@
 				<h2 title={user?.username}>
 					{meta.username}
 				</h2>
-				<button
-					class="plain"
-					disabled={followBtnDisabled}
-					onclick={follow}
-					use:tooltip={{ text: isFollowing ? "Unfollow" : "Follow" }}
-				>
-					<Icon i={isFollowing ? "person-minus" : "person-add"} />
-				</button>
+				{#if canFollow}
+					<button
+						class="plain follow"
+						disabled={followBtnDisabled}
+						onclick={follow}
+						use:tooltip={{ text: isFollowing ? "Unfollow" : "Follow" }}
+					>
+						<Icon i={isFollowing ? "person-minus" : "person-add"} />
+					</button>
+				{:else if !isAuthenticated}
+					<a
+						class="follow"
+						href={resolve("/login")}
+						use:tooltip={{ text: "Log in to follow" }}
+					>
+						<Icon i="person-add" />
+					</a>
+				{/if}
 			</div>
 			{#if user?.bio}
 				<span title={user?.bio}>{user?.bio}</span>
@@ -216,7 +230,13 @@
 					watched={dataLoader.state.data[i].watched}
 					media={w}
 					fluidSize={true}
-					disableInteraction={true}
+					hideButtons={true}
+					publicView={true}
+					publicRatingSettings={{
+						ratingSystem: user?.ratingSystem,
+						ratingStep: user?.ratingStep,
+					}}
+					publicListOwner={{ id: meta.id, username: meta.username }}
 				/>
 			{/if}
 		{/each}
@@ -321,13 +341,6 @@
 		}
 	}
 
-	textarea {
-		border: 0;
-		padding: 0;
-		resize: none;
-		text-overflow: ellipsis;
-	}
-
 	.basic-ctr {
 		min-width: 200px;
 		max-width: 300px;
@@ -343,8 +356,11 @@
 				text-overflow: ellipsis;
 			}
 
-			button {
+			.follow {
 				margin-left: auto;
+				display: flex;
+				align-items: center;
+				width: 28px;
 				fill: $text-color;
 			}
 		}
@@ -354,6 +370,7 @@
 			overflow: hidden;
 			text-overflow: ellipsis;
 			display: -webkit-box;
+			line-clamp: 2;
 			-webkit-line-clamp: 2;
 			-webkit-box-orient: vertical;
 		}

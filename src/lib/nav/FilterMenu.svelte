@@ -3,7 +3,14 @@
 	import type { Filters } from "@/types";
 	import Icon from "../Icon.svelte";
 	import tooltip from "../actions/tooltip";
-	import Menu from "../Menu.svelte";
+	import Menu, { type MenuConfig } from "../Menu.svelte";
+
+	interface Props {
+		conf?: MenuConfig;
+		showGames?: boolean;
+	}
+
+	let { conf, showGames = store.serverFeatures?.games }: Props = $props();
 
 	function filterClicked(type: keyof Filters, f: string) {
 		if (store.activeFilters[type]?.includes(f)) {
@@ -18,7 +25,7 @@
 	}
 </script>
 
-<Menu conf={{ width: "200px", right: "47px", arrowLeft: "38px" }}>
+<Menu conf={conf ?? { width: "200px", right: "47px", arrowLeft: "38px" }}>
 	<div class="title">
 		<h4 class="norm sm-caps">type</h4>
 		{#if store.activeFilters?.type?.length > 0 || store.activeFilters?.status?.length > 0}
@@ -47,7 +54,7 @@
 		>
 			MOVIE
 		</button>
-		{#if store.serverFeatures?.games}
+		{#if showGames}
 			<button
 				class:active={store.activeFilters.type.includes("game")}
 				onclick={() => filterClicked("type", "game")}
@@ -68,7 +75,7 @@
 		onclick={() => filterClicked("status", "watching")}
 	>
 		watching
-		{#if store.serverFeatures?.games}
+		{#if showGames}
 			(playing)
 		{/if}
 	</button>
@@ -77,7 +84,7 @@
 		onclick={() => filterClicked("status", "finished")}
 	>
 		finished
-		{#if store.serverFeatures?.games}
+		{#if showGames}
 			(played)
 		{/if}
 	</button>

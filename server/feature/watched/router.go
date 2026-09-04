@@ -27,8 +27,11 @@ func NewRouter(br *router.BaseRouter, service *Service) *Router {
 
 func (r *Router) AddRoutes() {
 	watched := r.br.Router.Group("/watched").Use(authmiddleware.AuthRequired(nil, r.br.Cfg))
+	public := r.br.Router.Group("/public/users/:id/:username")
 
 	watched.GET("", router.PaginatedRequest(false), r.GetWatchedList)
+	// Kept for compatibility with authenticated clients. New shared-list views
+	// use the explicitly anonymous /public route below.
 	watched.GET(":id/:username", router.PaginatedRequest(true), r.GetPublicWatchedList)
 	watched.POST("", r.AddWatched)
 	watched.PUT(":id", r.UpdateWatched)
@@ -36,6 +39,9 @@ func (r *Router) AddRoutes() {
 	// TODO Move add/delete watched from tag to the `tag` package (the service code is there so the route may as well be under there, also avoids a circular dep).
 	watched.POST(":id/tag/:tagId", r.AddWatchedToTag)
 	watched.DELETE(":id/tag/:tagId", r.DeleteWatchedFromTag)
+
+	public.GET("/watched", router.PaginatedRequest(true), r.GetPublicWatchedList)
+	public.GET("/media/:type/:mediaId", r.GetPublicWatchedItem)
 }
 
 // Get our (logged in user) watched list.
@@ -106,6 +112,47 @@ func (r *Router) GetPublicWatchedList(c *gin.Context) {
 		Results:          domain.NewWatchedPublicGetPageResponse(wp.Results),
 	}
 	c.JSON(http.StatusOK, dto)
+}
+
+// GetPublicWatchedItem returns read-only owner-scoped details for an item opened
+// from a public list.
+func (r *Router) GetPublicWatchedItem(c *gin.Context) {
+	userId, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, router.ErrorResponse{Error: "invalid user id"})
+		return
+	}
+	mediaId, err := strconv.ParseUint(c.Param("mediaId"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, router.ErrorResponse{Error: "invalid media id"})
+		return
+	}
+	mediaType := util.SupportedMedia(c.Param("type"))
+	if mediaType != util.SupportedMediaMovie &&
+		mediaType != util.SupportedMediaShow &&
+		mediaType != util.SupportedMediaGame {
+		c.JSON(http.StatusBadRequest, router.ErrorResponse{Error: "unsupported media type"})
+		return
+	}
+
+	watchedItem, thoughtsPublic, err := r.s.GetPublicWatchedItem(
+		uint(userId),
+		c.Param("username"),
+		uint(mediaId),
+		mediaType,
+	)
+	if err != nil {
+		c.JSON(http.StatusForbidden, router.ErrorResponse{Error: err.Error()})
+		return
+	}
+	watchedDto := domain.NewWatchedDtoForPublicContentPage(
+		&watchedItem,
+		thoughtsPublic,
+	)
+	c.JSON(http.StatusOK, domain.PublicMediaDetailsResponse{
+		Media:          domain.NewMediaFromWatched(&watchedItem, &watchedDto),
+		ThoughtsPublic: thoughtsPublic,
+	})
 }
 
 func (r *Router) AddWatched(c *gin.Context) {

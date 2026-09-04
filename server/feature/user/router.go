@@ -38,6 +38,11 @@ func (r *Router) AddRoutes() {
 	u.GET("/search", r.GetSearchUsers)
 	// Get user public info
 	u.GET("/public/:pubUserId/:pubUsername", r.GetUserPublicInfo)
+	// Public profile data used by anonymous shared-list views.
+	r.br.Router.GET(
+		"/public/users/:id/:username",
+		r.GetUserPublicInfo,
+	)
 	// Update bio
 	u.POST("/bio", r.UpdateBio)
 	// Upload avatar
@@ -101,12 +106,18 @@ func (r *Router) GetSearchUsers(c *gin.Context) {
 
 // Get user public info
 func (r *Router) GetUserPublicInfo(c *gin.Context) {
-	id, err := strconv.Atoi(c.Param("pubUserId"))
+	idParam := c.Param("pubUserId")
+	username := c.Param("pubUsername")
+	if idParam == "" {
+		idParam = c.Param("id")
+		username = c.Param("username")
+	}
+	id, err := strconv.Atoi(idParam)
 	if err != nil {
 		c.Status(400)
 		return
 	}
-	response, err := r.service.GetUserPublicInfo(uint(id), c.Param("pubUsername"))
+	response, err := r.service.GetUserPublicInfo(uint(id), username)
 	if err != nil {
 		c.JSON(http.StatusForbidden, router.ErrorResponse{Error: err.Error()})
 		return

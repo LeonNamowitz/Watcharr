@@ -4,15 +4,20 @@
 
 	interface Props {
 		topCrew: TMDBContentCreditsCrew[];
+		disableInteraction?: boolean;
 	}
 
-	let { topCrew }: Props = $props();
+	let { topCrew, disableInteraction = false }: Props = $props();
 </script>
 
 <div class="creators">
 	{#each topCrew as crew (crew.credit_id)}
 		<div>
-			<a href={resolve(`/person/${crew.id}`)}>{crew.name}</a>
+			{#if disableInteraction}
+				<strong>{crew.name}</strong>
+			{:else}
+				<a href={resolve(`/person/${crew.id}`)}>{crew.name}</a>
+			{/if}
 			<span>{crew.job}</span>
 		</div>
 	{/each}
