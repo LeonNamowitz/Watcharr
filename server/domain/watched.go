@@ -129,6 +129,19 @@ func NewWatchedDtoForPublicLists(w *entity.Watched) WatchedDto {
 	return dto
 }
 
+// NewWatchedDtoForPublicContentPage returns the read-only watched data needed
+// when a visitor opens an item from a public list. Thoughts are only included
+// when the list owner has made them public.
+func NewWatchedDtoForPublicContentPage(w *entity.Watched, thoughtsPublic bool) WatchedDto {
+	dto := NewWatchedDtoForPublicLists(w)
+	dto.Activity = w.Activity
+	dto.Plays = getPlaysFromActivity(w.Activity)
+	if thoughtsPublic {
+		dto.Thoughts = w.Thoughts
+	}
+	return dto
+}
+
 // A fuller dto with all details needed for a content details page.
 func NewWatchedDtoForContentPage(w *entity.Watched) WatchedDto {
 	dto := NewWatchedDtoWithBaseProps(w)
@@ -169,6 +182,14 @@ func NewWatchedPublicGetPageResponse(w []entity.Watched) WatchedPublicGetPageRes
 		r = append(r, NewMediaFromWatched(v, &d))
 	}
 	return r
+}
+
+// PublicMediaDetailsResponse is the read-only detail returned for an item on a
+// public list. ThoughtsPublic lets the client distinguish private thoughts from
+// an intentionally public but empty review.
+type PublicMediaDetailsResponse struct {
+	Media          Media `json:"media"`
+	ThoughtsPublic bool  `json:"thoughtsPublic"`
 }
 
 // Add a watched entry request

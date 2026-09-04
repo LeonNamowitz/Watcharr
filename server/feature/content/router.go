@@ -22,6 +22,7 @@ type WatchedProvider interface {
 	UpdateWatchedLastViewedSeason(userId uint, id uint, seasonNum int) error
 	GetWatchedItemBySupportedMediaId(userId uint, id uint, t util.SupportedMedia) (entity.Watched, error)
 	GetWatchedItemsBySupportedMediaIds(userId uint, c []addedtocontent.IdToTypePair) ([]entity.Watched, error)
+	GetPublicWatchedItem(userId uint, username string, mediaId uint, mediaType util.SupportedMedia) (entity.Watched, bool, error)
 }
 
 type Router struct {
@@ -47,6 +48,7 @@ func NewRouter(
 
 func (r *Router) AddRoutes() {
 	content := r.br.Router.Group("/content").Use(authmiddleware.AuthRequired(nil, r.br.Cfg))
+	publicOwnerContent := r.br.Router.Group("/public/users/:id/:username/content")
 	exp := time.Hour * 24
 
 	// NOTE: Some routes use `cache.CachePage`, but others that contain user watched data
@@ -60,6 +62,11 @@ func (r *Router) AddRoutes() {
 	content.GET("/tv/:id", router.WhereaboutsRequired(r.br.Cfg), r.GetTvDetails)
 	// Get tv cast
 	content.GET("/tv/:id/credits", cache.CachePage(r.br.MemStore, exp, r.GetTvCredits))
+
+	publicOwnerContent.GET("/movie/:mediaId", router.WhereaboutsRequired(r.br.Cfg), r.GetPublicMovieDetails)
+	publicOwnerContent.GET("/movie/:mediaId/credits", cache.CachePage(r.br.MemStore, exp, r.GetPublicMovieCredits))
+	publicOwnerContent.GET("/tv/:mediaId", router.WhereaboutsRequired(r.br.Cfg), r.GetPublicTvDetails)
+	publicOwnerContent.GET("/tv/:mediaId/credits", cache.CachePage(r.br.MemStore, exp, r.GetPublicTvCredits))
 	// Get season details
 	// Supports `watchedId` query parameter for saving the requested season as `LastViewedSeason`.
 	content.GET("/tv/:id/season/:num", r.GetSeasonDetails)
@@ -69,6 +76,127 @@ func (r *Router) AddRoutes() {
 	content.GET("/person/:id/credits", r.GetPersonCredits)
 	// Available regions for watch providers
 	content.GET("/regions", r.GetRegions)
+}
+
+func (r *Router) getPublicOwnerWatched(c *gin.Context, mediaType util.SupportedMedia) (uint, entity.Watched, bool, error) {
+	userId, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		return 0, entity.Watched{}, false, err
+	}
+	mediaId, err := strconv.ParseUint(c.Param("mediaId"), 10, 64)
+	if err != nil {
+		return 0, entity.Watched{}, false, err
+	}
+	watched, thoughtsPublic, err := r.wp.GetPublicWatchedItem(
+		uint(userId),
+		c.Param("username"),
+		uint(mediaId),
+		mediaType,
+	)
+	return uint(userId), watched, thoughtsPublic, err
+}
+
+func (r *Router) addPublicSimilarWatched(userId uint, media *domain.Media) error {
+	return addedtocontent.AddList(
+		r.wp,
+		userId,
+		media.Similar,
+		func(i int, w *entity.Watched) {
+			media.Similar[i].Watched = domain.NewWatchedDtoForPublicLists(w)
+		},
+	)
+}
+
+func (r *Router) GetPublicMovieCredits(c *gin.Context) {
+	if _, _, _, err := r.getPublicOwnerWatched(c, util.SupportedMediaMovie); err != nil {
+		c.JSON(http.StatusForbidden, router.ErrorResponse{Error: "failed fetching the public list item"})
+		return
+	}
+	content, err := r.tmdb.MovieCredits(c.Param("mediaId"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, router.ErrorResponse{Error: err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, content)
+}
+
+func (r *Router) GetPublicTvCredits(c *gin.Context) {
+	if _, _, _, err := r.getPublicOwnerWatched(c, util.SupportedMediaShow); err != nil {
+		c.JSON(http.StatusForbidden, router.ErrorResponse{Error: "failed fetching the public list item"})
+		return
+	}
+	content, err := r.tmdb.ShowCredits(c.Param("mediaId"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, router.ErrorResponse{Error: err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, content)
+}
+
+// GetPublicMovieDetails returns the normal movie page data with the public
+// list owner's watched entry attached instead of the visitor's.
+func (r *Router) GetPublicMovieDetails(c *gin.Context) {
+	userId, watched, thoughtsPublic, err := r.getPublicOwnerWatched(
+		c,
+		util.SupportedMediaMovie,
+	)
+	if err != nil {
+		c.JSON(http.StatusForbidden, router.ErrorResponse{Error: "failed fetching the public list item"})
+		return
+	}
+	content, err := r.tmdb.MovieDetails(tmdb.MovieDetailsOptions{
+		ID:      c.Param("mediaId"),
+		Country: c.MustGet("userCountry").(string),
+		Params: map[string]string{
+			"append_to_response": "videos,watch/providers,similar",
+		},
+	})
+	if err != nil {
+		c.JSON(http.StatusBadRequest, router.ErrorResponse{Error: err.Error()})
+		return
+	}
+	media := content.AsMedia()
+	media.Watched = domain.NewWatchedDtoForPublicContentPage(&watched, thoughtsPublic)
+	if err := r.addPublicSimilarWatched(userId, &media); err != nil {
+		slog.Error("GetPublicMovieDetails: Failed to add public watched data to similar content", "error", err)
+	}
+	c.JSON(http.StatusOK, domain.PublicMediaDetailsResponse{
+		Media:          media,
+		ThoughtsPublic: thoughtsPublic,
+	})
+}
+
+// GetPublicTvDetails returns the normal show page data with the public list
+// owner's watched entry attached instead of the visitor's.
+func (r *Router) GetPublicTvDetails(c *gin.Context) {
+	userId, watched, thoughtsPublic, err := r.getPublicOwnerWatched(
+		c,
+		util.SupportedMediaShow,
+	)
+	if err != nil {
+		c.JSON(http.StatusForbidden, router.ErrorResponse{Error: "failed fetching the public list item"})
+		return
+	}
+	content, err := r.tmdb.ShowDetails(tmdb.ShowDetailsOptions{
+		ID:      c.Param("mediaId"),
+		Country: c.MustGet("userCountry").(string),
+		Params: map[string]string{
+			"append_to_response": "videos,watch/providers,similar,external_ids,keywords",
+		},
+	})
+	if err != nil {
+		c.JSON(http.StatusBadRequest, router.ErrorResponse{Error: err.Error()})
+		return
+	}
+	media := content.AsMedia()
+	media.Watched = domain.NewWatchedDtoForPublicContentPage(&watched, thoughtsPublic)
+	if err := r.addPublicSimilarWatched(userId, &media); err != nil {
+		slog.Error("GetPublicTvDetails: Failed to add public watched data to similar content", "error", err)
+	}
+	c.JSON(http.StatusOK, domain.PublicMediaDetailsResponse{
+		Media:          media,
+		ThoughtsPublic: thoughtsPublic,
+	})
 }
 
 func (r *Router) GetMovieDetails(c *gin.Context) {

@@ -42,7 +42,14 @@ func (r *Router) AddRoutes() {
 
 	// Master search
 	search.GET("", router.PaginatedRequest(true), r.GetSearch)
+	// Kept for compatibility with authenticated clients.
 	search.GET("/list/:id/:username", router.PaginatedRequest(true), r.GetPublicListSearch)
+	// Search within a shared list without creating a user session.
+	r.br.Router.GET(
+		"/public/users/:id/:username/search",
+		router.PaginatedRequest(true),
+		r.GetPublicListSearch,
+	)
 }
 
 // NOTE: The handler functions use `copier` to copy values from the response

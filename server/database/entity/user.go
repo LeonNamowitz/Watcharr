@@ -33,10 +33,12 @@ type User struct {
 
 func (u *User) GetSafe() PublicUser {
 	return PublicUser{
-		ID:       u.ID,
-		Username: u.Username,
-		Avatar:   u.Avatar,
-		Bio:      u.Bio,
+		ID:           u.ID,
+		Username:     u.Username,
+		Avatar:       u.Avatar,
+		Bio:          u.Bio,
+		RatingSystem: u.RatingSystem,
+		RatingStep:   u.RatingStep,
 	}
 }
 
@@ -67,11 +69,13 @@ type UserSettings struct {
 
 // Public user details for search results
 type PublicUser struct {
-	ID       uint   `json:"id"`
-	Username string `json:"username"`
-	AvatarID uint   `json:"-"`
-	Avatar   Image  `json:"avatar,omitzero"`
-	Bio      string `json:"bio,omitempty"`
+	ID           uint   `json:"id"`
+	Username     string `json:"username"`
+	AvatarID     uint   `json:"-"`
+	Avatar       Image  `json:"avatar,omitzero"`
+	Bio          string `json:"bio,omitempty"`
+	RatingSystem *int   `json:"ratingSystem,omitempty"`
+	RatingStep   *int   `json:"ratingStep,omitempty"`
 }
 
 // Private user details, for returning users details to themselves

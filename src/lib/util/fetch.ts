@@ -130,6 +130,12 @@ export class Reqer {
 		 * with users Watcharr token.
 		 */
 		private watcharrAuthed: boolean,
+		/**
+		 * Whether a missing or invalid token should navigate to the login page.
+		 * Public pages use authenticated requests opportunistically and must remain
+		 * usable when a stored token has expired.
+		 */
+		private redirectOnAuthFailure = true,
 	) {}
 
 	private buildBaseUrl(b: string): string {
@@ -224,8 +230,10 @@ export class Reqer {
 			if (this.watcharrAuthed) {
 				const token = localStorage.getItem("token");
 				if (!token) {
-					console.error("No token, going to login.");
-					goto(resolve("/login?again=1"));
+					console.error("No auth token found.");
+					if (this.redirectOnAuthFailure) {
+						goto(resolve("/login?again=1"));
+					}
 					throw new ReqerError("No auth token found");
 				}
 				headers.append("Authorization", token);
@@ -257,7 +265,11 @@ export class Reqer {
 		} catch (err) {
 			console.error("Reqer->do: Errored!", err);
 			if (err instanceof ReqerError) {
-				if (this.watcharrAuthed && err.response?.status === 401) {
+				if (
+					this.watcharrAuthed &&
+					this.redirectOnAuthFailure &&
+					err.response?.status === 401
+				) {
 					console.error("Recieved 401 response, going to login.");
 					notify({ text: "Request Authorization Failed!", type: "error" });
 					clearWatcharrData();

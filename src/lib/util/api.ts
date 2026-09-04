@@ -54,6 +54,9 @@ console.log("api: baseURL constructed:", baseURL);
 
 export const req = new Reqer(baseURL, true);
 export const noAuthReq = new Reqer(baseURL, false);
+// Used by public pages to enhance the UI for signed-in visitors without making
+// authentication a requirement or redirecting visitors with an expired token.
+export const optionalAuthReq = new Reqer(baseURL, true, false);
 
 /**
  * Options for our internal updateWatched func.
@@ -327,30 +330,26 @@ export async function getServerFeatures() {
 
 export async function followUser(id: number) {
 	const nid = notify({ text: `Following`, type: "loading" });
-	req
-		.post<Follow>(`/follow/${id}`)
-		.then((resp) => {
-			console.log("Followed:", resp);
-			store.follows.push(resp);
-			notify({ id: nid, text: `Followed!`, type: "success" });
-		})
-		.catch((err) => {
-			console.error(err);
-			notify({ id: nid, text: "Failed To Follow!", type: "error" });
-		});
+	try {
+		const resp = await req.post<Follow>(`/follow/${id}`);
+		console.log("Followed:", resp);
+		store.follows.push(resp);
+		notify({ id: nid, text: `Followed!`, type: "success" });
+	} catch (err) {
+		console.error(err);
+		notify({ id: nid, text: "Failed To Follow!", type: "error" });
+	}
 }
 
 export async function unfollowUser(id: number) {
 	const nid = notify({ text: `Unfollowing`, type: "loading" });
-	req
-		.delete(`/follow/${id}`)
-		.then((resp) => {
-			console.log("Unfollowed:", resp);
-			store.follows = store.follows.filter((fo) => fo.followedUser.id != id);
-			notify({ id: nid, text: `Unfollowed!`, type: "success" });
-		})
-		.catch((err) => {
-			console.error(err);
-			notify({ id: nid, text: "Failed To Unfollow!", type: "error" });
-		});
+	try {
+		const resp = await req.delete(`/follow/${id}`);
+		console.log("Unfollowed:", resp);
+		store.follows = store.follows.filter((fo) => fo.followedUser.id != id);
+		notify({ id: nid, text: `Unfollowed!`, type: "success" });
+	} catch (err) {
+		console.error(err);
+		notify({ id: nid, text: "Failed To Unfollow!", type: "error" });
+	}
 }

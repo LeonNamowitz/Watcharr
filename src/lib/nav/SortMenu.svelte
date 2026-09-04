@@ -1,7 +1,13 @@
 <script lang="ts">
 	import { page } from "$app/state";
 	import { store } from "@/store.svelte";
-	import Menu from "../Menu.svelte";
+	import Menu, { type MenuConfig } from "../Menu.svelte";
+
+	interface Props {
+		conf?: MenuConfig;
+	}
+
+	let { conf }: Props = $props();
 
 	let isPublicListSearch = $derived(
 		page.url.pathname.startsWith("/lists/") &&
@@ -40,7 +46,7 @@
 </script>
 
 <Menu
-	conf={{
+	conf={conf ?? {
 		width: "180px",
 		right: "90px",
 		arrowLeft: isPublicListSearch ? "61px" : "21px",
