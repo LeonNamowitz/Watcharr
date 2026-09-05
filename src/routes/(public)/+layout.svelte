@@ -38,6 +38,9 @@
 	let isListPage = $derived(
 		/^\/lists\/[^/]+\/[^/]+\/?$/.test(page.url.pathname),
 	);
+	let isSearchActive = $derived(
+		isListPage && Boolean(page.url.searchParams.get("query")?.trim()),
+	);
 	let isPersonPage = $derived(
 		/^\/lists\/[^/]+\/[^/]+\/person\/[^/]+\/?$/.test(page.url.pathname),
 	);
@@ -49,6 +52,18 @@
 		if (except !== "detailed") detailedMenuShown = false;
 		if (except !== "sort") sortMenuShown = false;
 		if (except !== "filter") filterMenuShown = false;
+	}
+
+	function toggleListMenu(menu: "sort" | "filter") {
+		const wasShown = menu === "sort" ? sortMenuShown : filterMenuShown;
+		closeMenus();
+		if (wasShown) return;
+
+		if (menu === "sort") {
+			sortMenuShown = true;
+		} else {
+			filterMenuShown = true;
+		}
 	}
 
 	function shouldIgnoreSearchKey(ev: KeyboardEvent) {
@@ -87,6 +102,8 @@
 					location.searchParams.set("query", query);
 				} else {
 					location.searchParams.delete("query");
+					location.searchParams.delete("scope");
+					location.searchParams.delete("type");
 				}
 				const searchParams = location.searchParams.toString();
 				const listLocation = searchParams
@@ -248,10 +265,7 @@
 		<div class="control">
 			<button
 				class="plain other sort"
-				onclick={() => {
-					closeMenus("sort");
-					sortMenuShown = !sortMenuShown;
-				}}
+				onclick={() => toggleListMenu("sort")}
 				use:tooltip={{
 					text: "Sort",
 					pos: "bot",
@@ -277,10 +291,7 @@
 		<div class="control">
 			<button
 				class="plain other filter"
-				onclick={() => {
-					closeMenus("filter");
-					filterMenuShown = !filterMenuShown;
-				}}
+				onclick={() => toggleListMenu("filter")}
 				use:tooltip={{
 					text: "Filter",
 					pos: "bot",
@@ -295,6 +306,7 @@
 			{#if filterMenuShown}
 				<FilterMenu
 					showGames={true}
+					showTypes={!isSearchActive}
 					conf={{
 						width: "200px",
 						top: "49px",

@@ -123,6 +123,10 @@ func (s *Service) Search(
 			return resp, errors.New("person search failed")
 		}
 	case domain.SearchTypeGame:
+		if s.cfg == nil || !s.cfg.TwitchEnabled() {
+			slog.Debug("Search: Game search skipped because IGDB is disabled.")
+			return resp, nil
+		}
 		greq := igdb.SearchOptions{
 			Query:       query,
 			Year:        qfilters.Year,

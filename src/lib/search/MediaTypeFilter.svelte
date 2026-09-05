@@ -7,10 +7,12 @@
 	interface Props {
 		active?: string;
 		disabled?: boolean;
+		showGames?: boolean;
 		onChange: (nowActive: FilterType) => void;
 	}
 
-	let { active, disabled, onChange }: Props = $props();
+	let { active, disabled, showGames, onChange }: Props = $props();
+	let gamesVisible = $derived(showGames ?? store.serverFeatures?.games);
 </script>
 
 <div class:disabled>
@@ -28,7 +30,7 @@
 	>
 		<Icon i="tv" wh={20} /> TV Shows
 	</button>
-	{#if store.serverFeatures?.games}
+	{#if gamesVisible}
 		<button
 			class="plain"
 			data-active={active === "game"}
