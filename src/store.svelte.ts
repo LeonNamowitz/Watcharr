@@ -180,7 +180,8 @@ export const store = {
 		if (!temporaryWatchedListState) {
 			localStorage.setItem("activeFilter", JSON.stringify(v));
 		}
-		clearActiveWatchedListPreset();
+		// A preset remains active when only its sort is customized. Filter
+		// changes still clear it through the activeFilters setter below.
 		console.debug("Store: Saved activeSort:", v);
 		updateSortAndFiltersForQueryParams();
 	},
