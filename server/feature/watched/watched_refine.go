@@ -102,7 +102,25 @@ func refineSort(
 	}
 	switch sort {
 	case domain.WatchedSortDateAdded:
-		db.Order(obc(clause.Column{Name: "watcheds.created_at"}))
+		db.
+			// An edited ADDED_WATCHED date is the user-visible date added.
+			// Keep created_at as the fallback for legacy/imported entries.
+			Joins(`LEFT JOIN (
+					SELECT
+						watched_id AS a_watched_id,
+						MAX(COALESCE(custom_date, created_at)) AS a_date_added
+					FROM activities
+					WHERE
+						type = ?
+						AND deleted_at IS NULL
+						AND user_id = ?
+					GROUP BY watched_id
+				) date_added_activity ON date_added_activity.a_watched_id = watcheds.id`,
+				entity.ADDED_WATCHED, userId).
+			Order(obc(clause.Column{
+				Name: "COALESCE(date_added_activity.a_date_added, watcheds.created_at)",
+				Raw:  true,
+			}))
 	case domain.WatchedSortLastChanged:
 		db.Order(obc(clause.Column{Name: "watcheds.updated_at"}))
 	case domain.WatchedSortLastFinished:
