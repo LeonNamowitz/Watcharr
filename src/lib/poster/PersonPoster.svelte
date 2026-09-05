@@ -13,6 +13,7 @@
 		role?: string | undefined;
 		zoomOnHover?: boolean;
 		disableInteraction?: boolean;
+		publicListOwner?: { id: string | number; username: string };
 	}
 
 	let {
@@ -22,16 +23,38 @@
 		role = undefined,
 		zoomOnHover = true,
 		disableInteraction = false,
+		publicListOwner,
 	}: Props = $props();
 
 	let poster = $derived(
 		path ? `https://image.tmdb.org/t/p/w300_and_h450_bestv2${path}` : undefined,
 	);
-	let link: `/person/${number}` | undefined = $derived(
-		id && !disableInteraction
-			? (`/person/${id}` as `/person/${number}`)
-			: undefined,
-	);
+	let link = $derived.by(() => {
+		if (!id || disableInteraction) return;
+		if (publicListOwner) {
+			return resolve("/(public)/lists/[id]/[username]/person/[personId]", {
+				id: String(publicListOwner.id),
+				username: publicListOwner.username,
+				personId: String(id),
+			});
+		}
+		return resolve("/(app)/person/[id]", { id: String(id) });
+	});
+
+	function navigateToPerson() {
+		if (!id || disableInteraction) return;
+		if (publicListOwner) {
+			goto(
+				resolve("/(public)/lists/[id]/[username]/person/[personId]", {
+					id: String(publicListOwner.id),
+					username: publicListOwner.username,
+					personId: String(id),
+				}),
+			);
+			return;
+		}
+		goto(resolve("/(app)/person/[id]", { id: String(id) }));
+	}
 </script>
 
 <!-- Quick fix to ignore error, should be fixed -->
@@ -40,7 +63,7 @@
 	onmouseenter={(e) => calculateTransformOrigin(e)}
 	onfocusin={(e) => calculateTransformOrigin(e)}
 	onclick={() => {
-		if (!disableInteraction && link) goto(resolve(link));
+		if (link) navigateToPerson();
 	}}
 	onkeypress={() => console.log("on kpress")}
 >
@@ -65,7 +88,7 @@
 		<div class="inner">
 			<h2>
 				{#if link}
-					<a data-sveltekit-preload-data="tap" href={resolve(link)}>
+					<a data-sveltekit-preload-data="tap" href={link}>
 						{name}
 					</a>
 				{:else}

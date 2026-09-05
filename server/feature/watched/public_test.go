@@ -14,6 +14,7 @@ import (
 	"github.com/sbondCo/Watcharr/domain"
 	"github.com/sbondCo/Watcharr/internal/testutil"
 	appRouter "github.com/sbondCo/Watcharr/router"
+	"github.com/sbondCo/Watcharr/util"
 )
 
 func TestPublicWatchedRoutesAreAnonymousAndRespectThoughtPrivacy(t *testing.T) {
@@ -209,6 +210,45 @@ func TestPublicWatchedRouteRejectsMismatchedOwner(t *testing.T) {
 		"/api/public/users/"+strconv.FormatUint(uint64(owner.ID), 10)+"/someone-else/watched?page=1")
 	if recorder.Code != http.StatusForbidden {
 		t.Fatalf("mismatched owner status = %d, want 403", recorder.Code)
+	}
+}
+
+func TestOptionalPublicWatchedItemAllowsOffListContent(t *testing.T) {
+	db := testutil.SetupDB(t)
+	profilePrivate := false
+	owner := entity.User{
+		Username: "owner",
+		Password: "password",
+		UserSettings: entity.UserSettings{
+			Private: &profilePrivate,
+		},
+	}
+	mustCreate(t, db.Create(&owner).Error)
+	service := NewService(db, nil, nil, nil, watchedSearchUserProvider{})
+
+	watched, thoughtsPublic, err := service.GetOptionalPublicWatchedItem(
+		owner.ID,
+		owner.Username,
+		999,
+		util.SupportedMediaMovie,
+	)
+	if err != nil {
+		t.Fatalf("optional public watched item returned error: %v", err)
+	}
+	if watched != nil {
+		t.Fatalf("optional public watched item = %#v, want nil", watched)
+	}
+	if !thoughtsPublic {
+		t.Fatal("public owner unexpectedly has private thoughts")
+	}
+
+	if _, _, err := service.GetPublicWatchedItem(
+		owner.ID,
+		owner.Username,
+		999,
+		util.SupportedMediaMovie,
+	); err == nil {
+		t.Fatal("strict public watched item unexpectedly allowed off-list content")
 	}
 }
 

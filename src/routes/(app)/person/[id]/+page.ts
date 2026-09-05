@@ -6,7 +6,6 @@ export const load = (async ({ params }) => {
 
 	if (!id) {
 		error(400);
-		return;
 	}
 
 	return {

@@ -23,20 +23,33 @@ type WatchedProvider interface {
 	GetWatchedItemBySupportedMediaId(userId uint, id uint, t util.SupportedMedia) (entity.Watched, error)
 	GetWatchedItemsBySupportedMediaIds(userId uint, c []addedtocontent.IdToTypePair) ([]entity.Watched, error)
 	GetPublicWatchedItem(userId uint, username string, mediaId uint, mediaType util.SupportedMedia) (entity.Watched, bool, error)
+	GetOptionalPublicWatchedItem(userId uint, username string, mediaId uint, mediaType util.SupportedMedia) (*entity.Watched, bool, error)
+	ValidatePublicWatchedList(userId uint, username string) error
+}
+
+type TMDBProvider interface {
+	MovieDetails(tmdb.MovieDetailsOptions) (tmdb.MovieDetails, error)
+	MovieCredits(string) (tmdb.ContentCredits, error)
+	ShowDetails(tmdb.ShowDetailsOptions) (tmdb.ShowDetails, error)
+	ShowCredits(string) (tmdb.ContentCredits, error)
+	SeasonDetails(string, string) (tmdb.SeasonDetails, error)
+	PersonDetails(string) (tmdb.PersonDetails, error)
+	PersonCredits(string) (tmdb.PersonCombinedCredits, error)
+	Regions() (tmdb.Regions, error)
 }
 
 type Router struct {
 	br   *router.BaseRouter
 	cs   *Service
 	wp   WatchedProvider
-	tmdb *tmdb.TMDB
+	tmdb TMDBProvider
 }
 
 func NewRouter(
 	br *router.BaseRouter,
 	cs *Service,
 	wp WatchedProvider,
-	tmdb *tmdb.TMDB,
+	tmdb TMDBProvider,
 ) *Router {
 	return &Router{
 		br:   br,
@@ -48,7 +61,7 @@ func NewRouter(
 
 func (r *Router) AddRoutes() {
 	content := r.br.Router.Group("/content").Use(authmiddleware.AuthRequired(nil, r.br.Cfg))
-	publicOwnerContent := r.br.Router.Group("/public/users/:id/:username/content")
+	publicOwnerContent := r.br.Router.Group("/public/users/:id/:username/content").Use(r.PublicOwnerRequired)
 	exp := time.Hour * 24
 
 	// NOTE: Some routes use `cache.CachePage`, but others that contain user watched data
@@ -68,6 +81,8 @@ func (r *Router) AddRoutes() {
 	publicOwnerContent.GET("/tv/:mediaId", router.WhereaboutsRequired(r.br.Cfg), r.GetPublicTvDetails)
 	publicOwnerContent.GET("/tv/:mediaId/credits", cache.CachePage(r.br.MemStore, exp, r.GetPublicTvCredits))
 	publicOwnerContent.GET("/tv/:mediaId/season/:num", r.GetPublicTvSeasonDetails)
+	publicOwnerContent.GET("/person/:personId", r.GetPublicPerson)
+	publicOwnerContent.GET("/person/:personId/credits", r.GetPublicPersonCredits)
 	// Get season details
 	// Supports `watchedId` query parameter for saving the requested season as `LastViewedSeason`.
 	content.GET("/tv/:id/season/:num", r.GetSeasonDetails)
@@ -79,16 +94,50 @@ func (r *Router) AddRoutes() {
 	content.GET("/regions", r.GetRegions)
 }
 
-func (r *Router) getPublicOwnerWatched(c *gin.Context, mediaType util.SupportedMedia) (uint, entity.Watched, bool, error) {
+func (r *Router) PublicOwnerRequired(c *gin.Context) {
 	userId, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil {
-		return 0, entity.Watched{}, false, err
+		c.AbortWithStatusJSON(
+			http.StatusBadRequest,
+			router.ErrorResponse{Error: "invalid public list owner id"},
+		)
+		return
+	}
+	if err := r.wp.ValidatePublicWatchedList(uint(userId), c.Param("username")); err != nil {
+		c.AbortWithStatusJSON(
+			http.StatusForbidden,
+			router.ErrorResponse{Error: "failed validating the public list owner"},
+		)
+		return
+	}
+	c.Set("publicOwnerId", uint(userId))
+	c.Next()
+}
+
+func (r *Router) getPublicOwnerID(c *gin.Context) (uint, error) {
+	if userId, exists := c.Get("publicOwnerId"); exists {
+		return userId.(uint), nil
+	}
+	userId, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		return 0, err
+	}
+	if err := r.wp.ValidatePublicWatchedList(uint(userId), c.Param("username")); err != nil {
+		return 0, err
+	}
+	return uint(userId), nil
+}
+
+func (r *Router) getOptionalPublicOwnerWatched(c *gin.Context, mediaType util.SupportedMedia) (uint, *entity.Watched, bool, error) {
+	userId, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		return 0, nil, false, err
 	}
 	mediaId, err := strconv.ParseUint(c.Param("mediaId"), 10, 64)
 	if err != nil {
-		return 0, entity.Watched{}, false, err
+		return 0, nil, false, err
 	}
-	watched, thoughtsPublic, err := r.wp.GetPublicWatchedItem(
+	watched, thoughtsPublic, err := r.wp.GetOptionalPublicWatchedItem(
 		uint(userId),
 		c.Param("username"),
 		uint(mediaId),
@@ -109,7 +158,7 @@ func (r *Router) addPublicSimilarWatched(userId uint, media *domain.Media) error
 }
 
 func (r *Router) GetPublicMovieCredits(c *gin.Context) {
-	if _, _, _, err := r.getPublicOwnerWatched(c, util.SupportedMediaMovie); err != nil {
+	if _, err := r.getPublicOwnerID(c); err != nil {
 		c.JSON(http.StatusForbidden, router.ErrorResponse{Error: "failed fetching the public list item"})
 		return
 	}
@@ -122,7 +171,7 @@ func (r *Router) GetPublicMovieCredits(c *gin.Context) {
 }
 
 func (r *Router) GetPublicTvCredits(c *gin.Context) {
-	if _, _, _, err := r.getPublicOwnerWatched(c, util.SupportedMediaShow); err != nil {
+	if _, err := r.getPublicOwnerID(c); err != nil {
 		c.JSON(http.StatusForbidden, router.ErrorResponse{Error: "failed fetching the public list item"})
 		return
 	}
@@ -134,14 +183,14 @@ func (r *Router) GetPublicTvCredits(c *gin.Context) {
 	c.JSON(http.StatusOK, content)
 }
 
-// GetPublicTvSeasonDetails returns the normal TMDB season and episode overview
-// after confirming that the show belongs to the requested public list owner.
+// GetPublicTvSeasonDetails returns the normal read-only TMDB season and episode
+// overview after validating the requested public list owner.
 func (r *Router) GetPublicTvSeasonDetails(c *gin.Context) {
 	if c.Param("num") == "" {
 		c.JSON(http.StatusBadRequest, router.ErrorResponse{Error: "a season number was not provided"})
 		return
 	}
-	if _, _, _, err := r.getPublicOwnerWatched(c, util.SupportedMediaShow); err != nil {
+	if _, err := r.getPublicOwnerID(c); err != nil {
 		c.JSON(http.StatusForbidden, router.ErrorResponse{Error: "failed fetching the public list item"})
 		return
 	}
@@ -156,7 +205,7 @@ func (r *Router) GetPublicTvSeasonDetails(c *gin.Context) {
 // GetPublicMovieDetails returns the normal movie page data with the public
 // list owner's watched entry attached instead of the visitor's.
 func (r *Router) GetPublicMovieDetails(c *gin.Context) {
-	userId, watched, thoughtsPublic, err := r.getPublicOwnerWatched(
+	userId, watched, thoughtsPublic, err := r.getOptionalPublicOwnerWatched(
 		c,
 		util.SupportedMediaMovie,
 	)
@@ -176,7 +225,11 @@ func (r *Router) GetPublicMovieDetails(c *gin.Context) {
 		return
 	}
 	media := content.AsMedia()
-	media.Watched = domain.NewWatchedDtoForPublicContentPage(&watched, thoughtsPublic)
+	if watched != nil {
+		media.Watched = domain.NewWatchedDtoForPublicContentPage(watched, thoughtsPublic)
+	} else {
+		thoughtsPublic = false
+	}
 	if err := r.addPublicSimilarWatched(userId, &media); err != nil {
 		slog.Error("GetPublicMovieDetails: Failed to add public watched data to similar content", "error", err)
 	}
@@ -189,7 +242,7 @@ func (r *Router) GetPublicMovieDetails(c *gin.Context) {
 // GetPublicTvDetails returns the normal show page data with the public list
 // owner's watched entry attached instead of the visitor's.
 func (r *Router) GetPublicTvDetails(c *gin.Context) {
-	userId, watched, thoughtsPublic, err := r.getPublicOwnerWatched(
+	userId, watched, thoughtsPublic, err := r.getOptionalPublicOwnerWatched(
 		c,
 		util.SupportedMediaShow,
 	)
@@ -209,7 +262,11 @@ func (r *Router) GetPublicTvDetails(c *gin.Context) {
 		return
 	}
 	media := content.AsMedia()
-	media.Watched = domain.NewWatchedDtoForPublicContentPage(&watched, thoughtsPublic)
+	if watched != nil {
+		media.Watched = domain.NewWatchedDtoForPublicContentPage(watched, thoughtsPublic)
+	} else {
+		thoughtsPublic = false
+	}
 	if err := r.addPublicSimilarWatched(userId, &media); err != nil {
 		slog.Error("GetPublicTvDetails: Failed to add public watched data to similar content", "error", err)
 	}
@@ -386,27 +443,44 @@ func (r *Router) GetPerson(c *gin.Context) {
 	c.JSON(http.StatusOK, content.AsPersonDetailsResponse())
 }
 
-func (r *Router) GetPersonCredits(c *gin.Context) {
-	userId := c.MustGet("userId").(uint)
-	if c.Param("id") == "" {
-		c.Status(400)
+func (r *Router) GetPublicPerson(c *gin.Context) {
+	if _, err := r.getPublicOwnerID(c); err != nil {
+		c.JSON(http.StatusForbidden, router.ErrorResponse{Error: "failed validating the public list owner"})
 		return
 	}
-	creditsType := strings.ToLower(c.Query("creditsType"))
-	if creditsType == "" {
-		person, err := r.tmdb.PersonDetails(c.Param("id"))
-		if err != nil {
-			c.JSON(http.StatusBadRequest, router.ErrorResponse{Error: err.Error()})
-			return
-		}
-		creditsType = strings.ToLower(person.KnownForDepartment)
+	if c.Param("personId") == "" {
+		c.JSON(http.StatusBadRequest, router.ErrorResponse{Error: "a person id was not provided"})
+		return
 	}
-	content, err := r.tmdb.PersonCredits(c.Param("id"))
+	if _, err := strconv.ParseUint(c.Param("personId"), 10, 64); err != nil {
+		c.JSON(http.StatusBadRequest, router.ErrorResponse{Error: "invalid person id"})
+		return
+	}
+	content, err := r.tmdb.PersonDetails(c.Param("personId"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, router.ErrorResponse{Error: err.Error()})
 		return
 	}
-	// Add content into response struct then add watched entries
+	c.JSON(http.StatusOK, content.AsPersonDetailsResponse())
+}
+
+func (r *Router) getPersonCreditsResponse(
+	personId string,
+	creditsType string,
+) (domain.PersonCreditsResponse, error) {
+	creditsType = strings.ToLower(creditsType)
+	if creditsType == "" {
+		person, err := r.tmdb.PersonDetails(personId)
+		if err != nil {
+			return domain.PersonCreditsResponse{}, err
+		}
+		creditsType = strings.ToLower(person.KnownForDepartment)
+	}
+	content, err := r.tmdb.PersonCredits(personId)
+	if err != nil {
+		return domain.PersonCreditsResponse{}, err
+	}
+
 	resp := domain.PersonCreditsResponse{}
 	resp.HasActing = len(content.Cast) > 0
 	for i := range content.Crew {
@@ -415,22 +489,31 @@ func (r *Router) GetPersonCredits(c *gin.Context) {
 			break
 		}
 	}
-	switch {
-	case creditsType == "directing":
+	switch creditsType {
+	case "directing":
 		for i := range content.Crew {
-			if !strings.EqualFold(content.Crew[i].Department, "Directing") {
-				continue
+			if strings.EqualFold(content.Crew[i].Department, "Directing") {
+				resp.Credits = append(resp.Credits, content.Crew[i].AsMedia())
 			}
-			resp.Credits = append(resp.Credits, content.Crew[i].AsMedia())
-		}
-	case creditsType == "acting":
-		for i := range content.Cast {
-			resp.Credits = append(resp.Credits, content.Cast[i].AsMedia())
 		}
 	default:
 		for i := range content.Cast {
 			resp.Credits = append(resp.Credits, content.Cast[i].AsMedia())
 		}
+	}
+	return resp, nil
+}
+
+func (r *Router) GetPersonCredits(c *gin.Context) {
+	userId := c.MustGet("userId").(uint)
+	if c.Param("id") == "" {
+		c.Status(400)
+		return
+	}
+	resp, err := r.getPersonCreditsResponse(c.Param("id"), c.Query("creditsType"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, router.ErrorResponse{Error: err.Error()})
+		return
 	}
 	if err := addedtocontent.AddList(
 		r.wp,
@@ -441,6 +524,51 @@ func (r *Router) GetPersonCredits(c *gin.Context) {
 		},
 	); err != nil {
 		slog.Error("GetPersonCredits: Failed to add watched to content!", "error", err)
+		c.JSON(
+			http.StatusInternalServerError,
+			router.ErrorResponse{Error: "failed to add watched data to response"},
+		)
+		return
+	}
+	c.JSON(http.StatusOK, resp)
+}
+
+func (r *Router) GetPublicPersonCredits(c *gin.Context) {
+	userId, err := r.getPublicOwnerID(c)
+	if err != nil {
+		c.JSON(http.StatusForbidden, router.ErrorResponse{Error: "failed validating the public list owner"})
+		return
+	}
+	if c.Param("personId") == "" {
+		c.JSON(http.StatusBadRequest, router.ErrorResponse{Error: "a person id was not provided"})
+		return
+	}
+	if _, err := strconv.ParseUint(c.Param("personId"), 10, 64); err != nil {
+		c.JSON(http.StatusBadRequest, router.ErrorResponse{Error: "invalid person id"})
+		return
+	}
+	creditsType := strings.ToLower(c.Query("creditsType"))
+	if creditsType != "" && creditsType != "acting" && creditsType != "directing" {
+		c.JSON(http.StatusBadRequest, router.ErrorResponse{Error: "invalid credits type"})
+		return
+	}
+	resp, err := r.getPersonCreditsResponse(
+		c.Param("personId"),
+		creditsType,
+	)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, router.ErrorResponse{Error: err.Error()})
+		return
+	}
+	if err := addedtocontent.AddList(
+		r.wp,
+		userId,
+		resp.Credits,
+		func(i int, w *entity.Watched) {
+			resp.Credits[i].Watched = domain.NewWatchedDtoForPublicLists(w)
+		},
+	); err != nil {
+		slog.Error("GetPublicPersonCredits: Failed to add watched data", "error", err)
 		c.JSON(
 			http.StatusInternalServerError,
 			router.ErrorResponse{Error: "failed to add watched data to response"},

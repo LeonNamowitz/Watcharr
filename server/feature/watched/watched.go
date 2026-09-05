@@ -201,21 +201,50 @@ func (s *Service) GetPublicWatchedItem(
 	mediaId uint,
 	mediaType util.SupportedMedia,
 ) (entity.Watched, bool, error) {
-	owner, err := s.getPublicListOwner(userId, username)
+	watched, thoughtsPublic, err := s.GetOptionalPublicWatchedItem(
+		userId,
+		username,
+		mediaId,
+		mediaType,
+	)
 	if err != nil {
 		return entity.Watched{}, false, err
+	}
+	if watched == nil {
+		return entity.Watched{}, false, errors.New("failed fetching the list item")
+	}
+	return *watched, thoughtsPublic, nil
+}
+
+// GetOptionalPublicWatchedItem validates a public list owner and returns their
+// watched data when the requested content is on their list. A missing watched
+// item is not an error so public person credits can still open a read-only
+// owner-scoped content page.
+func (s *Service) GetOptionalPublicWatchedItem(
+	userId uint,
+	username string,
+	mediaId uint,
+	mediaType util.SupportedMedia,
+) (*entity.Watched, bool, error) {
+	owner, err := s.getPublicListOwner(userId, username)
+	if err != nil {
+		return nil, false, err
 	}
 
 	watched, err := s.GetWatchedItemBySupportedMediaId(userId, mediaId, mediaType)
 	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			thoughtsPublic := owner.PrivateThoughts == nil || !*owner.PrivateThoughts
+			return nil, thoughtsPublic, nil
+		}
 		slog.Error("GetPublicWatchedItem: Failed to get watched item.",
 			"user_id", userId, "media_id", mediaId, "media_type", mediaType,
 			"error", err)
-		return entity.Watched{}, false, errors.New("failed fetching the list item")
+		return nil, false, errors.New("failed fetching the list item")
 	}
 
 	thoughtsPublic := owner.PrivateThoughts == nil || !*owner.PrivateThoughts
-	return watched, thoughtsPublic, nil
+	return &watched, thoughtsPublic, nil
 }
 
 // Get a watched list item by id (must be for `userId`).

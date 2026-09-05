@@ -3,6 +3,7 @@
 	import Activity from "@/lib/Activity.svelte";
 	import Error from "@/lib/Error.svelte";
 	import HorizontalList from "@/lib/HorizontalList.svelte";
+	import Icon from "@/lib/Icon.svelte";
 	import Spinner from "@/lib/Spinner.svelte";
 	import ExpandableText from "@/lib/content/ExpandableText.svelte";
 	import Genres from "@/lib/content/Genres.svelte";
@@ -199,6 +200,11 @@
 					thoughtsPublic={details?.thoughtsPublic ?? false}
 					{ratingSettings}
 				/>
+			{:else}
+				<div class="not-on-list">
+					<Icon i="film" wh={22} />
+					<span>Not on {ownerName}'s list</span>
+				</div>
 			{/if}
 		</div>
 
@@ -208,7 +214,7 @@
 					<Spinner />
 				{:then credits}
 					{#if credits?.topCrew && credits.topCrew.length > 0}
-						<TopCrewList topCrew={credits.topCrew} disableInteraction={true} />
+						<TopCrewList topCrew={credits.topCrew} {publicListOwner} />
 					{/if}
 
 					{#if credits?.cast && credits.cast.length > 0}
@@ -220,7 +226,7 @@
 									path={cast.profile_path}
 									role={cast.character}
 									zoomOnHover={false}
-									disableInteraction={true}
+									{publicListOwner}
 								/>
 							{/each}
 						</HorizontalList>
@@ -290,6 +296,35 @@
 	.back-to-list {
 		width: max-content;
 		font-size: 14px;
+	}
+
+	.not-on-list {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 9px;
+		width: calc(100% - 160px);
+		max-width: 940px;
+		margin: 22px auto 0;
+		padding: 15px;
+		border: 2px solid rgba(255, 255, 255, 0.22);
+		border-radius: 12px;
+		color: rgba(255, 255, 255, 0.9);
+		fill: currentColor;
+		background: linear-gradient(
+			135deg,
+			rgba(31, 31, 31, 0.96),
+			rgba(14, 14, 14, 0.9)
+		);
+		font-weight: 600;
+
+		@media screen and (max-width: 900px) {
+			width: calc(100% - 80px);
+		}
+
+		@media screen and (max-width: 720px) {
+			width: calc(100% - 40px);
+		}
 	}
 
 	.page {
