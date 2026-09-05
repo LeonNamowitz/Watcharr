@@ -14,6 +14,7 @@
 	import {
 		beginTemporaryWatchedListState,
 		defaultSort,
+		setWatchedListPreset,
 		store,
 	} from "@/store.svelte";
 	import type { Follow, PrivateUser } from "@/types";
@@ -185,6 +186,8 @@
 	}
 
 	onMount(() => {
+		setWatchedListPreset("recentlyWatched");
+
 		const token = localStorage.getItem("token");
 		if (token) {
 			restoreSignedInViewer();
