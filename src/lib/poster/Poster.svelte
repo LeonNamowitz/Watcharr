@@ -52,6 +52,8 @@
 		 * Notably 'On my list' feature (eg on person page).
 		 */
 		hideIfNotOnList?: boolean;
+		/** Hide this poster without rebuilding its parent list. */
+		hidden?: boolean;
 		// When provided, default click handlers will instead run this callback.
 		onClick?: (() => void) | undefined;
 		/**
@@ -74,6 +76,7 @@
 		publicView = false,
 		publicListOwner = undefined,
 		hideIfNotOnList = false,
+		hidden = false,
 		publicRatingSettings = undefined,
 		onClick = undefined,
 		onUpdated = undefined,
@@ -373,7 +376,7 @@
 		}
 	}}
 	onkeypress={() => console.log("on kpress")}
-	class={`${publicView ? "public-view " : ""}${posterActive ? "active " : ""}${watched?.pinned ? "pinned " : ""}${hideIfNotOnList && !watched ? "hidden " : ""}`}
+	class={`${publicView ? "public-view " : ""}${posterActive ? "active " : ""}${watched?.pinned ? "pinned " : ""}${hidden || (hideIfNotOnList && !watched) ? "hidden " : ""}`}
 	class:just-deleted={justDeletedFromWatcheds}
 >
 	<div

@@ -4,7 +4,7 @@ import type { Handle } from "@sveltejs/kit";
 interface PublicRoute {
 	ownerId: string;
 	ownerName: string;
-	mediaType?: "movie" | "tv" | "game";
+	mediaType?: "movie" | "tv" | "game" | "person";
 	mediaId?: string;
 }
 
@@ -22,8 +22,14 @@ interface PublicMediaMetadata {
 	};
 }
 
+interface PublicPersonMetadata {
+	name?: string;
+	biography?: string;
+	extPosterPath?: string;
+}
+
 const publicRoutePattern =
-	/^\/lists\/(\d+)\/([^/]+)(?:\/(movie|tv|game)\/(\d+))?\/?$/;
+	/^\/lists\/(\d+)\/([^/]+)(?:\/(movie|tv|game|person)\/(\d+))?\/?$/;
 
 function parsePublicRoute(pathname: string): PublicRoute | undefined {
 	const match = pathname.match(publicRoutePattern);
@@ -76,6 +82,7 @@ function metadataImage(
 	origin: string,
 	user?: PublicUserMetadata,
 	details?: PublicMediaMetadata,
+	person?: PublicPersonMetadata,
 ) {
 	const media = details?.media;
 	if (media?.poster?.path) {
@@ -87,6 +94,9 @@ function metadataImage(
 	}
 	if (media?.extPosterPath) {
 		return `https://image.tmdb.org/t/p/w500${media.extPosterPath}`;
+	}
+	if (person?.extPosterPath) {
+		return `https://image.tmdb.org/t/p/w500${person.extPosterPath}`;
 	}
 	if (user?.avatar?.path) {
 		return new URL(`/api/${user.avatar.path.replace(/^\/+/, "")}`, origin).href;
@@ -100,16 +110,21 @@ function injectMetadata(
 	route: PublicRoute,
 	user?: PublicUserMetadata,
 	details?: PublicMediaMetadata,
+	person?: PublicPersonMetadata,
 ) {
 	const ownerName = user?.username ?? route.ownerName;
 	const mediaName = details?.media?.name;
-	const title = mediaName
-		? `${mediaName} - ${ownerName}'s Watcharr`
-		: `${ownerName}'s Watcharr Library`;
-	const description = mediaName
-		? `See ${ownerName}'s status, rating, review, and activity for ${mediaName} on Watcharr.`
-		: `See ${ownerName}'s recently finished titles, complete library, ratings, and watchlist on Watcharr.`;
-	const image = metadataImage(route, url.origin, user, details);
+	const title = person?.name
+		? `${person.name} - ${ownerName}'s Watcharr`
+		: mediaName
+			? `${mediaName} - ${ownerName}'s Watcharr`
+			: `${ownerName}'s Watcharr Library`;
+	const description = person?.name
+		? `Explore ${person.name}'s credits with ${ownerName}'s ratings and list status on Watcharr.`
+		: mediaName
+			? `See ${ownerName}'s status, rating, review, and activity for ${mediaName} on Watcharr.`
+			: `See ${ownerName}'s recently finished titles, complete library, ratings, and watchlist on Watcharr.`;
+	const image = metadataImage(route, url.origin, user, details, person);
 	const canonicalUrl = new URL(url.pathname, url.origin).href;
 	const safeTitle = escapeHtml(title);
 	const safeDescription = escapeHtml(description);
@@ -140,11 +155,16 @@ export const handle: Handle = async ({ event, resolve }) => {
 	if (!route) return resolve(event);
 
 	const ownerPath = `public/users/${route.ownerId}/${encodeURIComponent(route.ownerName)}`;
-	const [user, details] = await Promise.all([
+	const [user, details, person] = await Promise.all([
 		getPublicJson<PublicUserMetadata>(ownerPath),
-		route.mediaType && route.mediaId
+		route.mediaType && route.mediaType !== "person" && route.mediaId
 			? getPublicJson<PublicMediaMetadata>(
 					`${ownerPath}/content/${route.mediaType}/${route.mediaId}`,
+				)
+			: Promise.resolve(undefined),
+		route.mediaType === "person" && route.mediaId
+			? getPublicJson<PublicPersonMetadata>(
+					`${ownerPath}/content/person/${route.mediaId}`,
 				)
 			: Promise.resolve(undefined),
 	]);
@@ -154,7 +174,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 		transformPageChunk: ({ html, done }) => {
 			pageHtml += html;
 			if (!done) return "";
-			return injectMetadata(pageHtml, event.url, route, user, details);
+			return injectMetadata(pageHtml, event.url, route, user, details, person);
 		},
 	});
 };

@@ -5,9 +5,25 @@
 	interface Props {
 		topCrew: TMDBContentCreditsCrew[];
 		disableInteraction?: boolean;
+		publicListOwner?: { id: string | number; username: string };
 	}
 
-	let { topCrew, disableInteraction = false }: Props = $props();
+	let {
+		topCrew,
+		disableInteraction = false,
+		publicListOwner,
+	}: Props = $props();
+
+	function personLink(personId: number) {
+		if (publicListOwner) {
+			return resolve("/(public)/lists/[id]/[username]/person/[personId]", {
+				id: String(publicListOwner.id),
+				username: publicListOwner.username,
+				personId: String(personId),
+			});
+		}
+		return resolve("/(app)/person/[id]", { id: String(personId) });
+	}
 </script>
 
 <div class="creators">
@@ -16,7 +32,7 @@
 			{#if disableInteraction}
 				<strong>{crew.name}</strong>
 			{:else}
-				<a href={resolve(`/person/${crew.id}`)}>{crew.name}</a>
+				<a href={personLink(crew.id)}>{crew.name}</a>
 			{/if}
 			<span>{crew.job}</span>
 		</div>

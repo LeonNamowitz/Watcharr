@@ -37,6 +37,9 @@
 	let isListPage = $derived(
 		/^\/lists\/[^/]+\/[^/]+\/?$/.test(page.url.pathname),
 	);
+	let isPersonPage = $derived(
+		/^\/lists\/[^/]+\/[^/]+\/person\/[^/]+\/?$/.test(page.url.pathname),
+	);
 	let homeHref = $derived(
 		`/lists/${page.params.id}/${page.params.username}` as `/lists/${string}/${string}`,
 	);
@@ -210,7 +213,7 @@
 </script>
 
 {#snippet navActions()}
-	{#if isListPage}
+	{#if isListPage || isPersonPage}
 		<div class="control">
 			<button
 				class="plain other detailedView"
@@ -237,6 +240,8 @@
 				/>
 			{/if}
 		</div>
+	{/if}
+	{#if isListPage}
 		<div class="control">
 			<button
 				class="plain other sort"
