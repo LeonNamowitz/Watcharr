@@ -122,7 +122,7 @@ func NewWatchedDtoForPublicLists(w *entity.Watched) WatchedDto {
 	dto := NewWatchedDtoWithBaseProps(w)
 
 	if w.Content != nil && w.Content.Type == entity.SHOW {
-		dto.WatchingSeason = watchedutil.GetLatestWatchedInTv(
+		dto.WatchingSeason = watchedutil.GetLatestProgressInTv(
 			w.WatchedSeasons, w.WatchedEpisodes)
 	}
 
@@ -134,7 +134,7 @@ func NewWatchedDtoForPublicLists(w *entity.Watched) WatchedDto {
 // when the list owner has made them public.
 func NewWatchedDtoForPublicContentPage(w *entity.Watched, thoughtsPublic bool) WatchedDto {
 	dto := NewWatchedDtoForPublicLists(w)
-	dto.Activity = w.Activity
+	dto.Activity = activityForPublic(w.Activity)
 	dto.WatchedSeasons = w.WatchedSeasons
 	dto.WatchedEpisodes = w.WatchedEpisodes
 	dto.Plays = getPlaysFromActivity(w.Activity)
@@ -142,6 +142,25 @@ func NewWatchedDtoForPublicContentPage(w *entity.Watched, thoughtsPublic bool) W
 		dto.Thoughts = w.Thoughts
 	}
 	return dto
+}
+
+// activityForPublic copies activity before removing data that may contain
+// review text. In particular, THOUGHTS_REMOVED stores the deleted review in
+// Data, so returning the database entities directly would bypass thought
+// privacy on anonymous pages.
+func activityForPublic(activity []entity.Activity) []entity.Activity {
+	if len(activity) == 0 {
+		return nil
+	}
+	public := make([]entity.Activity, len(activity))
+	copy(public, activity)
+	for i := range public {
+		if public[i].Type == entity.THOUGHTS_CHANGED ||
+			public[i].Type == entity.THOUGHTS_REMOVED {
+			public[i].Data = ""
+		}
+	}
+	return public
 }
 
 // A fuller dto with all details needed for a content details page.

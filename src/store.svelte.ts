@@ -97,6 +97,14 @@ const _store: Store = $state({
 	tags: [],
 });
 
+type WatchedListStateSnapshot = {
+	sort: string[];
+	filters: Filters;
+	preset: WatchedListPresetId | undefined;
+};
+
+let temporaryWatchedListState: WatchedListStateSnapshot | undefined;
+
 const updateSortAndFiltersForQueryParams = () => {
 	try {
 		const qp: Record<string, string> = {};
@@ -122,6 +130,35 @@ const updateSortAndFiltersForQueryParams = () => {
 };
 
 /**
+ * Lets a route reuse the watched-list controls without persisting its changes
+ * over the user's own list preferences. The returned cleanup restores the
+ * original in-memory state when that route group is left.
+ */
+export const beginTemporaryWatchedListState = () => {
+	if (!browser) {
+		return () => {};
+	}
+	if (temporaryWatchedListState) {
+		return () => {};
+	}
+	temporaryWatchedListState = {
+		sort: [..._store.activeSort],
+		filters: cloneFilters(_store.activeFilters),
+		preset: _store.activeWatchedListPreset,
+	};
+
+	return () => {
+		if (!temporaryWatchedListState) return;
+		const original = temporaryWatchedListState;
+		temporaryWatchedListState = undefined;
+		_store.activeSort = original.sort;
+		_store.activeFilters = original.filters;
+		_store.activeWatchedListPreset = original.preset;
+		updateSortAndFiltersForQueryParams();
+	};
+};
+
+/**
  * Expose store to app through getters/setters
  * to control what can and can't be accessed.
  * With setters we can easily and more reliably
@@ -140,7 +177,9 @@ export const store = {
 	},
 	set activeSort(v) {
 		_store.activeSort = v;
-		localStorage.setItem("activeFilter", JSON.stringify(v));
+		if (!temporaryWatchedListState) {
+			localStorage.setItem("activeFilter", JSON.stringify(v));
+		}
 		clearActiveWatchedListPreset();
 		console.debug("Store: Saved activeSort:", v);
 		updateSortAndFiltersForQueryParams();
@@ -157,7 +196,9 @@ export const store = {
 	},
 	set activeFilters(v) {
 		_store.activeFilters = v;
-		localStorage.setItem("activeFilterReal", JSON.stringify(v));
+		if (!temporaryWatchedListState) {
+			localStorage.setItem("activeFilterReal", JSON.stringify(v));
+		}
 		clearActiveWatchedListPreset();
 		console.debug("Store: Saved activeFilters:", v);
 		updateSortAndFiltersForQueryParams();
@@ -275,7 +316,9 @@ export const clearActiveFilters = () => {
 
 const clearActiveWatchedListPreset = () => {
 	_store.activeWatchedListPreset = undefined;
-	localStorage.removeItem("activeWatchedListPreset");
+	if (!temporaryWatchedListState) {
+		localStorage.removeItem("activeWatchedListPreset");
+	}
 };
 
 export const setWatchedListPreset = (presetId: WatchedListPresetId) => {
@@ -283,7 +326,9 @@ export const setWatchedListPreset = (presetId: WatchedListPresetId) => {
 	store.activeFilters = cloneFilters(preset.filters);
 	store.activeSort = [...preset.sort];
 	_store.activeWatchedListPreset = presetId;
-	localStorage.setItem("activeWatchedListPreset", presetId);
+	if (!temporaryWatchedListState) {
+		localStorage.setItem("activeWatchedListPreset", presetId);
+	}
 };
 
 if (browser) {

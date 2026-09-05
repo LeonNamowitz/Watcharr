@@ -32,6 +32,46 @@ func GetLatestWatchedInTv(
 	return ""
 }
 
+// GetLatestProgressInTv returns the normal latest watched position when one
+// exists, then falls back to the highest season or episode tracked in any
+// status. Public pages use the fallback so planned, held and dropped progress
+// can still be described without changing the established in-app heuristic.
+func GetLatestProgressInTv(
+	ws []entity.WatchedSeason,
+	we []entity.WatchedEpisode,
+) string {
+	if latest := GetLatestWatchedInTv(ws, we); latest != "" {
+		return latest
+	}
+
+	seasonNum := -1
+	episodeNum := -1
+	for i := range ws {
+		if ws[i].SeasonNumber > seasonNum {
+			seasonNum = ws[i].SeasonNumber
+			episodeNum = -1
+		}
+	}
+	for i := range we {
+		if we[i].SeasonNumber > seasonNum {
+			seasonNum = we[i].SeasonNumber
+			episodeNum = we[i].EpisodeNumber
+			continue
+		}
+		if we[i].SeasonNumber == seasonNum && we[i].EpisodeNumber > episodeNum {
+			episodeNum = we[i].EpisodeNumber
+		}
+	}
+
+	if seasonNum < 0 {
+		return ""
+	}
+	if episodeNum >= 0 {
+		return SeasonAndEpToReadable(seasonNum, episodeNum)
+	}
+	return "Season " + strconv.Itoa(seasonNum)
+}
+
 func getLatestWatchedSeasonInTv(ws []entity.WatchedSeason) int {
 	if len(ws) <= 0 {
 		return -1

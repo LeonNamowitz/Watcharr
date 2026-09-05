@@ -55,3 +55,20 @@ func TestGetLatestWatchedInTv(t *testing.T) {
 		t.Errorf("%s != %s", resp, want)
 	}
 }
+
+func TestGetLatestProgressInTvFallsBackToNonWatchedStatuses(t *testing.T) {
+	watchedSeasons := []entity.WatchedSeason{{
+		SeasonNumber: 2,
+		Status:       entity.HOLD,
+	}}
+	watchedEps := []entity.WatchedEpisode{{
+		GormModelNoDel: dbmodel.GormModelNoDel{ID: 1},
+		SeasonNumber:   2,
+		EpisodeNumber:  4,
+		Status:         entity.DROPPED,
+	}}
+
+	if got := watchedutil.GetLatestProgressInTv(watchedSeasons, watchedEps); got != "S2E4" {
+		t.Fatalf("GetLatestProgressInTv() = %q, want S2E4", got)
+	}
+}
