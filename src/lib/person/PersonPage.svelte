@@ -321,9 +321,8 @@
 				>
 					<div class="filter-heading">
 						<div>
-							<span class="control-label">Show credits</span>
 							<span class="filter-summary">
-								Showing {visibleCredits.length} of {creditCounts.all}
+								Showing {visibleCredits.length} of {creditCounts.all} credits.
 							</span>
 						</div>
 					</div>
@@ -473,7 +472,7 @@
 		}
 
 		.filter-summary {
-			margin-left: 8px;
+			margin-left: 4px;
 			font-size: 12px;
 			color: rgba($color: $text-color, $alpha: 0.56);
 		}
@@ -493,8 +492,10 @@
 				gap: 7px;
 				min-width: 0;
 				padding: 8px 10px;
+				border: 2px solid $text-color;
 				border-radius: 6px;
 				color: rgba($color: $text-color, $alpha: 0.76);
+				fill: currentColor;
 				font-size: 13px;
 				text-align: start;
 				transition:
@@ -534,8 +535,9 @@
 		.controls-row {
 			display: flex;
 			align-items: flex-end;
-			justify-content: center;
+			justify-content: space-between;
 			gap: 14px;
+			padding: 0 4px;
 
 			.dropdown-wrap {
 				width: 100%;
