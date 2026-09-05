@@ -40,8 +40,9 @@
 
 	// let settings = $derived($userSettings);
 	let isUsingThumbs = $derived(
-		(ratingSettings?.ratingSystem ?? store.userSettings?.ratingSystem) ===
-			RatingSystem.Thumbs,
+		(ratingSettings
+			? ratingSettings.ratingSystem
+			: store.userSettings?.ratingSystem) === RatingSystem.Thumbs,
 	);
 </script>
 

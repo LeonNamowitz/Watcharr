@@ -149,6 +149,12 @@ func TestPublicWatchedRoutesAreAnonymousAndRespectThoughtPrivacy(t *testing.T) {
 	thoughtsPrivate = true
 	mustCreate(t, db.Model(&entity.User{}).Where("id = ?", owner.ID).
 		Update("private_thoughts", thoughtsPrivate).Error)
+	mustCreate(t, db.Create(&entity.Activity{
+		UserID:    owner.ID,
+		WatchedID: watchedItem.ID,
+		Type:      entity.THOUGHTS_REMOVED,
+		Data:      "Private historical review",
+	}).Error)
 	detailRecorder = request(t, engine, http.MethodGet, detailPath)
 	if detailRecorder.Code != http.StatusOK {
 		t.Fatalf("private-thought detail status = %d, want 200; body=%s",
@@ -161,6 +167,10 @@ func TestPublicWatchedRoutesAreAnonymousAndRespectThoughtPrivacy(t *testing.T) {
 	if detail.ThoughtsPublic || detail.Media.Watched.Thoughts != "" {
 		t.Fatalf("private thoughts leaked: public=%v thoughts=%q",
 			detail.ThoughtsPublic, detail.Media.Watched.Thoughts)
+	}
+	if strings.Contains(detailRecorder.Body.String(), "Private historical review") {
+		t.Fatalf("removed thoughts leaked through public activity: %s",
+			detailRecorder.Body.String())
 	}
 
 	profilePrivate = true
