@@ -93,14 +93,14 @@
 		data-active={store.activeWatchedListPreset === "recentlyWatched"}
 		onclick={() => setWatchedListPreset("recentlyWatched")}
 	>
-		<Icon i="reel" wh={18} /> Recently Finished
+		<Icon i="film" wh={18} /> Recently Finished
 	</button>
 	<button
 		class="plain"
 		data-active={store.activeWatchedListPreset === "watchlist"}
 		onclick={() => setWatchedListPreset("watchlist")}
 	>
-		<Icon i="film" wh={18} /> Watchlist
+		<Icon i="calendar" wh={18} /> Watchlist
 	</button>
 </div>
 
@@ -172,6 +172,7 @@
 			align-items: center;
 			gap: 8px;
 			padding: 8px 14px;
+			border: 2px solid $text-color;
 			border-radius: 8px;
 			font-size: 14px;
 			color: $text-color;
