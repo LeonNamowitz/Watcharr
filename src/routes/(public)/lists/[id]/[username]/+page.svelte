@@ -6,6 +6,7 @@
 	import { followUser, noAuthReq, unfollowUser } from "@/lib/util/api.js";
 	import {
 		clearActiveFilters,
+		defaultSort,
 		setWatchedListPreset,
 		store,
 	} from "@/store.svelte.js";
@@ -53,6 +54,8 @@
 				status: ["planned", "watching", "finished", "hold", "dropped"],
 			};
 			store.activeSort = ["LASTFIN", "DOWN"];
+		} else if (!query && previousSearchQuery) {
+			setWatchedListPreset("recentlyWatched");
 		}
 		previousSearchQuery = query;
 	});
@@ -170,6 +173,11 @@
 		);
 	}
 
+	function showAllItems() {
+		clearActiveFilters();
+		store.activeSort = [...defaultSort];
+	}
+
 	onDestroy(() => {
 		console.debug("PAGE DESTROYED");
 		store.searchQuery = "";
@@ -224,6 +232,13 @@
 			onclick={() => setWatchedListPreset("recentlyWatched")}
 		>
 			<Icon i="reel" wh={18} /> Recently Finished
+		</button>
+		<button
+			class="plain"
+			data-active={!store.hasActiveFilters}
+			onclick={showAllItems}
+		>
+			All Items
 		</button>
 		<button
 			class="plain"
