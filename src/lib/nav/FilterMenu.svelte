@@ -8,9 +8,14 @@
 	interface Props {
 		conf?: MenuConfig;
 		showGames?: boolean;
+		showTypes?: boolean;
 	}
 
-	let { conf, showGames = store.serverFeatures?.games }: Props = $props();
+	let {
+		conf,
+		showGames = store.serverFeatures?.games,
+		showTypes = true,
+	}: Props = $props();
 
 	function filterClicked(type: keyof Filters, f: string) {
 		if (store.activeFilters[type]?.includes(f)) {
@@ -27,7 +32,9 @@
 
 <Menu conf={conf ?? { width: "200px", right: "47px", arrowLeft: "38px" }}>
 	<div class="title">
-		<h4 class="norm sm-caps">type</h4>
+		{#if showTypes}
+			<h4 class="norm sm-caps">type</h4>
+		{/if}
 		{#if store.activeFilters?.type?.length > 0 || store.activeFilters?.status?.length > 0}
 			<button
 				class="plain"
@@ -41,28 +48,30 @@
 			</button>
 		{/if}
 	</div>
-	<div class="type-filter">
-		<button
-			class:active={store.activeFilters.type.includes("tv")}
-			onclick={() => filterClicked("type", "tv")}
-		>
-			SHOW
-		</button>
-		<button
-			class:active={store.activeFilters.type.includes("movie")}
-			onclick={() => filterClicked("type", "movie")}
-		>
-			MOVIE
-		</button>
-		{#if showGames}
+	{#if showTypes}
+		<div class="type-filter">
 			<button
-				class:active={store.activeFilters.type.includes("game")}
-				onclick={() => filterClicked("type", "game")}
+				class:active={store.activeFilters.type.includes("tv")}
+				onclick={() => filterClicked("type", "tv")}
 			>
-				GAME
+				SHOW
 			</button>
-		{/if}
-	</div>
+			<button
+				class:active={store.activeFilters.type.includes("movie")}
+				onclick={() => filterClicked("type", "movie")}
+			>
+				MOVIE
+			</button>
+			{#if showGames}
+				<button
+					class:active={store.activeFilters.type.includes("game")}
+					onclick={() => filterClicked("type", "game")}
+				>
+					GAME
+				</button>
+			{/if}
+		</div>
+	{/if}
 	<h4 class="norm sm-caps">status</h4>
 	<button
 		class={`plain ${store.activeFilters.status.includes("planned") ? "on" : ""}`}

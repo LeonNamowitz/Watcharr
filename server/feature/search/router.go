@@ -23,17 +23,51 @@ type WatchedProvider interface {
 	ValidatePublicWatchedList(userId uint, username string) error
 }
 
+type SearchProvider interface {
+	Search(r domain.SearchRequest, pp util.PaginationParams, userId uint) (domain.SearchResponse, error)
+}
+
 type Router struct {
 	br              *router.BaseRouter
-	service         *Service
+	service         SearchProvider
 	watchedProvider WatchedProvider
 }
 
-func NewRouter(br *router.BaseRouter, service *Service, watchedProvider WatchedProvider) *Router {
+func NewRouter(br *router.BaseRouter, service SearchProvider, watchedProvider WatchedProvider) *Router {
 	return &Router{
 		br,
 		service,
 		watchedProvider,
+	}
+}
+
+func publicSearchType(value string) (domain.SearchType, bool) {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "", string(domain.SearchTypeMulti):
+		return domain.SearchTypeMulti, true
+	case string(domain.SearchTypeMovie):
+		return domain.SearchTypeMovie, true
+	case string(domain.SearchTypeShow), string(util.SupportedMediaShow):
+		return domain.SearchTypeShow, true
+	case string(domain.SearchTypePerson):
+		return domain.SearchTypePerson, true
+	case string(domain.SearchTypeGame):
+		return domain.SearchTypeGame, true
+	default:
+		return "", false
+	}
+}
+
+func watchedTypeForSearchType(searchType domain.SearchType) []util.SupportedMedia {
+	switch searchType {
+	case domain.SearchTypeMovie:
+		return []util.SupportedMedia{util.SupportedMediaMovie}
+	case domain.SearchTypeShow:
+		return []util.SupportedMedia{util.SupportedMediaShow}
+	case domain.SearchTypeGame:
+		return []util.SupportedMedia{util.SupportedMediaGame}
+	default:
+		return nil
 	}
 }
 
@@ -118,7 +152,73 @@ func (r *Router) GetSearch(c *gin.Context) {
 	c.JSON(http.StatusOK, ww)
 }
 
-// Search a public user's watched titles with owner-scoped pagination.
+func (r *Router) getPublicFullSearch(
+	c *gin.Context,
+	ownerID uint,
+	query string,
+	searchType domain.SearchType,
+	pp util.PaginationParams,
+) {
+	if r.service == nil {
+		c.JSON(http.StatusInternalServerError, router.ErrorResponse{Error: "search is unavailable"})
+		return
+	}
+
+	resp, err := r.service.Search(domain.SearchRequest{
+		Type:         searchType,
+		Query:        query,
+		PreferMyList: false,
+	}, pp, ownerID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, router.ErrorResponse{Error: err.Error()})
+		return
+	}
+
+	publicResp := domain.SearchResponse{}
+	if err := copier.CopyWithOption(
+		&publicResp,
+		&resp,
+		copier.Option{DeepCopy: true},
+	); err != nil {
+		slog.Error("GetPublicListSearch: Failed to copy full search response", "error", err)
+		c.JSON(
+			http.StatusInternalServerError,
+			router.ErrorResponse{Error: "failed to prepare response"},
+		)
+		return
+	}
+	ownerContent := make([]domain.Media, 0, len(publicResp.Results))
+	ownerContentIndexes := make([]int, 0, len(publicResp.Results))
+	for i, result := range publicResp.Results {
+		switch result.Type {
+		case domain.MediaTypeTMDBMovie,
+			domain.MediaTypeTMDBShow,
+			domain.MediaTypeIGDBGame:
+			ownerContent = append(ownerContent, result)
+			ownerContentIndexes = append(ownerContentIndexes, i)
+		}
+	}
+	if err := addedtocontent.AddList(
+		r.watchedProvider,
+		ownerID,
+		ownerContent,
+		func(i int, w *entity.Watched) {
+			publicResp.Results[ownerContentIndexes[i]].Watched = domain.NewWatchedDtoForPublicLists(w)
+		},
+	); err != nil {
+		slog.Error("GetPublicListSearch: Failed to add owner watched data", "error", err)
+		c.JSON(
+			http.StatusInternalServerError,
+			router.ErrorResponse{Error: "failed to add watched data to response"},
+		)
+		return
+	}
+	publicResp.Meta.FromMyList = false
+	c.JSON(http.StatusOK, publicResp)
+}
+
+// Search a public user's watched titles, or expand to the configured external
+// providers, while keeping watched metadata scoped to the public list owner.
 func (r *Router) GetPublicListSearch(c *gin.Context) {
 	pp := c.MustGet("paginationParams").(util.PaginationParams)
 	query := strings.TrimSpace(c.Query("query"))
@@ -126,6 +226,40 @@ func (r *Router) GetPublicListSearch(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, router.ErrorResponse{Error: "a query is required"})
 		return
 	}
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, router.ErrorResponse{Error: "invalid user id"})
+		return
+	}
+	ownerID := uint(id)
+	if err := r.watchedProvider.ValidatePublicWatchedList(
+		ownerID,
+		c.Param("username"),
+	); err != nil {
+		c.JSON(http.StatusForbidden, router.ErrorResponse{Error: err.Error()})
+		return
+	}
+
+	scope := strings.ToLower(strings.TrimSpace(c.DefaultQuery("scope", "list")))
+	if scope != "list" && scope != "all" {
+		c.JSON(http.StatusBadRequest, router.ErrorResponse{Error: "invalid search scope"})
+		return
+	}
+	rawType := c.Query("type")
+	searchType, valid := publicSearchType(rawType)
+	if scope == "list" && strings.Contains(rawType, ",") {
+		// Preserve the original public-list API's comma-separated type filter.
+		searchType, valid = domain.SearchTypeMulti, true
+	}
+	if !valid {
+		c.JSON(http.StatusBadRequest, router.ErrorResponse{Error: "invalid search type"})
+		return
+	}
+	if scope == "all" || searchType == domain.SearchTypePerson {
+		r.getPublicFullSearch(c, ownerID, query, searchType, pp)
+		return
+	}
+
 	wpr := domain.WatchedGetPageRequest{
 		Sort:    domain.WatchedSortDateAdded,
 		SortDir: domain.WatchedSortDirAsc,
@@ -139,19 +273,11 @@ func (r *Router) GetPublicListSearch(c *gin.Context) {
 		)
 		return
 	}
-
-	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, router.ErrorResponse{Error: "invalid user id"})
-		return
-	}
-	ownerID := uint(id)
-	if err := r.watchedProvider.ValidatePublicWatchedList(
-		ownerID,
-		c.Param("username"),
-	); err != nil {
-		c.JSON(http.StatusForbidden, router.ErrorResponse{Error: err.Error()})
-		return
+	// The master search calls shows "show", while watched-list filters call
+	// them "tv". A single selected result type owns the list filter here;
+	// legacy comma-separated watched-list filters continue to bind unchanged.
+	if !strings.Contains(rawType, ",") {
+		wpr.FilterType = watchedTypeForSearchType(searchType)
 	}
 
 	wp, err := r.watchedProvider.GetWatchedPage(
