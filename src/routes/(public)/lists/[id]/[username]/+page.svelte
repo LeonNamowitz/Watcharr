@@ -190,7 +190,7 @@
 	<title>{meta.username}'s Watched List</title>
 </svelte:head>
 
-<div class="content">
+<div class="content" class:logged-out={!isAuthenticated}>
 	<div class="inner">
 		<UserAvatar img={user?.avatar} />
 		<div class="basic-ctr">
@@ -207,14 +207,6 @@
 					>
 						<Icon i={isFollowing ? "person-minus" : "person-add"} />
 					</button>
-				{:else if !isAuthenticated}
-					<a
-						class="follow"
-						href={resolve("/login")}
-						use:tooltip={{ text: "Log in to follow" }}
-					>
-						<Icon i="person-add" />
-					</a>
 				{/if}
 			</div>
 			{#if user?.bio}
@@ -326,6 +318,18 @@
 			max-width: 1200px;
 			margin: 20px 30px;
 			margin-top: 0;
+		}
+	}
+
+	.logged-out .inner {
+		flex-flow: column;
+	}
+
+	.logged-out .basic-ctr {
+		text-align: center;
+
+		.name-row {
+			justify-content: center;
 		}
 	}
 
