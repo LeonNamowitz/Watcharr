@@ -2,12 +2,11 @@ import { browser } from "$app/environment";
 
 export type PersonSortOption =
 	"voteCount" | "newest" | "oldest" | "ownerRating";
-export type PersonCreditFilter = "watched" | "all" | "planned";
+export type PersonCreditFilter = "all" | "watched" | "planned" | "missing";
 
 export type PersonPageState = {
 	sortOption: PersonSortOption;
 	creditsType: string;
-	onListFilter: boolean;
 	creditFilter: PersonCreditFilter;
 };
 
@@ -37,6 +36,19 @@ function normalizeSortOption(value: unknown): PersonSortOption | undefined {
 	return undefined;
 }
 
+function normalizeCreditFilter(value: unknown): PersonCreditFilter | undefined {
+	switch (value) {
+		case "all":
+		case "onList":
+			return "all";
+		case "watched":
+		case "planned":
+		case "missing":
+			return value;
+	}
+	return undefined;
+}
+
 export function readPersonPageState(
 	personId: number,
 	publicOwnerId?: string,
@@ -52,28 +64,15 @@ export function readPersonPageState(
 		const parsed = JSON.parse(rawState) as {
 			sortOption?: unknown;
 			creditsType?: unknown;
-			onListFilter?: unknown;
-			onMyListFilter?: unknown;
 			creditFilter?: unknown;
 		};
 		const sortOption = normalizeSortOption(parsed.sortOption);
 		if (!sortOption || typeof parsed.creditsType !== "string") return;
-		const onListFilter =
-			typeof parsed.onListFilter === "boolean"
-				? parsed.onListFilter
-				: typeof parsed.onMyListFilter === "boolean"
-					? parsed.onMyListFilter
-					: false;
-		const creditFilter = ["watched", "all", "planned"].includes(
-			String(parsed.creditFilter),
-		)
-			? (parsed.creditFilter as PersonCreditFilter)
-			: "all";
+		const parsedCreditFilter = normalizeCreditFilter(parsed.creditFilter);
 		return {
 			sortOption,
 			creditsType: parsed.creditsType,
-			onListFilter,
-			creditFilter,
+			creditFilter: parsedCreditFilter ?? "all",
 		};
 	} catch {
 		return undefined;
