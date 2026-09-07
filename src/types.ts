@@ -172,6 +172,7 @@ export interface WatchedUpdateRequest {
 	removeThoughts?: boolean;
 	pinned?: boolean;
 	letCountAsPlay?: boolean;
+	backdateRatingActivity?: boolean;
 }
 
 export interface WatchedUpdateResponse {

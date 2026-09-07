@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"time"
 
 	"github.com/sbondCo/Watcharr/database/dbmodel"
 	"github.com/sbondCo/Watcharr/database/entity"
@@ -632,12 +633,17 @@ func (s *Service) updateWatched(
 	addedActivity := entity.Activity{}
 	if ar.Rating != 0 {
 		ratingData, _ := json.Marshal(map[string]any{"rating": ar.Rating})
+		var customDate *time.Time
+		if ar.BackdateRatingActivity {
+			customDate = s.lastRatingActivityDate(userId, id)
+		}
 		addedActivity, _ = s.activityProvider.AddActivity(
 			userId,
 			domain.ActivityAddProps{
-				WatchedID: id,
-				Type:      entity.RATING_CHANGED,
-				Data:      string(ratingData),
+				WatchedID:  id,
+				Type:       entity.RATING_CHANGED,
+				Data:       string(ratingData),
+				CustomDate: customDate,
 			},
 			false,
 		)
@@ -677,6 +683,60 @@ func (s *Service) updateWatched(
 		)
 	}
 	return domain.WatchedUpdateResponse{NewActivity: addedActivity}, nil
+}
+
+// lastRatingActivityDate returns a timestamp one minute after the most recent
+// visible rating-related activity. If no rating history exists, it falls back
+// to the most recent visible activity of any type.
+func (s *Service) lastRatingActivityDate(userId uint, watchedId uint) *time.Time {
+	var activities []entity.Activity
+	res := s.db.
+		Where("user_id = ? AND watched_id = ?", userId, watchedId).
+		Find(&activities)
+	if res.Error != nil {
+		slog.Warn("lastRatingActivityDate: failed to load activity history",
+			"user_id", userId, "watched_id", watchedId, "error", res.Error)
+		return nil
+	}
+
+	var latestGeneral time.Time
+	var latestRating time.Time
+	for _, activity := range activities {
+		date := activity.CreatedAt
+		if activity.CustomDate != nil {
+			date = *activity.CustomDate
+		}
+		if date.After(latestGeneral) {
+			latestGeneral = date
+		}
+
+		if activity.Type == entity.RATING_CHANGED ||
+			(activity.Type == entity.ADDED_WATCHED && addedActivityHasRating(activity.Data)) {
+			if date.After(latestRating) {
+				latestRating = date
+			}
+		}
+	}
+
+	latest := latestRating
+	if latest.IsZero() {
+		latest = latestGeneral
+	}
+	if latest.IsZero() {
+		return nil
+	}
+	latest = latest.Add(time.Minute)
+	return &latest
+}
+
+func addedActivityHasRating(data string) bool {
+	var values struct {
+		Rating *float64 `json:"rating"`
+	}
+	if err := json.Unmarshal([]byte(data), &values); err != nil {
+		return false
+	}
+	return values.Rating != nil && *values.Rating > 0
 }
 
 func (s *Service) UpdateWatchedLastViewedSeason(

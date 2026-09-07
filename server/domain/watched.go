@@ -203,6 +203,9 @@ type WatchedUpdateRequest struct {
 	// Allow the added activity count as play?
 	// If the activity was going to count, this can stop it.
 	LetCountAsPlay *bool `json:"letCountAsPlay"`
+	// Backdate only the new rating activity to the latest existing
+	// rating-related activity for this watched item, when one exists.
+	BackdateRatingActivity bool `json:"backdateRatingActivity,omitempty"`
 }
 
 // If the struct is valid for the Update Request.

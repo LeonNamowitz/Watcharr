@@ -1,20 +1,28 @@
 <script lang="ts">
+	import { resolve } from "$app/paths";
 	import Error from "@/lib/Error.svelte";
 	import Icon from "@/lib/Icon.svelte";
 	import Spinner from "@/lib/Spinner.svelte";
-	import { req } from "@/lib/util/api";
+	import WatchedDeleteModal from "@/lib/watched/WatchedDeleteModal.svelte";
+	import { removeWatched, req, updateWatched } from "@/lib/util/api";
 	import { notify } from "@/lib/util/notify";
 	import type {
 		Media,
 		PaginationResponse,
+		SearchResponseMeta,
+		SupportedMedia,
 		Watched,
+		WatchedUpdateRequest,
 		WatchedStatus,
 	} from "@/types";
+	import { SearchType } from "@/types";
 
 	type GameRow = {
 		media: Media;
 		watched: Watched;
 		value: string;
+		status: WatchedStatus;
+		originalStatus: WatchedStatus;
 		originalValue?: number;
 		error?: string;
 	};
@@ -26,6 +34,7 @@
 	let search = $state("");
 	let statusFilter = $state<StatusFilter>("ALL");
 	let sortMode = $state<SortMode>("ALPHA");
+	let sortOrder = $state<number[]>([]);
 	let loading = $state(true);
 	let loadingPage = $state(1);
 	let loadError = $state<unknown>();
@@ -33,6 +42,15 @@
 	let savedCount = $state(0);
 	let saveTotal = $state(0);
 	let saveErrorCount = $state(0);
+	let backdateRatingActivities = $state(true);
+	let addSearch = $state("");
+	let addStatus = $state<WatchedStatus>("PLANNED");
+	let addResults = $state<Media[]>([]);
+	let addLoading = $state(false);
+	let addError = $state<unknown>();
+	let addingGameId = $state<number>();
+	let deleteTarget = $state<GameRow>();
+	let deletingGameId = $state<number>();
 
 	const statusOptions: { value: StatusFilter; label: string }[] = [
 		{ value: "ALL", label: "All statuses" },
@@ -48,35 +66,34 @@
 		{ value: "RATING_DESC", label: "Rating: high to low" },
 		{ value: "RATING_ASC", label: "Rating: low to high" },
 	];
+	const editableStatusOptions = statusOptions.filter(
+		(option): option is { value: WatchedStatus; label: string } =>
+			option.value !== "ALL",
+	);
 
 	const visibleRows = $derived.by(() => {
 		const query = search.trim().toLocaleLowerCase();
+		const positionById = new Map(
+			sortOrder.map((watchedId, position) => [watchedId, position]),
+		);
 		return rows
 			.filter(
 				(row) =>
-					(statusFilter === "ALL" || row.watched.status === statusFilter) &&
+					(statusFilter === "ALL" || row.originalStatus === statusFilter) &&
 					(!query || gameTitle(row.media).toLocaleLowerCase().includes(query)),
 			)
 			.sort((a, b) => {
-				if (sortMode === "RATING_DESC") {
-					return (
-						ratingValue(b) - ratingValue(a) ||
-						gameTitle(a.media).localeCompare(gameTitle(b.media))
-					);
-				}
-				if (sortMode === "RATING_ASC") {
-					return (
-						ratingValue(a) - ratingValue(b) ||
-						gameTitle(a.media).localeCompare(gameTitle(b.media))
-					);
-				}
-				return gameTitle(a.media).localeCompare(gameTitle(b.media));
+				return (
+					(positionById.get(a.watched.id) ?? Number.MAX_SAFE_INTEGER) -
+						(positionById.get(b.watched.id) ?? Number.MAX_SAFE_INTEGER) ||
+					gameTitle(a.media).localeCompare(gameTitle(b.media))
+				);
 			});
 	});
 
 	const changedRows = $derived(rows.filter(isChanged));
 	const invalidRows = $derived(
-		changedRows.filter((row) => !validRating(row.value)),
+		changedRows.filter((row) => ratingChanged(row) && !validRating(row.value)),
 	);
 	const ratedCount = $derived(
 		rows.filter((row) => row.originalValue !== undefined).length,
@@ -88,11 +105,18 @@
 	}
 
 	function updateSortMode(event: Event) {
-		sortMode = (event.currentTarget as HTMLSelectElement).value as SortMode;
+		const nextSortMode = (event.currentTarget as HTMLSelectElement)
+			.value as SortMode;
+		sortMode = nextSortMode;
+		sortOrder = sortedRowIds(rows, nextSortMode);
+	}
+
+	function resortRows() {
+		sortOrder = sortedRowIds(rows, sortMode);
 	}
 
 	function ratingValue(row: GameRow) {
-		const rating = Number(row.value);
+		const rating = parseRating(row.value);
 		return row.value.trim() && Number.isFinite(rating) ? rating : -1;
 	}
 
@@ -106,24 +130,67 @@
 		return Number.isNaN(year) ? "" : String(year);
 	}
 
-	function gameHref(media: Media) {
+	function gameHref(media: Media): `/${SupportedMedia}/${string}` | undefined {
 		return media.ids.igdb ? `/game/${media.ids.igdb}` : undefined;
 	}
 
 	function validRating(value: string) {
 		if (!value.trim()) return false;
-		const rating = Number(value);
+		const rating = parseRating(value);
 		return Number.isFinite(rating) && rating >= 0.1 && rating <= 10;
 	}
 
+	function parseRating(value: string) {
+		return Number(value.trim().replace(",", "."));
+	}
+
+	function ratingChanged(row: GameRow) {
+		if (!row.value.trim()) return row.originalValue !== undefined;
+		return (
+			!validRating(row.value) || parseRating(row.value) !== row.originalValue
+		);
+	}
+
+	function ratingError(row: GameRow) {
+		return !row.value.trim() && row.originalValue !== undefined
+			? "Restore the current rating; clearing is not supported."
+			: "Enter a number from 0.1 to 10.";
+	}
+
 	function isChanged(row: GameRow) {
-		if (!validRating(row.value)) return row.value.trim() !== "";
-		return Number(row.value) !== row.originalValue;
+		return ratingChanged(row) || row.status !== row.originalStatus;
 	}
 
 	function updateValue(row: GameRow, event: Event) {
 		row.value = (event.currentTarget as HTMLInputElement).value;
 		row.error = undefined;
+	}
+
+	function updateRowStatus(row: GameRow, event: Event) {
+		row.status = (event.currentTarget as HTMLSelectElement)
+			.value as WatchedStatus;
+		row.error = undefined;
+	}
+
+	function compareRows(a: GameRow, b: GameRow, mode: SortMode) {
+		if (mode === "RATING_DESC") {
+			return ratingValue(b) - ratingValue(a);
+		}
+		if (mode === "RATING_ASC") {
+			return ratingValue(a) - ratingValue(b);
+		}
+		return 0;
+	}
+
+	function sortedRowIds(source: GameRow[], mode: SortMode) {
+		return source
+			.slice()
+			.sort(
+				(a, b) =>
+					compareRows(a, b, mode) ||
+					gameTitle(a.media).localeCompare(gameTitle(b.media)),
+			)
+			.map((row) => row.watched.id);
 	}
 
 	function formatRating(rating?: number) {
@@ -134,6 +201,7 @@
 		loading = true;
 		loadError = undefined;
 		rows = [];
+		sortOrder = [];
 
 		try {
 			const games: Media[] = [];
@@ -155,13 +223,17 @@
 				.filter((media) => media.watched?.id)
 				.map((media) => {
 					const rating = media.watched?.rating;
+					const status = (media.watched as Watched).status;
 					return {
 						media,
 						watched: media.watched as Watched,
 						value: formatRating(rating),
+						status,
+						originalStatus: status,
 						originalValue: rating && rating > 0 ? rating : undefined,
 					};
 				});
+			sortOrder = sortedRowIds(rows, sortMode);
 		} catch (error) {
 			console.error("game-ratings: Failed to load games", error);
 			loadError = error;
@@ -175,31 +247,47 @@
 		if (saving || pendingRows.length === 0) return;
 
 		for (const row of pendingRows) {
-			row.error = validRating(row.value)
-				? undefined
-				: "Enter a number from 0.1 to 10.";
+			row.error =
+				!ratingChanged(row) || validRating(row.value)
+					? undefined
+					: ratingError(row);
 		}
-		if (pendingRows.some((row) => !validRating(row.value))) return;
+		if (
+			pendingRows.some((row) => ratingChanged(row) && !validRating(row.value))
+		) {
+			return;
+		}
 
 		saving = true;
 		savedCount = 0;
 		saveTotal = pendingRows.length;
 		saveErrorCount = 0;
 		const savingNotice = notify({
-			text: `Saving 0 of ${pendingRows.length} ratings…`,
+			text: `Saving 0 of ${pendingRows.length} changes…`,
 			type: "loading",
 		});
 
 		for (const row of pendingRows) {
 			try {
-				const rating = Number(row.value);
-				await req.put(`/watched/${row.watched.id}`, { rating });
-				row.originalValue = rating;
-				row.watched.rating = rating;
+				const update: WatchedUpdateRequest = {};
+				if (row.status !== row.originalStatus) {
+					update.status = row.status;
+				}
+				if (ratingChanged(row)) {
+					update.rating = parseRating(row.value);
+					update.backdateRatingActivity = backdateRatingActivities;
+				}
+				await req.put(`/watched/${row.watched.id}`, update);
+				if (ratingChanged(row)) {
+					row.originalValue = parseRating(row.value);
+					row.watched.rating = parseRating(row.value);
+				}
+				row.originalStatus = row.status;
+				row.watched.status = row.status;
 				savedCount += 1;
 				notify({
 					id: savingNotice,
-					text: `Saving ${savedCount} of ${pendingRows.length} ratings…`,
+					text: `Saving ${savedCount} of ${pendingRows.length} changes…`,
 					type: "loading",
 				});
 			} catch (error) {
@@ -218,10 +306,109 @@
 			text:
 				saveErrorCount > 0
 					? `Saved ${savedCount}; ${saveErrorCount} failed.`
-					: `Saved ${savedCount} rating${savedCount === 1 ? "" : "s"}.`,
+					: `Saved ${savedCount} change${savedCount === 1 ? "" : "s"}.`,
 			type: saveErrorCount > 0 ? "error" : "success",
 			time: 7000,
 		});
+	}
+
+	async function searchGames() {
+		const query = addSearch.trim();
+		if (!query) {
+			addResults = [];
+			return;
+		}
+		addLoading = true;
+		addError = undefined;
+		try {
+			const response = await req.get<
+				PaginationResponse<Media, SearchResponseMeta>
+			>("/search", {
+				params: {
+					query,
+					type: SearchType.game,
+					page: 1,
+					limit: 20,
+				},
+			});
+			const existingIds = new Set(
+				rows
+					.map((row) => row.media.ids.igdb)
+					.filter((id): id is number => typeof id === "number"),
+			);
+			addResults = (response.results ?? []).filter(
+				(media) =>
+					typeof media.ids.igdb === "number" &&
+					!existingIds.has(media.ids.igdb),
+			);
+		} catch (error) {
+			console.error("game-ratings: Failed to search games", error);
+			addError = error;
+			addResults = [];
+		} finally {
+			addLoading = false;
+		}
+	}
+
+	async function addGame(media: Media) {
+		const igdbId = media.ids.igdb;
+		if (
+			typeof igdbId !== "number" ||
+			rows.some((row) => row.media.ids.igdb === igdbId) ||
+			addingGameId !== undefined
+		) {
+			return;
+		}
+		addingGameId = igdbId;
+		try {
+			const watched = await updateWatched(undefined, {
+				contentId: igdbId,
+				contentType: "game",
+				status: addStatus,
+			});
+			if (!watched) return;
+			const row: GameRow = {
+				media,
+				watched,
+				value: formatRating(watched.rating),
+				status: watched.status,
+				originalStatus: watched.status,
+				originalValue:
+					watched.rating && watched.rating > 0 ? watched.rating : undefined,
+			};
+			rows = [...rows, row];
+			sortOrder = [...sortOrder, watched.id];
+			addResults = addResults.filter((result) => result !== media);
+		} catch (error) {
+			console.error(`game-ratings: Failed to add ${gameTitle(media)}`, error);
+		} finally {
+			addingGameId = undefined;
+		}
+	}
+
+	function requestDelete(row: GameRow) {
+		if (!saving && deletingGameId === undefined) {
+			deleteTarget = row;
+		}
+	}
+
+	async function closeDeleteModal(confirmed: boolean) {
+		if (!confirmed) {
+			deleteTarget = undefined;
+			return;
+		}
+		const row = deleteTarget;
+		if (!row) return;
+		deletingGameId = row.watched.id;
+		const removed = await removeWatched(row.watched.id);
+		if (removed) {
+			rows = rows.filter((candidate) => candidate !== row);
+			sortOrder = sortOrder.filter((id) => id !== row.watched.id);
+		} else {
+			row.error = "Could not remove";
+		}
+		deletingGameId = undefined;
+		deleteTarget = undefined;
 	}
 
 	loadGames();
@@ -237,11 +424,12 @@
 			<p class="eyebrow">Temporary tool</p>
 			<h1>Bulk game ratings</h1>
 			<p class="description">
-				Update every game on your list in one place. Ratings are stored on a
-				0–10 scale. Leave a field unchanged to keep its current value.
+				Edit ratings and statuses, add games, or remove them from your list.
+				Ratings are stored on a 0–10 scale; for a 0–100 display, enter 8.7 to
+				show 87 in the rest of the app.
 			</p>
 		</div>
-		<a class="back-link" href="/">
+		<a class="back-link" href={resolve("/")}>
 			<Icon i="arrow" wh={16} />
 			Back to list
 		</a>
@@ -261,6 +449,65 @@
 			}}
 		/>
 	{:else}
+		<section class="add-panel">
+			<div class="section-heading">
+				<div>
+					<h2>Add a game</h2>
+					<p>Search IGDB and add a game directly to your list.</p>
+				</div>
+				<label class="add-status">
+					<span>Add as</span>
+					<select bind:value={addStatus}>
+						{#each editableStatusOptions as option (option.value)}
+							<option value={option.value}>{option.label}</option>
+						{/each}
+					</select>
+				</label>
+			</div>
+			<form
+				class="add-search"
+				onsubmit={(event) => {
+					event.preventDefault();
+					searchGames();
+				}}
+			>
+				<input
+					bind:value={addSearch}
+					type="search"
+					placeholder="Search for a game to add…"
+					aria-label="Search for a game to add"
+				/>
+				<button disabled={addLoading || !addSearch.trim()} type="submit">
+					{addLoading ? "Searching…" : "Search"}
+				</button>
+			</form>
+			{#if addError}
+				<p class="add-error">Couldn't search for games. Try again.</p>
+			{:else if addResults.length > 0}
+				<div class="add-results">
+					{#each addResults as media (media.ids.igdb)}
+						{@const igdbId = media.ids.igdb}
+						<div class="add-result">
+							<div>
+								<strong>{gameTitle(media)}</strong>
+								{#if gameYear(media)}
+									<span>{gameYear(media)}</span>
+								{/if}
+							</div>
+							<button
+								disabled={addingGameId !== undefined}
+								onclick={() => addGame(media)}
+							>
+								{addingGameId === igdbId ? "Adding…" : "Add"}
+							</button>
+						</div>
+					{/each}
+				</div>
+			{:else if addSearch.trim() && !addLoading}
+				<p class="add-empty">No new games found.</p>
+			{/if}
+		</section>
+
 		<div class="toolbar">
 			<div class="filter-controls">
 				<label class="search-box">
@@ -270,7 +517,7 @@
 				<label class="status-filter">
 					<span>Status</span>
 					<select value={statusFilter} onchange={updateStatusFilter}>
-						{#each statusOptions as option}
+						{#each statusOptions as option (option.value)}
 							<option value={option.value}>{option.label}</option>
 						{/each}
 					</select>
@@ -278,7 +525,7 @@
 				<label class="sort-filter">
 					<span>Sort</span>
 					<select value={sortMode} onchange={updateSortMode}>
-						{#each sortOptions as option}
+						{#each sortOptions as option (option.value)}
 							<option value={option.value}>{option.label}</option>
 						{/each}
 					</select>
@@ -296,6 +543,12 @@
 					<strong>{changedRows.length} unsaved</strong>
 				{/if}
 			</div>
+			<p class="sort-help">
+				Changing a rating will not move it.
+				<button class="plain resort-button" type="button" onclick={resortRows}
+					>Re-sort now</button
+				>
+			</p>
 		</div>
 
 		{#if rows.length === 0}
@@ -314,14 +567,17 @@
 			<div class="list-card">
 				<div class="list-header">
 					<span>Game</span>
+					<span>Status</span>
 					<span>Your rating</span>
+					<span aria-hidden="true"></span>
 				</div>
 				<div class="game-list">
 					{#each visibleRows as row (row.watched.id)}
+						{@const href = gameHref(row.media)}
 						<div class:changed={isChanged(row)} class="game-row">
 							<div class="game-info">
-								{#if gameHref(row.media)}
-									<a class="game-title" href={gameHref(row.media)}
+								{#if href}
+									<a class="game-title" href={resolve(href)}
 										>{gameTitle(row.media)}</a
 									>
 								{:else}
@@ -331,6 +587,17 @@
 									<span class="game-year">{gameYear(row.media)}</span>
 								{/if}
 							</div>
+							<select
+								class="row-status"
+								aria-label={`Status for ${gameTitle(row.media)}`}
+								value={row.status}
+								disabled={saving || deletingGameId === row.watched.id}
+								onchange={(event) => updateRowStatus(row, event)}
+							>
+								{#each editableStatusOptions as option (option.value)}
+									<option value={option.value}>{option.label}</option>
+								{/each}
+							</select>
 							<div class="rating-input-wrap">
 								<input
 									class:invalid={row.error}
@@ -340,6 +607,7 @@
 									max="10"
 									step="0.1"
 									placeholder="—"
+									disabled={saving || deletingGameId === row.watched.id}
 									value={row.value}
 									oninput={(event) => updateValue(row, event)}
 								/>
@@ -347,6 +615,15 @@
 									<span class="row-error">{row.error}</span>
 								{/if}
 							</div>
+							<button
+								class="delete-row"
+								type="button"
+								disabled={saving || deletingGameId !== undefined}
+								aria-label={`Remove ${gameTitle(row.media)} from your list`}
+								onclick={() => requestDelete(row)}
+							>
+								<Icon i="trash" wh={18} />
+							</button>
 						</div>
 					{/each}
 				</div>
@@ -359,13 +636,21 @@
 					{:else if invalidRows.length > 0}
 						Fix invalid ratings before saving.
 					{:else if saveErrorCount > 0}
-						Some ratings could not be saved. You can retry them.
+						Some changes could not be saved. You can retry them.
 					{:else}
 						{changedRows.length === 0
 							? "Everything is up to date."
-							: `${changedRows.length} rating${changedRows.length === 1 ? "" : "s"} ready to save.`}
+							: `${changedRows.length} change${changedRows.length === 1 ? "" : "s"} ready to save.`}
 					{/if}
 				</p>
+				<label class="backdate-option">
+					<input
+						type="checkbox"
+						bind:checked={backdateRatingActivities}
+						disabled={saving}
+					/>
+					<span>Keep rating activity dates with existing history</span>
+				</label>
 				<button
 					disabled={saving || changedRows.length === 0}
 					onclick={saveRatings}
@@ -376,6 +661,13 @@
 		{/if}
 	{/if}
 </main>
+
+{#if deleteTarget}
+	<WatchedDeleteModal
+		mediaName={gameTitle(deleteTarget.media)}
+		onClose={closeDeleteModal}
+	/>
+{/if}
 
 <style lang="scss">
 	.ratings-page {
@@ -411,6 +703,110 @@
 		line-height: 1.5;
 	}
 
+	.add-panel {
+		margin-bottom: 18px;
+		padding: 16px;
+		border: 2px solid $text-color;
+		border-radius: 8px;
+	}
+
+	.section-heading {
+		display: flex;
+		align-items: start;
+		justify-content: space-between;
+		gap: 15px;
+		margin-bottom: 12px;
+
+		h2 {
+			font-size: 20px;
+			margin-bottom: 3px;
+		}
+
+		p {
+			color: $text-color-accent;
+			font-size: 13px;
+		}
+	}
+
+	.add-status {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		color: $text-color-accent;
+		font-size: 13px;
+		font-weight: bold;
+		white-space: nowrap;
+
+		select {
+			min-width: 135px;
+		}
+	}
+
+	.add-search {
+		display: flex;
+		gap: 8px;
+
+		input {
+			min-width: 0;
+			flex: 1;
+		}
+
+		button {
+			width: auto;
+			min-width: 95px;
+		}
+	}
+
+	.add-results {
+		display: flex;
+		flex-flow: column;
+		gap: 7px;
+		margin-top: 12px;
+	}
+
+	.add-result {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 12px;
+		padding-top: 7px;
+		border-top: 1px solid $bg-color-accent;
+
+		> div {
+			display: flex;
+			align-items: baseline;
+			gap: 8px;
+			min-width: 0;
+		}
+
+		strong {
+			overflow: hidden;
+			text-overflow: ellipsis;
+			white-space: nowrap;
+		}
+
+		span {
+			color: $text-color-accent;
+			font-size: 13px;
+		}
+
+		button {
+			width: auto;
+			padding: 5px 12px;
+		}
+	}
+
+	.add-empty,
+	.add-error {
+		margin-top: 10px;
+		color: $text-color-accent;
+		font-size: 13px;
+	}
+
+	.add-error {
+		color: $error;
+	}
+
 	.back-link {
 		display: inline-flex;
 		align-items: center;
@@ -427,6 +823,7 @@
 
 	.toolbar {
 		display: flex;
+		flex-wrap: wrap;
 		align-items: center;
 		justify-content: space-between;
 		gap: 15px;
@@ -500,6 +897,20 @@
 		}
 	}
 
+	.sort-help {
+		flex-basis: 100%;
+		margin-top: 5px;
+		color: $text-color-accent;
+		font-size: 12px;
+		text-align: right;
+
+		.resort-button {
+			color: $text-color;
+			font-weight: bold;
+			text-decoration: underline;
+		}
+	}
+
 	.list-card {
 		overflow: hidden;
 		border: 2px solid $text-color;
@@ -509,7 +920,7 @@
 	.list-header,
 	.game-row {
 		display: grid;
-		grid-template-columns: minmax(0, 1fr) 130px;
+		grid-template-columns: minmax(0, 1fr) 145px 115px 34px;
 		gap: 20px;
 		align-items: center;
 	}
@@ -544,6 +955,13 @@
 		align-items: baseline;
 		gap: 8px;
 		min-width: 0;
+	}
+
+	.row-status {
+		width: 100%;
+		min-width: 0;
+		padding: 7px 6px;
+		font-size: 12px;
 	}
 
 	.game-title {
@@ -588,6 +1006,15 @@
 		white-space: nowrap;
 	}
 
+	.delete-row {
+		width: 30px;
+		padding: 5px;
+
+		&:hover {
+			color: $error;
+		}
+	}
+
 	.save-bar {
 		display: flex;
 		align-items: center;
@@ -603,6 +1030,19 @@
 		button {
 			width: auto;
 			min-width: 135px;
+		}
+	}
+
+	.backdate-option {
+		display: flex;
+		align-items: center;
+		gap: 7px;
+		margin-left: auto;
+		color: $text-color-accent;
+		font-size: 12px;
+
+		input {
+			width: auto;
 		}
 	}
 
@@ -679,10 +1119,27 @@
 			justify-content: space-between;
 		}
 
+		.section-heading {
+			flex-flow: column;
+		}
+
+		.add-status {
+			justify-content: space-between;
+			width: 100%;
+
+			select {
+				flex: 1;
+			}
+		}
+
+		.sort-help {
+			text-align: left;
+		}
+
 		.list-header,
 		.game-row {
-			grid-template-columns: minmax(0, 1fr) 95px;
-			gap: 10px;
+			grid-template-columns: minmax(0, 1fr) 95px 72px 26px;
+			gap: 7px;
 		}
 
 		.list-header,
@@ -693,6 +1150,10 @@
 
 		.save-bar button {
 			width: 100%;
+		}
+
+		.backdate-option {
+			margin-left: 0;
 		}
 	}
 </style>
