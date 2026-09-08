@@ -122,9 +122,9 @@ function injectMetadata(
 			? `${mediaName} - ${ownerName}'s Watcharr`
 			: `${ownerName}'s Watcharr Library`;
 	const description = person?.name
-		? `Explore ${person.name}'s credits with ${ownerName}'s ratings and list status on Watcharr.`
+		? `Explore ${person.name}'s credits and find out which ones ${ownerName} has on their list.`
 		: mediaName && isOnOwnersList
-			? `See ${ownerName}'s status, rating, review, and activity for ${mediaName} on Watcharr.`
+			? `Explore ${ownerName}'s status, rating and review for "${mediaName}".`
 			: mediaName
 				? `${mediaName} is not on ${ownerName}'s list. Explore its details on Watcharr.`
 				: `See ${ownerName}'s recently finished titles, complete library, ratings, and watchlist on Watcharr.`;
