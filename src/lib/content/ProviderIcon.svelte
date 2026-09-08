@@ -189,6 +189,19 @@
 			/>
 		</svg>
 	</a>
+{:else if i === "HowLongToBeat"}
+	<a aria-label={i} title={i} {href} rel="external" target="_blank">
+		<svg
+			width="30"
+			height="30"
+			viewBox="0 0 24 24"
+			xmlns="http://www.w3.org/2000/svg"
+		>
+			<path
+				d="M12 2a10 10 0 1 0 10 10A10.011 10.011 0 0 0 12 2Zm0 18a8 8 0 1 1 8-8 8.009 8.009 0 0 1-8 8Zm1-8.414V6h-2v6.414l4.293 4.293 1.414-1.414Z"
+			/>
+		</svg>
+	</a>
 {:else if i === "Itch"}
 	<a aria-label={i} {href} rel="external" target="_blank">
 		<svg

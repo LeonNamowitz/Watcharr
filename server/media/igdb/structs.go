@@ -2,6 +2,7 @@ package igdb
 
 import (
 	"encoding/json"
+	"net/url"
 	"strings"
 	"time"
 
@@ -206,6 +207,12 @@ func (t *GameDetailsResponse) AsMedia() domain.Media {
 			})
 		}
 	}
+	// IGDB does not provide an HLTB identifier. Link to HLTB's title search
+	// instead of guessing a numeric game id that could point to the wrong game.
+	m.Providers = append(m.Providers, domain.MediaProvider{
+		Name: "HowLongToBeat",
+		Link: "https://howlongtobeat.com/?q=" + url.QueryEscape(t.Name),
+	})
 	// Genres
 	for _, v := range t.Genres {
 		m.Genres = append(m.Genres, domain.MediaGenre{
