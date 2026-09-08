@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { resolve } from "$app/paths";
 	import Activity from "@/lib/Activity.svelte";
 	import Error from "@/lib/Error.svelte";
 	import HorizontalList from "@/lib/HorizontalList.svelte";
@@ -186,6 +187,15 @@
 
 						<div class="btns">
 							<ViewTrailerButton videos={show.videos} />
+							<a
+								class="btn"
+								href={resolve("/(app)/rating-helper/[type]/[id]", {
+									type: "tv",
+									id: String(data.tvId),
+								})}
+							>
+								<Icon i="star" wh={14} /> Rating Helper
+							</a>
 							{#if jellyfinUrl}
 								<a
 									class="btn"

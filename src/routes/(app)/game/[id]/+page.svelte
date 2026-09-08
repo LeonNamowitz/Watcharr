@@ -19,6 +19,7 @@
 	import { activityRemovedHook } from "@/lib/activity.js";
 	import Genres from "@/lib/content/Genres.svelte";
 	import SimilarContent from "@/lib/content/SimilarContent.svelte";
+	import { resolve } from "$app/paths";
 
 	let { data } = $props();
 
@@ -141,6 +142,15 @@
 
 						<div class="btns">
 							<ViewTrailerButton videos={game.videos} />
+							<a
+								class="btn"
+								href={resolve("/(app)/rating-helper/[type]/[id]", {
+									type: "game",
+									id: String(data.gameId),
+								})}
+							>
+								<Icon i="star" wh={14} /> Rating Helper
+							</a>
 							{#if game.watched}
 								<div class="other-side">
 									<AddToTagButton watchedItem={game.watched} />
@@ -233,6 +243,7 @@
 				gap: 8px;
 				margin-top: auto;
 
+				a.btn,
 				button {
 					max-width: fit-content;
 					overflow: hidden;

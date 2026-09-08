@@ -31,6 +31,7 @@
 	import TopCrewList from "@/lib/content/TopCrewList.svelte";
 	import { activityRemovedHook } from "@/lib/activity.js";
 	import Genres from "@/lib/content/Genres.svelte";
+	import { resolve } from "$app/paths";
 
 	let { data } = $props();
 
@@ -181,6 +182,15 @@
 									bind:this={arrRequestButtonComp}
 								/>
 							{/if}
+							<a
+								class="btn"
+								href={resolve("/(app)/rating-helper/[type]/[id]", {
+									type: "movie",
+									id: String(data.movieId),
+								})}
+							>
+								<Icon i="star" wh={14} /> Rating Helper
+							</a>
 							{#if movie.watched}
 								<div class="other-side">
 									<AddToTagButton watchedItem={movie.watched} />
