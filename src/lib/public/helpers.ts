@@ -37,3 +37,8 @@ export function toPublicLastSeenSeason(progress?: string) {
 	const season = /^Season\s+(\d+)$/i.exec(progress);
 	return season ? Number(season[1]) : undefined;
 }
+
+export function toPublicPlaytimeLabel(hours?: number) {
+	if (typeof hours !== "number") return;
+	return `${hours} ${hours === 1 ? "hour" : "hours"}`;
+}

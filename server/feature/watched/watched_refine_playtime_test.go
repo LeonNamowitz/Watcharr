@@ -88,6 +88,15 @@ func TestGetWatchedPageSortsOnlyRecordedGamePlaytime(t *testing.T) {
 	if dto.PlaytimeHours == nil || *dto.PlaytimeHours != lowHours {
 		t.Fatalf("list dto playtime = %v, want %d", dto.PlaytimeHours, lowHours)
 	}
+
+	publicDTO := domain.NewWatchedDtoForPublicLists(&entries[2])
+	if publicDTO.PlaytimeHours == nil || *publicDTO.PlaytimeHours != lowHours {
+		t.Fatalf(
+			"public list dto playtime = %v, want %d",
+			publicDTO.PlaytimeHours,
+			lowHours,
+		)
+	}
 }
 
 func assertPlaytimeSort(

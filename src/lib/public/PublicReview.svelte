@@ -2,7 +2,11 @@
 	import type { RatingSettings } from "@/lib/rating/helpers";
 	import { toRatingLabel } from "@/lib/rating/helpers";
 	import { watchedStatuses } from "@/lib/util/helpers";
-	import { toPublicLastSeenLabel, toPublicStatusLabel } from "./helpers";
+	import {
+		toPublicLastSeenLabel,
+		toPublicPlaytimeLabel,
+		toPublicStatusLabel,
+	} from "./helpers";
 	import type { SupportedMedia, Watched } from "@/types";
 	import Icon from "../Icon.svelte";
 
@@ -24,6 +28,11 @@
 		mediaType === "tv" &&
 			["PLANNED", "WATCHING", "HOLD", "DROPPED"].includes(watched.status)
 			? toPublicLastSeenLabel(watched.watchingSeason)
+			: undefined,
+	);
+	let playtimeLabel = $derived(
+		mediaType === "game"
+			? toPublicPlaytimeLabel(watched.playtimeHours)
 			: undefined,
 	);
 	let reviewThoughts = $derived(watched.thoughts ?? "");
@@ -50,6 +59,9 @@
 			<span class="status {watched.status.toLowerCase()}">
 				<i><Icon i={watchedStatuses[watched.status]} wh={18} /></i>
 				<span>{statusLabel}</span>
+				{#if playtimeLabel}
+					<span class="playtime">— {playtimeLabel}</span>
+				{/if}
 				{#if lastSeenLabel}
 					<span class="last-seen">— Last seen: {lastSeenLabel}</span>
 				{/if}
@@ -147,7 +159,8 @@
 			flex-wrap: wrap;
 			gap: 7px;
 
-			.last-seen {
+			.last-seen,
+			.playtime {
 				color: rgba(255, 255, 255, 0.82);
 				font-size: 13px;
 				font-weight: normal;

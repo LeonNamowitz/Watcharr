@@ -9,7 +9,7 @@
 	} from "@/lib/util/helpers";
 	import type { SupportedMedia, Watched } from "@/types";
 	import Icon from "@/lib/Icon.svelte";
-	import { toPublicStatusLabel } from "./helpers";
+	import { toPublicPlaytimeLabel, toPublicStatusLabel } from "./helpers";
 
 	interface Props {
 		watched: Watched;
@@ -26,12 +26,16 @@
 	let showDateModified = $derived(
 		store.wlDetailedView.includes("dateModified"),
 	);
-	let showLastWatched = $derived(
-		Boolean(watched.watchingSeason) &&
-			store.wlDetailedView.includes("lastWatched"),
+	let progress = $derived(
+		mediaType === "game"
+			? toPublicPlaytimeLabel(watched.playtimeHours)
+			: watched.watchingSeason,
+	);
+	let showProgress = $derived(
+		Boolean(progress) && store.wlDetailedView.includes("progress"),
 	);
 	let showOptional = $derived(
-		!active && (showDateAdded || showDateModified || showLastWatched),
+		!active && (showDateAdded || showDateModified || showProgress),
 	);
 	let showStatusRating = $derived(
 		store.wlDetailedView.includes("statusRating"),
@@ -62,10 +66,14 @@
 						<span>{formatDate(watched.updatedAt)}</span>
 					</span>
 				{/if}
-				{#if showLastWatched}
-					<span title="Latest season watched">
+				{#if showProgress}
+					<span
+						title={mediaType === "game"
+							? "Hours played"
+							: "Latest season watched"}
+					>
 						<i><Icon i="play" wh={15} /></i>
-						<span>{watched.watchingSeason}</span>
+						<span>{progress}</span>
 					</span>
 				{/if}
 			</div>
