@@ -177,6 +177,9 @@
 			<span class="owner-status {we.status.toLowerCase()}">
 				<Icon i={watchedStatuses[we.status]} wh={18} />
 			</span>
+			<span class="sr-only">
+				List owner's episode status: {toUnderstandableStatus(we.status, false)}
+			</span>
 			{#if we.rating}
 				<span class="owner-rating">{we.rating}/10</span>
 			{/if}
@@ -446,6 +449,18 @@
 				filter: blur(6px);
 			}
 		}
+	}
+
+	.sr-only {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		padding: 0;
+		margin: -1px;
+		overflow: hidden;
+		clip: rect(0, 0, 0, 0);
+		white-space: nowrap;
+		border: 0;
 	}
 
 	@media screen and (max-width: 590px) {

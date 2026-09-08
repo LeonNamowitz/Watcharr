@@ -41,6 +41,11 @@
 	let isSearchActive = $derived(
 		isListPage && Boolean(page.url.searchParams.get("query")?.trim()),
 	);
+	let isGlobalSearch = $derived(
+		isSearchActive &&
+			(page.url.searchParams.get("scope") === "all" ||
+				page.url.searchParams.get("type") === "person"),
+	);
 	let isPersonPage = $derived(
 		/^\/lists\/[^/]+\/[^/]+\/person\/[^/]+\/?$/.test(page.url.pathname),
 	);
@@ -66,36 +71,12 @@
 		}
 	}
 
-	function shouldIgnoreSearchKey(ev: KeyboardEvent) {
-		return [
-			"ContextMenu",
-			"Home",
-			"End",
-			"PageDown",
-			"PageUp",
-			"NumLock",
-			"Escape",
-			"Tab",
-			"CapsLock",
-			"OS",
-			"ArrowLeft",
-			"ArrowRight",
-			"ArrowUp",
-			"ArrowDown",
-			"Control",
-			"Alt",
-			"AltGraph",
-			"Shift",
-			"Meta",
-		].includes(ev.key);
-	}
-
-	function handleSearch(ev: KeyboardEvent) {
-		if (shouldIgnoreSearchKey(ev)) return;
+	function handleSearch(ev: Event) {
+		if (ev instanceof InputEvent && ev.isComposing) return;
+		const target = ev.currentTarget as HTMLInputElement;
 		clearTimeout(searchTimeout);
 		searchTimeout = window.setTimeout(
 			() => {
-				const target = ev.target as HTMLInputElement;
 				const query = target.value.trim();
 				const location = new URL(page.url);
 				if (query) {
@@ -261,7 +242,7 @@
 			{/if}
 		</div>
 	{/if}
-	{#if isListPage}
+	{#if isListPage && !isGlobalSearch}
 		<div class="control">
 			<button
 				class="plain other sort"

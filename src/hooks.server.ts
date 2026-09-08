@@ -19,6 +19,7 @@ interface PublicMediaMetadata {
 		summary?: string;
 		extPosterPath?: string;
 		poster?: { path?: string };
+		watched?: { id?: number };
 	};
 }
 
@@ -114,6 +115,7 @@ function injectMetadata(
 ) {
 	const ownerName = user?.username ?? route.ownerName;
 	const mediaName = details?.media?.name;
+	const isOnOwnersList = Boolean(details?.media?.watched?.id);
 	const title = person?.name
 		? `${person.name} - ${ownerName}'s Watcharr`
 		: mediaName
@@ -121,9 +123,11 @@ function injectMetadata(
 			: `${ownerName}'s Watcharr Library`;
 	const description = person?.name
 		? `Explore ${person.name}'s credits with ${ownerName}'s ratings and list status on Watcharr.`
-		: mediaName
+		: mediaName && isOnOwnersList
 			? `See ${ownerName}'s status, rating, review, and activity for ${mediaName} on Watcharr.`
-			: `See ${ownerName}'s recently finished titles, complete library, ratings, and watchlist on Watcharr.`;
+			: mediaName
+				? `${mediaName} is not on ${ownerName}'s list. Explore its details on Watcharr.`
+				: `See ${ownerName}'s recently finished titles, complete library, ratings, and watchlist on Watcharr.`;
 	const image = metadataImage(route, url.origin, user, details, person);
 	const canonicalUrl = new URL(url.pathname, url.origin).href;
 	const safeTitle = escapeHtml(title);

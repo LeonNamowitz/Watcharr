@@ -52,33 +52,12 @@
 		}
 	}
 
-	function handleSearch(ev: KeyboardEvent) {
-		if (
-			ev.key === "ContextMenu" ||
-			ev.key === "Home" ||
-			ev.key === "End" ||
-			ev.key === "PageDown" ||
-			ev.key === "PageUp" ||
-			ev.key === "NumLock" ||
-			ev.key === "Escape" ||
-			ev.key === "Tab" ||
-			ev.key === "CapsLock" ||
-			ev.key === "OS" ||
-			ev.key === "ArrowLeft" ||
-			ev.key === "ArrowRight" ||
-			ev.key === "ArrowUp" ||
-			ev.key === "ArrowDown" ||
-			ev.key === "Control" ||
-			ev.key === "Alt" ||
-			ev.key === "AltGraph" ||
-			ev.key === "Shift" ||
-			ev.key === "Meta"
-		)
-			return;
+	function handleSearch(ev: Event) {
+		if (ev instanceof InputEvent && ev.isComposing) return;
+		const target = ev.currentTarget as HTMLInputElement;
 		clearTimeout(searchTimeout);
 		searchTimeout = window.setTimeout(
 			() => {
-				const target = ev.target as HTMLInputElement;
 				const query = target?.value.trim();
 				if (!query) return;
 				const currentSearchType = page.url.searchParams.get("type");

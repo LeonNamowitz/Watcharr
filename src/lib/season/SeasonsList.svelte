@@ -14,7 +14,7 @@
 	import { notify } from "@/lib/util/notify";
 	import PosterRating from "@/lib/poster/PosterRating.svelte";
 	import Icon from "@/lib/Icon.svelte";
-	import { watchedStatuses } from "@/lib/util/helpers";
+	import { toUnderstandableStatus, watchedStatuses } from "@/lib/util/helpers";
 	import { removeWatchedSeason, updateWatchedSeason } from "./api";
 	import { onMount } from "svelte";
 	import type { RatingSettings } from "@/lib/rating/helpers";
@@ -188,6 +188,14 @@
 								class:public={readOnly}
 							>
 								<Icon i={watchedStatuses[status]} />
+								{#if readOnly}
+									<span class="sr-only">
+										List owner's season status: {toUnderstandableStatus(
+											status,
+											false,
+										)}
+									</span>
+								{/if}
 							</div>
 						{/if}
 					{/if}
@@ -232,16 +240,25 @@
 									.filter(Boolean)
 									.join(" ")}
 							>
-								<PosterStatus
-									status={ws?.status}
-									btnTooltip="Season Status"
-									handleStatusClick={(t) =>
-										handleStatusClick(t, season.season_number)}
-									direction="bot"
-									width="100%"
-									small
-									disableInteraction={readOnly}
-								/>
+								{#if readOnly && ws}
+									<Icon i={watchedStatuses[ws.status]} wh={38} />
+									<span class="sr-only">
+										List owner's season status: {toUnderstandableStatus(
+											ws.status,
+											false,
+										)}
+									</span>
+								{:else}
+									<PosterStatus
+										status={ws?.status}
+										btnTooltip="Season Status"
+										handleStatusClick={(t) =>
+											handleStatusClick(t, season.season_number)}
+										direction="bot"
+										width="100%"
+										small
+									/>
+								{/if}
 							</div>
 						{/if}
 					{/if}
@@ -270,6 +287,18 @@
 		flex-flow: row;
 		gap: 20px;
 		width: 100%;
+	}
+
+	.sr-only {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		padding: 0;
+		margin: -1px;
+		overflow: hidden;
+		clip: rect(0, 0, 0, 0);
+		white-space: nowrap;
+		border: 0;
 	}
 
 	.episodes {
@@ -450,6 +479,11 @@
 			}
 
 			&.public-status {
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				fill: currentColor;
+
 				&.planned {
 					color: #8dc8ff;
 				}
@@ -468,11 +502,6 @@
 
 				&.dropped {
 					color: #ff8b8f;
-				}
-
-				:global(button.status.interaction-disabled) {
-					color: inherit;
-					fill: currentColor;
 				}
 			}
 		}

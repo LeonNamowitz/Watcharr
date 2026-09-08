@@ -84,6 +84,7 @@
 
 	const scroll = infScroll({ callback: onScrollToBottom });
 	const dataLoader = paginatedLoader<Media, SearchResponseMeta>(load);
+	let publicListOwner = $derived(meta);
 
 	$effect(() => {
 		const query = searchQuery;
@@ -248,13 +249,6 @@
 		}
 		if (nextType === SearchType.person) {
 			location.searchParams.set("scope", "all");
-		} else if (
-			to === SearchType.movie ||
-			to === SearchType.show ||
-			to === SearchType.game
-		) {
-			// A specific media search is always scoped back to the owner's list.
-			location.searchParams.delete("scope");
 		}
 		resetSearchListControls();
 		window.scrollTo({ top: 0 });
@@ -370,7 +364,7 @@
 						disabled={searchType === SearchType.person}
 						onclick={() => setSearchScope(!isGlobalSearch)}
 					>
-						<span class="source-option local">Leon's list</span>
+						<span class="source-option local">{meta.username}'s list</span>
 						<span class="source-option global">Global</span>
 					</button>
 				</div>
@@ -387,7 +381,7 @@
 					id={w.ids.tmdb}
 					name={w.name}
 					path={w.extPosterPath}
-					publicListOwner={{ id: meta.id, username: meta.username }}
+					{publicListOwner}
 				/>
 			{:else if w}
 				<Poster
@@ -402,7 +396,7 @@
 								ratingStep: user?.ratingStep,
 							}
 						: undefined}
-					publicListOwner={{ id: meta.id, username: meta.username }}
+					{publicListOwner}
 				/>
 			{/if}
 		{/each}

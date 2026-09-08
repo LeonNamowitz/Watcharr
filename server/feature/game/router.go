@@ -19,7 +19,7 @@ type WatchedProvider interface {
 	UpdateWatchedLastViewedSeason(userId uint, id uint, seasonNum int) error
 	GetWatchedItemBySupportedMediaId(userId uint, id uint, t util.SupportedMedia) (entity.Watched, error)
 	GetWatchedItemsBySupportedMediaIds(userId uint, c []addedtocontent.IdToTypePair) ([]entity.Watched, error)
-	GetPublicWatchedItem(userId uint, username string, mediaId uint, mediaType util.SupportedMedia) (entity.Watched, bool, error)
+	GetOptionalPublicWatchedItem(userId uint, username string, mediaId uint, mediaType util.SupportedMedia) (*entity.Watched, bool, error)
 }
 
 type Router struct {
@@ -78,7 +78,7 @@ func (r *Router) GetPublicGameDetails(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, router.ErrorResponse{Error: "invalid media id"})
 		return
 	}
-	watched, thoughtsPublic, err := r.watchedProvider.GetPublicWatchedItem(
+	watched, thoughtsPublic, err := r.watchedProvider.GetOptionalPublicWatchedItem(
 		uint(userId),
 		c.Param("username"),
 		uint(mediaId),
@@ -94,7 +94,9 @@ func (r *Router) GetPublicGameDetails(c *gin.Context) {
 		return
 	}
 	media := content.AsMedia()
-	media.Watched = domain.NewWatchedDtoForPublicContentPage(&watched, thoughtsPublic)
+	if watched != nil {
+		media.Watched = domain.NewWatchedDtoForPublicContentPage(watched, thoughtsPublic)
+	}
 	if err := addedtocontent.AddList(
 		r.watchedProvider,
 		uint(userId),

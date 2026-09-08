@@ -9,7 +9,7 @@
 		homeHref: "/" | `/lists/${string}/${string}`;
 		searchPlaceholder: string;
 		searchValue: string;
-		onSearch: (event: KeyboardEvent) => void;
+		onSearch: (event: Event) => void;
 		actions: Snippet;
 		variant: "app" | "public";
 	}
@@ -40,7 +40,7 @@
 				type="text"
 				placeholder={searchPlaceholder}
 				bind:value={searchValue}
-				onkeydown={onSearch}
+				oninput={onSearch}
 			/>
 			<Icon i="search" wh={19} />
 		</div>
@@ -53,7 +53,7 @@
 		type="text"
 		placeholder={searchPlaceholder}
 		bind:value={searchValue}
-		onkeydown={onSearch}
+		oninput={onSearch}
 	/>
 </nav>
 
