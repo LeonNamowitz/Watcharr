@@ -420,6 +420,9 @@ func (s *Service) AddWatched(
 		// We ALWAYS require the ActivityType to be provided by any caller.
 		return entity.Watched{}, errors.New("extraProp ActivityType not specified")
 	}
+	if ar.PlaytimeHours != nil && ar.ContentType != util.SupportedMediaGame {
+		return entity.Watched{}, errors.New("playtime is only supported for games")
+	}
 
 	watched := entity.Watched{
 		UserID: userId,
@@ -483,6 +486,7 @@ func (s *Service) AddWatched(
 	watched.Status = ar.Status
 	watched.Rating = ar.Rating
 	watched.Thoughts = ar.Thoughts
+	watched.PlaytimeHours = ar.PlaytimeHours
 
 	// If custom WatchedDate passed, set CreatedAt and UpdatedAt fields to it.
 	if !ar.WatchedDate.IsZero() {
@@ -609,6 +613,17 @@ func (s *Service) restoreWatchedAfterDuplicatedKeyErr(
 	}
 
 	// If we are here, we have a soft deleted record to restore:
+	updates := map[string]any{
+		"status":     ar.Status,
+		"rating":     ar.Rating,
+		"thoughts":   ar.Thoughts,
+		"deleted_at": nil,
+	}
+	// Never destroy playtime saved on a soft-deleted row, but allow an import
+	// or add request to fill it when it was never recorded.
+	if watchedOut.PlaytimeHours == nil && ar.PlaytimeHours != nil {
+		updates["playtime_hours"] = *ar.PlaytimeHours
+	}
 	res = s.db.
 		// Passing `&watchedOut` makes gorm do another query for inserting
 		// all existing rows into db, im not sure why... but just going to
@@ -617,12 +632,7 @@ func (s *Service) restoreWatchedAfterDuplicatedKeyErr(
 			GormModel: dbmodel.GormModel{ID: watchedOut.ID},
 		}).
 		Unscoped().
-		Updates(map[string]any{
-			"status":     ar.Status,
-			"rating":     ar.Rating,
-			"thoughts":   ar.Thoughts,
-			"deleted_at": nil,
-		})
+		Updates(updates)
 	if res.Error != nil || res.RowsAffected == 0 {
 		slog.Error("restoreWatchedAfterDuplicatedKeyErr: Updating record failed!",
 			"error", res.Error,
@@ -633,6 +643,9 @@ func (s *Service) restoreWatchedAfterDuplicatedKeyErr(
 	watchedOut.Status = ar.Status
 	watchedOut.Rating = ar.Rating
 	watchedOut.Thoughts = ar.Thoughts
+	if watchedOut.PlaytimeHours == nil && ar.PlaytimeHours != nil {
+		watchedOut.PlaytimeHours = ar.PlaytimeHours
+	}
 	watchedOut.DeletedAt = gorm.DeletedAt{}
 
 	slog.Info("restoreWatchedAfterDuplicatedKeyErr: Updated record.",
@@ -674,6 +687,17 @@ func (s *Service) updateWatched(
 	}
 	if ar.Pinned != nil {
 		upwat.Pinned = *ar.Pinned
+	}
+	if ar.PlaytimeHours != nil || ar.RemovePlaytime {
+		if upwat.GameID == nil {
+			return domain.WatchedUpdateResponse{},
+				errors.New("playtime is only supported for games")
+		}
+		if ar.PlaytimeHours != nil {
+			upwat.PlaytimeHours = ar.PlaytimeHours
+		} else {
+			upwat.PlaytimeHours = nil
+		}
 	}
 	res = s.db.Save(upwat)
 	if res.RowsAffected <= 0 {
@@ -722,6 +746,19 @@ func (s *Service) updateWatched(
 				WatchedID: id,
 				Type:      entity.THOUGHTS_REMOVED,
 				Data:      originalThoughts,
+			},
+			false,
+		)
+	}
+	if ar.PlaytimeHours != nil || ar.RemovePlaytime {
+		playtimeData, _ := json.Marshal(map[string]any{
+			"hours": ar.PlaytimeHours,
+		})
+		addedActivity, _ = s.activityProvider.AddActivity(userId,
+			domain.ActivityAddProps{
+				WatchedID: id,
+				Type:      entity.PLAYTIME_CHANGED,
+				Data:      string(playtimeData),
 			},
 			false,
 		)

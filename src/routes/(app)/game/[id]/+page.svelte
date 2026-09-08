@@ -50,6 +50,22 @@
 		})();
 	});
 
+	async function playtimeChanged(newHours?: number): Promise<boolean> {
+		if (!data.gameId || !game) {
+			return false;
+		}
+		try {
+			game.watched = await updateWatched(game.watched, {
+				contentId: data.gameId,
+				contentType: "game",
+				playtimeHours: newHours ?? null,
+			});
+			return true;
+		} catch {
+			return false;
+		}
+	}
+
 	async function contentChanged(
 		newStatus?: WatchedStatus,
 		newRating?: number,
@@ -171,6 +187,7 @@
 				onThoughtsChanged={(newThoughts) => {
 					return contentChanged(undefined, undefined, newThoughts);
 				}}
+				onPlaytimeChanged={playtimeChanged}
 			/>
 		</div>
 

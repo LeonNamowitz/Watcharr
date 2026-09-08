@@ -52,6 +52,14 @@
 					return `Rating Changed to ${a.data} Stars`;
 				}
 				return "Rating Changed";
+			case "PLAYTIME_CHANGED":
+				if (a.data) {
+					const data = JSON.parse(a.data);
+					if (typeof data.hours === "number") {
+						return `Hours Played Changed to ${data.hours}`;
+					}
+				}
+				return "Hours Played Removed";
 			case "STATUS_CHANGED":
 				if (a.data) {
 					return `Status Changed to ${toFullTitleCase(a.data)}`;

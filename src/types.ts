@@ -66,7 +66,7 @@ export type Icon =
 export type Theme = "light" | "dark" | "system";
 
 export type WLDetailedViewOption =
-	"statusRating" | "lastWatched" | "dateAdded" | "dateModified";
+	"statusRating" | "progress" | "dateAdded" | "dateModified";
 
 export enum UserType {
 	Watcharr = 0,
@@ -143,6 +143,7 @@ export interface Watched {
 	status: WatchedStatus;
 	thoughts: string;
 	pinned: boolean;
+	playtimeHours?: number;
 
 	activity?: Activity[];
 	watchedSeasons?: WatchedSeason[];
@@ -163,6 +164,7 @@ export interface WatchedAddRequest {
 	contentType: SupportedMedia;
 	rating?: number;
 	status?: WatchedStatus;
+	playtimeHours?: number;
 }
 
 export interface WatchedUpdateRequest {
@@ -172,6 +174,8 @@ export interface WatchedUpdateRequest {
 	removeThoughts?: boolean;
 	pinned?: boolean;
 	letCountAsPlay?: boolean;
+	playtimeHours?: number;
+	removePlaytime?: boolean;
 }
 
 export interface WatchedUpdateResponse {
@@ -179,7 +183,13 @@ export interface WatchedUpdateResponse {
 }
 
 export type WatchedSort =
-	"DATEADDED" | "LASTCHANGED" | "LASTFIN" | "RATING" | "ALPHA" | "DATERELEASED";
+	| "DATEADDED"
+	| "LASTCHANGED"
+	| "LASTFIN"
+	| "RATING"
+	| "PLAYTIME"
+	| "ALPHA"
+	| "DATERELEASED";
 
 export type SortDirection = "asc" | "desc";
 

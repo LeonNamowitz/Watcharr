@@ -46,10 +46,10 @@
 		Status & Rating
 	</button>
 	<button
-		class={`plain ${store.wlDetailedView?.includes("lastWatched") ? "on" : ""}`}
-		onclick={() => detailClicked("lastWatched")}
+		class={`plain ${store.wlDetailedView?.includes("progress") ? "on" : ""}`}
+		onclick={() => detailClicked("progress")}
 	>
-		Watching Season
+		Progress
 	</button>
 	<button
 		class={`plain ${store.wlDetailedView?.includes("dateAdded") ? "on" : ""}`}

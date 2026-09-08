@@ -77,6 +77,12 @@
 		Rating
 	</button>
 	<button
+		class={`plain ${getDirectionClass("PLAYTIME")}`}
+		onclick={() => sortClicked("PLAYTIME")}
+	>
+		Playtime
+	</button>
+	<button
 		class={`plain ${getDirectionClass("ALPHA")}`}
 		onclick={() => sortClicked("ALPHA")}
 	>

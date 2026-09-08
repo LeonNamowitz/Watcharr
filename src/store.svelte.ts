@@ -16,7 +16,7 @@ import { toggleTheme } from "./lib/util/theme";
 export const defaultSort = ["DATEADDED", "DOWN"];
 export const defaultWLDetailedView: WLDetailedViewOption[] = [
 	"statusRating",
-	"lastWatched",
+	"progress",
 ];
 
 export type WatchedListPresetId = "watchlist" | "recentlyWatched";
@@ -400,7 +400,10 @@ function rehydrateStore() {
 	// Restore wlDetailedView
 	const wlDetailedViewR = localStorage.getItem("wlDetailedView");
 	if (wlDetailedViewR) {
-		_store.wlDetailedView = JSON.parse(wlDetailedViewR);
+		const restored = JSON.parse(wlDetailedViewR) as string[];
+		_store.wlDetailedView = restored.map((option) =>
+			option === "lastWatched" ? "progress" : option,
+		) as WLDetailedViewOption[];
 		console.debug(
 			"rehydrateStore: Restored wlDetailedView:",
 			$state.snapshot(store.wlDetailedView),

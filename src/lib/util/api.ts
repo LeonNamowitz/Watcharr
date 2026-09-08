@@ -63,8 +63,9 @@ export const optionalAuthReq = new Reqer(baseURL, true, false);
  */
 export interface UpdateWatchedOptions extends Omit<
 	WatchedUpdateRequest,
-	"removeThoughts"
+	"removeThoughts" | "removePlaytime" | "playtimeHours"
 > {
+	playtimeHours?: number | null;
 	/**
 	 * TMDB ID.
 	 */
@@ -83,12 +84,14 @@ async function _updateWatched(
 	thoughts?: string,
 	pinned?: boolean,
 	letCountAsPlay?: boolean,
+	playtimeHours?: number | null,
 ) {
 	if (
 		!status &&
 		!rating &&
 		typeof thoughts === "undefined" &&
-		typeof pinned === "undefined"
+		typeof pinned === "undefined" &&
+		typeof playtimeHours === "undefined"
 	) {
 		console.warn(
 			"_updateWatched: Nothing was provided, so nothing can be updated!!!!",
@@ -104,6 +107,11 @@ async function _updateWatched(
 	if (typeof letCountAsPlay !== "undefined") {
 		obj.letCountAsPlay = letCountAsPlay;
 	}
+	if (typeof playtimeHours === "number") {
+		obj.playtimeHours = playtimeHours;
+	} else if (playtimeHours === null) {
+		obj.removePlaytime = true;
+	}
 	const resp = await req.put<WatchedUpdateResponse>(
 		`/watched/${wEntry.id}`,
 		obj,
@@ -112,6 +120,9 @@ async function _updateWatched(
 	if (rating) wEntry.rating = rating;
 	if (typeof thoughts !== "undefined") wEntry.thoughts = thoughts;
 	if (typeof pinned !== "undefined") wEntry.pinned = pinned;
+	if (typeof playtimeHours !== "undefined") {
+		wEntry.playtimeHours = playtimeHours ?? undefined;
+	}
 	if (resp?.newActivity && resp?.newActivity?.id) {
 		if (wEntry.activity && wEntry.activity.length > 0) {
 			wEntry.activity.push(resp.newActivity);
@@ -153,6 +164,7 @@ export async function updateWatched(
 					opts.thoughts,
 					opts.pinned,
 					opts.letCountAsPlay,
+					opts.playtimeHours,
 				);
 				notify({ id: nid, text: `Saved!`, type: "success" });
 			} catch (err) {
@@ -170,6 +182,7 @@ export async function updateWatched(
 			contentType: opts.contentType,
 			status: opts.status,
 			rating: opts.rating,
+			playtimeHours: opts.playtimeHours ?? undefined,
 		};
 		if (opts.contentType === "movie" || opts.contentType === "tv") {
 			reqBody.tmdbId = opts.contentId;

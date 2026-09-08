@@ -23,6 +23,7 @@ const (
 	WatchedSortLastChanged  WatchedSort = "LASTCHANGED"
 	WatchedSortLastFinished WatchedSort = "LASTFIN"
 	WatchedSortRating       WatchedSort = "RATING"
+	WatchedSortPlaytime     WatchedSort = "PLAYTIME"
 	WatchedSortAlphabetical WatchedSort = "ALPHA"
 	WatchedSortDateReleased WatchedSort = "DATERELEASED"
 )
@@ -82,13 +83,15 @@ type WatchedDto struct {
 	// Thoughts aren't always included (not needed on watched list pages
 	// & on public pages because they could be private).
 	Thoughts string `json:"thoughts,omitempty"`
-	// Watching Season extra detail for list.
+	// Watching season or game playtime progress for list posters.
 	WatchingSeason   string                  `json:"watchingSeason,omitempty"`
 	Activity         []entity.Activity       `json:"activity,omitempty"`
 	WatchedSeasons   []entity.WatchedSeason  `json:"watchedSeasons,omitempty"`
 	WatchedEpisodes  []entity.WatchedEpisode `json:"watchedEpisodes,omitempty"`
 	Tags             []entity.Tag            `json:"tags,omitempty"`
 	LastViewedSeason *int                    `json:"lastViewedSeason,omitempty"`
+	// User-entered whole hours played.
+	PlaytimeHours *uint `json:"playtimeHours,omitempty"`
 	// Amount of plays this media has, calculated from activity.
 	Plays int `json:"plays,omitempty"`
 }
@@ -97,12 +100,13 @@ type WatchedDto struct {
 // Note: If this is updated, ensure whatever uses this still makes sense.
 func NewWatchedDtoWithBaseProps(w *entity.Watched) WatchedDto {
 	return WatchedDto{
-		ID:        w.ID,
-		CreatedAt: w.CreatedAt,
-		UpdatedAt: w.UpdatedAt,
-		Status:    w.Status,
-		Rating:    w.Rating,
-		Pinned:    w.Pinned,
+		ID:            w.ID,
+		CreatedAt:     w.CreatedAt,
+		UpdatedAt:     w.UpdatedAt,
+		Status:        w.Status,
+		Rating:        w.Rating,
+		Pinned:        w.Pinned,
+		PlaytimeHours: w.PlaytimeHours,
 	}
 }
 
@@ -173,6 +177,7 @@ func NewWatchedDtoForContentPage(w *entity.Watched) WatchedDto {
 	dto.WatchedEpisodes = w.WatchedEpisodes
 	dto.Tags = w.Tags
 	dto.LastViewedSeason = w.LastViewedSeason
+	dto.PlaytimeHours = w.PlaytimeHours
 	dto.Plays = getPlaysFromActivity(w.Activity)
 
 	return dto
@@ -230,6 +235,8 @@ type WatchedAddRequest struct {
 	Status   entity.WatchedStatus `json:"status"`
 	Rating   float64              `json:"rating" binding:"max=10"`
 	Thoughts string               `json:"thoughts"`
+	// Only supported for game entries.
+	PlaytimeHours *uint `json:"playtimeHours"`
 	// Pass a watched date and we will set the CreatedAt (and initial UpdatedAt)
 	// properties for this watched entry to this specific date.
 	WatchedDate time.Time `json:"watchedDate,omitempty"`
@@ -242,6 +249,9 @@ type WatchedUpdateRequest struct {
 	Thoughts       string               `json:"thoughts" `
 	RemoveThoughts bool                 `json:"removeThoughts"`
 	Pinned         *bool                `json:"pinned" `
+	// Only supported for game entries. A pointer lets zero be set explicitly.
+	PlaytimeHours  *uint `json:"playtimeHours"`
+	RemovePlaytime bool  `json:"removePlaytime"`
 	// Allow the added activity count as play?
 	// If the activity was going to count, this can stop it.
 	LetCountAsPlay *bool `json:"letCountAsPlay"`
@@ -255,6 +265,8 @@ func (w WatchedUpdateRequest) Valid() error {
 		w.Rating == 0 &&
 		(w.Thoughts == "" && !w.RemoveThoughts) &&
 		w.Pinned == nil &&
+		w.PlaytimeHours == nil &&
+		!w.RemovePlaytime &&
 		w.LetCountAsPlay == nil {
 		// No properties are set, so this struct is not valid.
 		return errors.New("no properties provided")
@@ -264,6 +276,9 @@ func (w WatchedUpdateRequest) Valid() error {
 	}
 	if w.Rating < 0 || w.Rating > 10 {
 		return errors.New("rating can only be a value from 0-10")
+	}
+	if w.PlaytimeHours != nil && w.RemovePlaytime {
+		return errors.New("playtime cannot be set and removed in the same request")
 	}
 	return nil
 }

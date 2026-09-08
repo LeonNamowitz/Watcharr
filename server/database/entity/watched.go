@@ -30,9 +30,12 @@ type Watched struct {
 	// float so we can support decimal ratings.
 	// Ratings should still always be saved as out of 10.0,
 	// so they can be viewed with any ratings setting in the client.
-	Rating          float64          `json:"rating" gorm:"type:numeric(2,1)"`
-	Thoughts        string           `json:"thoughts"`
-	Pinned          bool             `json:"pinned" gorm:"default:false;not null"`
+	Rating   float64 `json:"rating" gorm:"type:numeric(2,1)"`
+	Thoughts string  `json:"thoughts"`
+	Pinned   bool    `json:"pinned" gorm:"default:false;not null"`
+	// User-entered playtime for games. Nullable so existing entries and an
+	// explicit value of zero remain distinguishable.
+	PlaytimeHours   *uint            `json:"playtimeHours,omitempty"`
 	UserID          uint             `json:"-" gorm:"uniqueIndex:usernctnidx;uniqueIndex:userngamidx"`
 	ContentID       *int             `json:"-" gorm:"uniqueIndex:usernctnidx"`
 	Content         *Content         `json:"content,omitempty"`

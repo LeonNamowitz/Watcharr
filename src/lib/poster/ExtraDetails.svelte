@@ -17,7 +17,7 @@
 		status,
 		dateAdded,
 		dateModified,
-		lastWatched,
+		progress,
 	}: PosterExtraDetails = $props();
 
 	let isUsingThumbs = $derived(
@@ -60,10 +60,10 @@
 						{formatDate(Date.parse(dateModified))}
 					</span>
 				</span>
-			{/if}{#if lastWatched && store.wlDetailedView.includes("lastWatched")}
-				<span title="Latest season watched">
+			{/if}{#if progress && store.wlDetailedView.includes("progress")}
+				<span title="Watching progress">
 					<i><Icon i="play" wh={15} /></i>
-					<span>{lastWatched}</span>
+					<span>{progress}</span>
 				</span>
 			{/if}{#if store.wlDetailedView.includes("statusRating")}
 				<span class="status-rating" title="Status and Rating">

@@ -13,6 +13,7 @@ var (
 	ADDED_WATCHED               ActivityType = "ADDED_WATCHED"
 	REMOVED_WATCHED             ActivityType = "REMOVED_WATCHED"
 	RATING_CHANGED              ActivityType = "RATING_CHANGED"
+	PLAYTIME_CHANGED            ActivityType = "PLAYTIME_CHANGED"
 	STATUS_CHANGED              ActivityType = "STATUS_CHANGED"
 	STATUS_CHANGED_AUTO         ActivityType = "STATUS_CHANGED_AUTO"
 	THOUGHTS_CHANGED            ActivityType = "THOUGHTS_CHANGED"

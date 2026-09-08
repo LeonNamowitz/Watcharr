@@ -176,6 +176,20 @@ func refineSort(
 			Order(obc(clause.Column{Name: "q.a_sort_by_date"}))
 	case domain.WatchedSortRating:
 		db.Order(obc(clause.Column{Name: "watcheds.rating"}))
+	case domain.WatchedSortPlaytime:
+		// Only games with recorded playtime participate in this sort. Other
+		// media, and games without playtime, retain their insertion order.
+		db.
+			Order(clause.OrderByColumn{
+				Column: clause.Column{
+					Name: "CASE WHEN watcheds.game_id IS NOT NULL AND watcheds.playtime_hours IS NOT NULL THEN 0 ELSE 1 END",
+					Raw:  true,
+				},
+			}).
+			Order(obc(clause.Column{Name: "watcheds.playtime_hours"})).
+			Order(clause.OrderByColumn{
+				Column: clause.Column{Name: "watcheds.id"},
+			})
 	case domain.WatchedSortAlphabetical:
 		db.Order(obc(clause.Column{
 			Name: "COALESCE(`Content`.`title`, `Game`.`name`)",

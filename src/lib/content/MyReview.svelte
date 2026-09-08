@@ -3,6 +3,7 @@
 	import Rating from "../rating/Rating.svelte";
 	import Status from "../Status.svelte";
 	import MyThoughts from "./MyThoughts.svelte";
+	import Playtime from "./Playtime.svelte";
 
 	interface Props {
 		watched?: Watched;
@@ -10,6 +11,7 @@
 		onRatingChanged: (newRating: number) => Promise<boolean>;
 		onStatusChanged: (newStatus: WatchedStatus) => Promise<boolean>;
 		onThoughtsChanged: (newThoughts: string) => Promise<boolean>;
+		onPlaytimeChanged?: (newHours?: number) => Promise<boolean>;
 	}
 
 	let {
@@ -18,6 +20,7 @@
 		onRatingChanged,
 		onStatusChanged,
 		onThoughtsChanged,
+		onPlaytimeChanged,
 	}: Props = $props();
 </script>
 
@@ -25,6 +28,9 @@
 	<Rating rating={watched?.rating} onChange={onRatingChanged} />
 	<Status status={watched?.status} onChange={onStatusChanged} />
 	{#if watched}
+		{#if onPlaytimeChanged}
+			<Playtime hours={watched.playtimeHours} onChange={onPlaytimeChanged} />
+		{/if}
 		<MyThoughts
 			{contentTitle}
 			thoughts={watched?.thoughts}
