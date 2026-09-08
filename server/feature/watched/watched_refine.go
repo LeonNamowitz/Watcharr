@@ -122,7 +122,24 @@ func refineSort(
 				Raw:  true,
 			}))
 	case domain.WatchedSortLastChanged:
-		db.Order(obc(clause.Column{Name: "watcheds.updated_at"}))
+		db.
+			// Match the date shown in the activity feed, including custom dates.
+			// Keep updated_at as the fallback for entries without activity.
+			Joins(`LEFT JOIN (
+					SELECT
+						watched_id AS a_watched_id,
+						MAX(COALESCE(custom_date, created_at)) AS a_last_changed
+					FROM activities
+					WHERE
+						deleted_at IS NULL
+						AND user_id = ?
+					GROUP BY watched_id
+				) last_changed_activity ON last_changed_activity.a_watched_id = watcheds.id`,
+				userId).
+			Order(obc(clause.Column{
+				Name: "COALESCE(last_changed_activity.a_last_changed, watcheds.updated_at)",
+				Raw:  true,
+			}))
 	case domain.WatchedSortLastFinished:
 		db.
 			// This join looks for the latest activity that counts as a play

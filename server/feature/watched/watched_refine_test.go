@@ -105,3 +105,110 @@ func TestGetWatchedPageDateAddedUsesActivityCustomDate(t *testing.T) {
 		"Edited activity",
 	})
 }
+
+func TestGetWatchedPageLastChangedUsesLatestActivityDate(t *testing.T) {
+	db := testutil.SetupDB(t)
+	user := entity.User{Username: "owner", Password: "password"}
+	mustCreate(t, db.Create(&user).Error)
+
+	contents := []entity.Content{
+		{TmdbID: 11, Title: "Pinned", Type: entity.MOVIE},
+		{TmdbID: 12, Title: "Backdated activity", Type: entity.MOVIE},
+		{TmdbID: 13, Title: "Fallback", Type: entity.MOVIE},
+		{TmdbID: 14, Title: "Recent activity", Type: entity.MOVIE},
+	}
+	for i := range contents {
+		mustCreate(t, db.Create(&contents[i]).Error)
+	}
+
+	date := func(value string) time.Time {
+		t.Helper()
+		parsed, err := time.Parse(time.DateOnly, value)
+		if err != nil {
+			t.Fatalf("parsing test date %q failed: %v", value, err)
+		}
+		return parsed
+	}
+
+	updatedDates := []time.Time{
+		date("2010-01-01"),
+		date("2026-01-01"),
+		date("2020-01-01"),
+		date("2019-01-01"),
+	}
+	watched := make([]entity.Watched, len(contents))
+	for i := range watched {
+		watched[i] = entity.Watched{
+			GormModel: dbmodel.GormModel{
+				CreatedAt: updatedDates[i],
+				UpdatedAt: updatedDates[i],
+			},
+			UserID:    user.ID,
+			ContentID: &contents[i].ID,
+			Status:    entity.FINISHED,
+			Pinned:    i == 0,
+		}
+		mustCreate(t, db.Create(&watched[i]).Error)
+	}
+
+	activities := []entity.Activity{
+		{
+			UserID:     user.ID,
+			WatchedID:  watched[0].ID,
+			Type:       entity.ADDED_WATCHED,
+			CustomDate: timePtr(date("2000-01-01")),
+		},
+		{
+			UserID:     user.ID,
+			WatchedID:  watched[1].ID,
+			Type:       entity.ADDED_WATCHED,
+			CustomDate: timePtr(date("2010-01-01")),
+		},
+		{
+			UserID:     user.ID,
+			WatchedID:  watched[1].ID,
+			Type:       entity.RATING_CHANGED,
+			CustomDate: timePtr(date("2017-12-01")),
+		},
+		{
+			UserID:     user.ID,
+			WatchedID:  watched[3].ID,
+			Type:       entity.ADDED_WATCHED,
+			CustomDate: timePtr(date("2018-01-01")),
+		},
+		{
+			UserID:     user.ID,
+			WatchedID:  watched[3].ID,
+			Type:       entity.STATUS_CHANGED,
+			CustomDate: timePtr(date("2024-01-01")),
+		},
+	}
+	for i := range activities {
+		mustCreate(t, db.Create(&activities[i]).Error)
+	}
+
+	service := NewService(db, nil, nil, nil, watchedSortUserProvider{})
+	page, err := service.GetWatchedPage(
+		user.ID,
+		util.PaginationParams{Page: 1, Limit: 10},
+		domain.WatchedGetPageRequest{
+			Sort:    domain.WatchedSortLastChanged,
+			SortDir: domain.WatchedSortDirDesc,
+		},
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("last-changed page failed: %v", err)
+	}
+
+	assertWatchedNames(t, page.Results, []string{
+		"Pinned",
+		"Recent activity",
+		"Fallback",
+		"Backdated activity",
+	})
+}
+
+func timePtr(value time.Time) *time.Time {
+	return &value
+}
