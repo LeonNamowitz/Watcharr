@@ -27,6 +27,8 @@ func TestGetWatchedPageDateAddedUsesActivityCustomDate(t *testing.T) {
 		{TmdbID: 2, Title: "Edited activity", Type: entity.MOVIE},
 		{TmdbID: 3, Title: "Fallback", Type: entity.MOVIE},
 		{TmdbID: 4, Title: "Recent activity", Type: entity.MOVIE},
+		{TmdbID: 5, Title: "Imported custom", Type: entity.MOVIE},
+		{TmdbID: 6, Title: "Imported fallback", Type: entity.MOVIE},
 	}
 	for i := range contents {
 		mustCreate(t, db.Create(&contents[i]).Error)
@@ -46,6 +48,8 @@ func TestGetWatchedPageDateAddedUsesActivityCustomDate(t *testing.T) {
 		date("2026-01-01"),
 		date("2020-01-01"),
 		date("2019-01-01"),
+		date("2026-02-01"),
+		date("2023-01-01"),
 	}
 	watched := make([]entity.Watched, len(contents))
 	for i := range watched {
@@ -83,6 +87,19 @@ func TestGetWatchedPageDateAddedUsesActivityCustomDate(t *testing.T) {
 		Type:       entity.STATUS_CHANGED,
 		CustomDate: &otherActivityDate,
 	}).Error)
+	importedDate := date("2018-01-01")
+	mustCreate(t, db.Create(&entity.Activity{
+		UserID:     user.ID,
+		WatchedID:  watched[4].ID,
+		Type:       entity.IMPORTED_WATCHED,
+		CustomDate: &importedDate,
+	}).Error)
+	// Without a custom date, the import time must not replace created_at.
+	mustCreate(t, db.Create(&entity.Activity{
+		UserID:    user.ID,
+		WatchedID: watched[5].ID,
+		Type:      entity.IMPORTED_WATCHED,
+	}).Error)
 
 	service := NewService(db, nil, nil, nil, watchedSortUserProvider{})
 	page, err := service.GetWatchedPage(
@@ -101,7 +118,9 @@ func TestGetWatchedPageDateAddedUsesActivityCustomDate(t *testing.T) {
 	assertWatchedNames(t, page.Results, []string{
 		"Pinned",
 		"Recent activity",
+		"Imported fallback",
 		"Fallback",
+		"Imported custom",
 		"Edited activity",
 	})
 }
