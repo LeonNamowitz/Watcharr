@@ -74,6 +74,7 @@ func (r *Router) GetCandidates(c *gin.Context) {
 		uint(tagID),
 		suggestionKind(c.DefaultQuery("kind", string(suggestionKindAll))),
 		criterionID,
+		c.Query("language"),
 		c.Query("q"),
 		c.MustGet("paginationParams").(util.PaginationParams),
 	)

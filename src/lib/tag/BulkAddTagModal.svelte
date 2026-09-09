@@ -13,6 +13,8 @@
 		type Tag,
 		type TagCandidate,
 		type TagCandidateMeta,
+		type TagLanguageSuggestionOption,
+		type TagSuggestionOption,
 		type TagSuggestionKind,
 		type TagSuggestionOptionsResponse,
 	} from "@/types";
@@ -26,8 +28,11 @@
 	let { tag, onClose, onAdded }: Props = $props();
 
 	let mode: "browse" | "suggestions" = $state("browse");
-	let source: "genre" | "company" | "future" = $state("genre");
+	let source: "genre" | "keyword" | "language" | "collection" | "future" =
+		$state("genre");
 	let criterionId = $state("");
+	let languageCode = $state("");
+	let facetQuery = $state("");
 	let options: TagSuggestionOptionsResponse | undefined = $state();
 	let candidates: TagCandidate[] = $state([]);
 	const selectedIds = new SvelteSet<number>();
@@ -43,9 +48,72 @@
 	let error = $state("");
 	let requestVersion = 0;
 
-	let activeOptions = $derived(
-		source === "genre" ? options?.genres : options?.companies,
+	const featuredNames = {
+		genre: ["animation", "documentary"],
+		keyword: [
+			"musical",
+			"based on novel or book",
+			"based on true story",
+			"time travel",
+		],
+	};
+
+	let activeOptions: TagSuggestionOption[] = $derived(
+		source === "genre"
+			? (options?.genres ?? [])
+			: source === "keyword"
+				? (options?.keywords ?? [])
+				: source === "collection"
+					? (options?.collections ?? [])
+					: [],
 	);
+	let filteredOptions = $derived(
+		activeOptions.filter((option) =>
+			option.name.toLowerCase().includes(facetQuery.trim().toLowerCase()),
+		),
+	);
+	let featuredOptions = $derived.by(() => {
+		if (source !== "genre" && source !== "keyword") return [];
+		const names = featuredNames[source];
+		return names
+			.map((name) =>
+				activeOptions.find((option) => option.name.toLowerCase() === name),
+			)
+			.filter((option): option is TagSuggestionOption => option !== undefined);
+	});
+	function criterionIsMissing() {
+		if (mode !== "suggestions" || source === "future") return false;
+		return source === "language" ? !languageCode : !criterionId;
+	}
+
+	function sourceLabel() {
+		switch (source) {
+			case "genre":
+				return "genre";
+			case "keyword":
+				return "keyword";
+			case "language":
+				return "original language";
+			case "collection":
+				return "TMDB collection";
+			default:
+				return "source";
+		}
+	}
+
+	function languageLabel(option: TagLanguageSuggestionOption) {
+		try {
+			const localized = new Intl.DisplayNames(undefined, {
+				type: "language",
+			}).of(option.code);
+			if (localized && localized.toLowerCase() !== option.code.toLowerCase()) {
+				return localized;
+			}
+		} catch {
+			// Use the API-provided English name below.
+		}
+		return option.name || option.code.toUpperCase();
+	}
 
 	function posterSource(candidate: TagCandidate) {
 		const media = candidate.media;
@@ -101,7 +169,7 @@
 
 	async function loadCandidates(nextPage = 1) {
 		const version = ++requestVersion;
-		if (mode === "suggestions" && source !== "future" && !criterionId) {
+		if (criterionIsMissing()) {
 			candidates = [];
 			totalResults = 0;
 			totalPages = 0;
@@ -120,8 +188,14 @@
 					limit: 30,
 					kind: currentKind(),
 					criterionId:
-						mode === "suggestions" && source !== "future"
+						mode === "suggestions" &&
+						source !== "future" &&
+						source !== "language"
 							? Number(criterionId)
+							: undefined,
+					language:
+						mode === "suggestions" && source === "language"
+							? languageCode
 							: undefined,
 					q: activeQuery || undefined,
 				},
@@ -155,6 +229,8 @@
 	async function changeSource(event: Event) {
 		source = (event.currentTarget as HTMLSelectElement).value as typeof source;
 		criterionId = "";
+		languageCode = "";
+		facetQuery = "";
 		page = 1;
 		candidateMeta = undefined;
 		await loadCandidates();
@@ -162,6 +238,16 @@
 
 	async function changeCriterion(event: Event) {
 		criterionId = (event.currentTarget as HTMLSelectElement).value;
+		await loadCandidates(1);
+	}
+
+	async function selectCriterion(id: number) {
+		criterionId = String(id);
+		await loadCandidates(1);
+	}
+
+	async function changeLanguage(event: Event) {
+		languageCode = (event.currentTarget as HTMLSelectElement).value;
 		await loadCandidates(1);
 	}
 
@@ -249,13 +335,15 @@
 					<span>Match using</span>
 					<select value={source} onchange={changeSource}>
 						<option value="genre">Genre</option>
-						<option value="company">Studio</option>
+						<option value="keyword">Keyword</option>
+						<option value="language">Original language</option>
+						<option value="collection">TMDB collection</option>
 						<option value="future">Future release</option>
 					</select>
 				</label>
-				{#if source !== "future"}
+				{#if source === "genre"}
 					<label>
-						<span>{source === "genre" ? "Genre" : "Studio"}</span>
+						<span>Genre</span>
 						<select
 							value={criterionId}
 							onchange={changeCriterion}
@@ -269,15 +357,75 @@
 							{/each}
 						</select>
 					</label>
+				{:else if source === "language"}
+					<label>
+						<span>Original language</span>
+						<select
+							value={languageCode}
+							onchange={changeLanguage}
+							disabled={loadingOptions}
+						>
+							<option value="">Choose one...</option>
+							{#each options?.languages ?? [] as option (option.code)}
+								<option value={option.code}>
+									{languageLabel(option)} ({option.count})
+								</option>
+							{/each}
+						</select>
+					</label>
 				{:else if options}
-					<span class="future-count">
-						{options.futureReleaseCount} future release{options.futureReleaseCount ===
-						1
-							? ""
-							: "s"} available
-					</span>
+					{#if source === "future"}
+						<span class="future-count">
+							{options.futureReleaseCount} future release{options.futureReleaseCount ===
+							1
+								? ""
+								: "s"} available
+						</span>
+					{/if}
 				{/if}
 			</div>
+			{#if featuredOptions.length > 0}
+				<div class="featured-facets" aria-label={`Featured ${source} options`}>
+					<span>Quick picks</span>
+					<div>
+						{#each featuredOptions as option (option.id)}
+							<button
+								type="button"
+								class:active={criterionId === String(option.id)}
+								onclick={() => selectCriterion(option.id)}
+							>
+								{option.name} ({option.count})
+							</button>
+						{/each}
+					</div>
+				</div>
+			{/if}
+			{#if source === "keyword" || source === "collection"}
+				<div class="facet-picker">
+					<label for="facet-search">Find a {sourceLabel()}</label>
+					<input
+						id="facet-search"
+						type="search"
+						placeholder={`Search ${source === "keyword" ? "keywords" : "collections"}`}
+						bind:value={facetQuery}
+					/>
+					<div class="facet-options">
+						{#each filteredOptions as option (option.id)}
+							<button
+								type="button"
+								class:active={criterionId === String(option.id)}
+								onclick={() => selectCriterion(option.id)}
+							>
+								<span>{option.name}</span><small>{option.count}</small>
+							</button>
+						{:else}
+							<p>
+								No matching {source === "keyword" ? "keywords" : "collections"}.
+							</p>
+						{/each}
+					</div>
+				</div>
+			{/if}
 			{#if loadingOptions}
 				<div class="inline-loading"><Spinner /></div>
 			{:else if options?.incomplete}
@@ -354,8 +502,8 @@
 						</span>
 					</label>
 				{/each}
-			{:else if mode === "suggestions" && source !== "future" && !criterionId}
-				<p class="empty">Choose an exact {source} to see suggestions.</p>
+			{:else if criterionIsMissing()}
+				<p class="empty">Choose an exact {sourceLabel()} to see suggestions.</p>
 			{:else}
 				<p class="empty">No untagged candidates found.</p>
 			{/if}
@@ -431,6 +579,87 @@
 		.future-count {
 			padding: 10px 0;
 			font-weight: normal;
+		}
+	}
+
+	.featured-facets,
+	.facet-picker {
+		display: flex;
+		flex-flow: column;
+		gap: 6px;
+	}
+
+	.featured-facets > span,
+	.facet-picker > label {
+		font-size: 13px;
+		font-weight: bold;
+	}
+
+	.featured-facets > div {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 7px;
+
+		button {
+			width: max-content;
+			padding: 6px 10px;
+			border: 1px solid color-mix(in srgb, $text-color 45%, transparent);
+			border-radius: 999px;
+			background: transparent;
+			color: $text-color;
+
+			&.active {
+				border-color: $text-color;
+				background: color-mix(in srgb, $text-color 14%, transparent);
+			}
+		}
+	}
+
+	.facet-picker input {
+		width: 100%;
+	}
+
+	.facet-options {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 5px;
+		max-height: 150px;
+		overflow-y: auto;
+
+		button {
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			gap: 8px;
+			width: 100%;
+			padding: 7px 9px;
+			border: 1px solid color-mix(in srgb, $text-color 30%, transparent);
+			border-radius: 5px;
+			background: transparent;
+			color: $text-color;
+			text-align: left;
+
+			span {
+				overflow: hidden;
+				text-overflow: ellipsis;
+				white-space: nowrap;
+			}
+
+			small {
+				opacity: 0.7;
+			}
+
+			&.active {
+				border-color: $text-color;
+				background: color-mix(in srgb, $text-color 14%, transparent);
+			}
+		}
+
+		p {
+			grid-column: 1 / -1;
+			margin: 8px 0;
+			font-size: 13px;
+			opacity: 0.7;
 		}
 	}
 
@@ -572,7 +801,8 @@
 			min-height: 75dvh;
 		}
 
-		.candidate-list {
+		.candidate-list,
+		.facet-options {
 			grid-template-columns: 1fr;
 		}
 

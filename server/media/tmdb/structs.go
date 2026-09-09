@@ -359,20 +359,28 @@ func (t *ContentDetails) AsMedia() domain.Media {
 
 type MovieDetails struct {
 	ContentDetails
-	Adult               bool   `json:"adult"`
-	BelongsToCollection any    `json:"belongs_to_collection"`
-	Budget              uint32 `json:"budget"`
-	ImdbID              string `json:"imdb_id"`
-	OriginalTitle       string `json:"original_title"`
-	ReleaseDate         string `json:"release_date"`
-	Revenue             uint32 `json:"revenue"`
-	Runtime             uint32 `json:"runtime"`
-	Title               string `json:"title"`
-	Video               bool   `json:"video"`
+	Adult               bool             `json:"adult"`
+	BelongsToCollection *MovieCollection `json:"belongs_to_collection"`
+	Budget              uint32           `json:"budget"`
+	ImdbID              string           `json:"imdb_id"`
+	OriginalTitle       string           `json:"original_title"`
+	ReleaseDate         string           `json:"release_date"`
+	Revenue             uint32           `json:"revenue"`
+	Runtime             uint32           `json:"runtime"`
+	Title               string           `json:"title"`
+	Video               bool             `json:"video"`
 
 	// Extra items because we use `append_to_response` on the request
 	ExternalIds ExternalIdsMovie `json:"external_ids"`
+	Keywords    MovieKeywords    `json:"keywords"`
 	Similar     MovieSimilar     `json:"similar"`
+}
+
+type MovieCollection struct {
+	ID           int    `json:"id"`
+	Name         string `json:"name"`
+	PosterPath   string `json:"poster_path"`
+	BackdropPath string `json:"backdrop_path"`
 }
 
 func (t *MovieDetails) AsMedia() domain.Media {
@@ -692,7 +700,7 @@ func (t *PersonDetails) AsPersonDetailsResponse() domain.PersonDetailsResponse {
 //
 
 type PersonCombinedCredits struct {
-	ID   int                                   `json:"id"`
+	ID   int                               `json:"id"`
 	Cast []PersonCombinedCreditsCastResult `json:"cast"`
 	Crew []PersonCombinedCreditsCrewResult `json:"crew"`
 }
@@ -1099,12 +1107,17 @@ type ExternalIdsShow struct {
 	TvrageID    int    `json:"tvrage_id"`
 }
 
+type Keyword struct {
+	Name string `json:"name"`
+	ID   int    `json:"id"`
+}
+
 type Keywords struct {
-	// ID      int `json:"id"`
-	Results []struct {
-		Name string `json:"name"`
-		ID   int    `json:"id"`
-	} `json:"results"`
+	Results []Keyword `json:"results"`
+}
+
+type MovieKeywords struct {
+	Keywords []Keyword `json:"keywords"`
 }
 
 type Regions struct {

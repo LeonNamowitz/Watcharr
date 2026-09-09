@@ -889,7 +889,8 @@ export interface TagAddRequest {
 	bgColor: string;
 }
 
-export type TagSuggestionKind = "all" | "genre" | "company" | "future";
+export type TagSuggestionKind =
+	"all" | "genre" | "keyword" | "language" | "collection" | "future";
 
 export interface TagSuggestionOption {
 	id: number;
@@ -897,9 +898,17 @@ export interface TagSuggestionOption {
 	count: number;
 }
 
+export interface TagLanguageSuggestionOption {
+	code: string;
+	name: string;
+	count: number;
+}
+
 export interface TagSuggestionOptionsResponse {
 	genres: TagSuggestionOption[];
-	companies: TagSuggestionOption[];
+	keywords: TagSuggestionOption[];
+	languages: TagLanguageSuggestionOption[];
+	collections: TagSuggestionOption[];
 	futureReleaseCount: number;
 	incomplete: boolean;
 	skippedCount: number;
