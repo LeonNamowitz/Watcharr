@@ -19,8 +19,8 @@ type suggestionTMDB struct {
 }
 
 func (p *suggestionTMDB) MovieDetails(options tmdb.MovieDetailsOptions) (tmdb.MovieDetails, error) {
-	if options.Params["append_to_response"] != "keywords" {
-		return tmdb.MovieDetails{}, errors.New("keywords were not requested")
+	if options.Params["append_to_response"] != "keywords,credits" {
+		return tmdb.MovieDetails{}, errors.New("keywords and credits were not requested")
 	}
 	if p.failMovie[options.ID] {
 		return tmdb.MovieDetails{}, errors.New("movie lookup failed")
@@ -29,8 +29,8 @@ func (p *suggestionTMDB) MovieDetails(options tmdb.MovieDetailsOptions) (tmdb.Mo
 }
 
 func (p *suggestionTMDB) ShowDetails(options tmdb.ShowDetailsOptions) (tmdb.ShowDetails, error) {
-	if options.Params["append_to_response"] != "keywords" {
-		return tmdb.ShowDetails{}, errors.New("keywords were not requested")
+	if options.Params["append_to_response"] != "keywords,aggregate_credits" {
+		return tmdb.ShowDetails{}, errors.New("keywords and aggregate credits were not requested")
 	}
 	if p.failShow[options.ID] {
 		return tmdb.ShowDetails{}, errors.New("show lookup failed")
@@ -90,11 +90,30 @@ func TestSuggestionsUseExactMetadataAndPreservePartialResults(t *testing.T) {
 	addGenre(&movie.ContentDetails, 99, "Documentary")
 	addGenre(&movie.ContentDetails, 16, "Animation")
 	movie.Keywords.Keywords = []tmdb.Keyword{{ID: 4344, Name: "musical"}}
+	movie.Credits.Crew = []tmdb.ContentCreditsCrew{
+		{ID: 1, Name: "Hans Zimmer", Job: originalMusicComposerJob},
+		{ID: 2, Name: "Soundtrack Performer", Job: "Musician"},
+	}
 	show := tmdb.ShowDetails{Name: "Music Show", FirstAirDate: "2026-12-01"}
 	show.ID = 20
 	show.OriginalLanguage = "ja"
 	addGenre(&show.ContentDetails, 10402, "Music")
 	show.Keywords.Results = []tmdb.Keyword{{ID: 4379, Name: "time travel"}}
+	show.AggregateCredits.Crew = []tmdb.AggregateCreditsCrew{
+		{
+			ID:   3,
+			Name: "Ludwig Göransson",
+			Jobs: []tmdb.AggregateCreditsJob{
+				{Job: originalMusicComposerJob, EpisodeCount: 10},
+				{Job: originalMusicComposerJob, EpisodeCount: 2},
+			},
+		},
+		{
+			ID:   4,
+			Name: "Music Supervisor",
+			Jobs: []tmdb.AggregateCreditsJob{{Job: "Music Supervisor", EpisodeCount: 10}},
+		},
+	}
 	collection := tmdb.MovieDetails{Title: "Collection Film"}
 	collection.ID = 25
 	collection.OriginalLanguage = "en"
@@ -124,6 +143,9 @@ func TestSuggestionsUseExactMetadataAndPreservePartialResults(t *testing.T) {
 	if len(options.Keywords) != 3 || options.Keywords[0].Name != "based on true story" || options.Keywords[1].Name != "musical" || options.Keywords[2].Name != "time travel" {
 		t.Fatalf("keywords = %#v", options.Keywords)
 	}
+	if len(options.Composers) != 2 || options.Composers[0].Name != "Hans Zimmer" || options.Composers[1].Name != "Ludwig Göransson" {
+		t.Fatalf("composers = %#v", options.Composers)
+	}
 	if len(options.Languages) != 2 || options.Languages[0].Name != "English" || options.Languages[0].Count != 2 || options.Languages[1].Name != "Japanese" {
 		t.Fatalf("languages = %#v", options.Languages)
 	}
@@ -151,6 +173,14 @@ func TestSuggestionsUseExactMetadataAndPreservePartialResults(t *testing.T) {
 	}
 	if len(keyword.Results) != 1 || keyword.Results[0].Media.Name != "Animated Musical" || keyword.Results[0].Reason != "Keyword: musical" {
 		t.Fatalf("keyword candidates = %#v", keyword.Results)
+	}
+
+	composer, err := service.GetCandidates(user.ID, tag.ID, suggestionKindComposer, 3, "", "", util.PaginationParams{Page: 1, Limit: 10})
+	if err != nil {
+		t.Fatalf("composer candidates failed: %v", err)
+	}
+	if len(composer.Results) != 1 || composer.Results[0].Media.Name != "Music Show" || composer.Results[0].Reason != "Composer: Ludwig Göransson" {
+		t.Fatalf("composer candidates = %#v", composer.Results)
 	}
 
 	languageCandidates, err := service.GetCandidates(user.ID, tag.ID, suggestionKindLanguage, 0, "en", "", util.PaginationParams{Page: 1, Limit: 10})
@@ -208,7 +238,7 @@ func TestSuggestionOptionsAllowLibrariesWithoutTMDBContent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("game-only suggestions failed: %v", err)
 	}
-	if len(options.Genres) != 0 || len(options.Keywords) != 0 || len(options.Languages) != 0 || len(options.Collections) != 0 || options.FutureReleaseCount != 0 {
+	if len(options.Genres) != 0 || len(options.Keywords) != 0 || len(options.Composers) != 0 || len(options.Languages) != 0 || len(options.Collections) != 0 || options.FutureReleaseCount != 0 {
 		t.Fatalf("game-only suggestions = %#v", options)
 	}
 }

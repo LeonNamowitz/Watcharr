@@ -28,7 +28,8 @@
 	let { tag, onClose, onAdded }: Props = $props();
 
 	let mode: "browse" | "suggestions" = $state("browse");
-	let source: "genre" | "keyword" | "language" | "collection" | "future" =
+	let source:
+		"genre" | "keyword" | "composer" | "language" | "collection" | "future" =
 		$state("genre");
 	let criterionId = $state("");
 	let languageCode = $state("");
@@ -63,9 +64,11 @@
 			? (options?.genres ?? [])
 			: source === "keyword"
 				? (options?.keywords ?? [])
-				: source === "collection"
-					? (options?.collections ?? [])
-					: [],
+				: source === "composer"
+					? (options?.composers ?? [])
+					: source === "collection"
+						? (options?.collections ?? [])
+						: [],
 	);
 	let filteredOptions = $derived(
 		activeOptions.filter((option) =>
@@ -92,6 +95,8 @@
 				return "genre";
 			case "keyword":
 				return "keyword";
+			case "composer":
+				return "composer";
 			case "language":
 				return "original language";
 			case "collection":
@@ -336,6 +341,7 @@
 					<select value={source} onchange={changeSource}>
 						<option value="genre">Genre</option>
 						<option value="keyword">Keyword</option>
+						<option value="composer">Composer</option>
 						<option value="language">Original language</option>
 						<option value="collection">TMDB collection</option>
 						<option value="future">Future release</option>
@@ -400,13 +406,19 @@
 					</div>
 				</div>
 			{/if}
-			{#if source === "keyword" || source === "collection"}
+			{#if source === "keyword" || source === "composer" || source === "collection"}
 				<div class="facet-picker">
 					<label for="facet-search">Find a {sourceLabel()}</label>
 					<input
 						id="facet-search"
 						type="search"
-						placeholder={`Search ${source === "keyword" ? "keywords" : "collections"}`}
+						placeholder={`Search ${
+							source === "keyword"
+								? "keywords"
+								: source === "composer"
+									? "composers"
+									: "collections"
+						}`}
 						bind:value={facetQuery}
 					/>
 					<div class="facet-options">
@@ -420,7 +432,11 @@
 							</button>
 						{:else}
 							<p>
-								No matching {source === "keyword" ? "keywords" : "collections"}.
+								No matching {source === "keyword"
+									? "keywords"
+									: source === "composer"
+										? "composers"
+										: "collections"}.
 							</p>
 						{/each}
 					</div>

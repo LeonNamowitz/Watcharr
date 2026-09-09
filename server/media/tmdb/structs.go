@@ -372,6 +372,7 @@ type MovieDetails struct {
 
 	// Extra items because we use `append_to_response` on the request
 	ExternalIds ExternalIdsMovie `json:"external_ids"`
+	Credits     ContentCredits   `json:"credits"`
 	Keywords    MovieKeywords    `json:"keywords"`
 	Similar     MovieSimilar     `json:"similar"`
 }
@@ -501,9 +502,10 @@ type ShowDetails struct {
 	Type string `json:"type"`
 
 	// Extra items because we use `append_to_response` on the request
-	ExternalIds ExternalIdsShow `json:"external_ids"`
-	Keywords    Keywords        `json:"keywords"`
-	Similar     ShowSimilar     `json:"similar"`
+	AggregateCredits AggregateContentCredits `json:"aggregate_credits"`
+	ExternalIds      ExternalIdsShow         `json:"external_ids"`
+	Keywords         Keywords                `json:"keywords"`
+	Similar          ShowSimilar             `json:"similar"`
 }
 
 func (t *ShowDetails) AsMedia() domain.Media {
@@ -844,19 +846,38 @@ type ContentCredits struct {
 		CreditID           string  `json:"credit_id"`
 		Order              int     `json:"order"`
 	} `json:"cast"`
-	Crew []struct {
-		Adult              bool    `json:"adult"`
-		Gender             int     `json:"gender"`
-		ID                 int     `json:"id"`
-		KnownForDepartment string  `json:"known_for_department"`
-		Name               string  `json:"name"`
-		OriginalName       string  `json:"original_name"`
-		Popularity         float64 `json:"popularity"`
-		ProfilePath        string  `json:"profile_path"`
-		CreditID           string  `json:"credit_id"`
-		Department         string  `json:"department"`
-		Job                string  `json:"job"`
-	} `json:"crew"`
+	Crew []ContentCreditsCrew `json:"crew"`
+}
+
+type ContentCreditsCrew struct {
+	Adult              bool    `json:"adult"`
+	Gender             int     `json:"gender"`
+	ID                 int     `json:"id"`
+	KnownForDepartment string  `json:"known_for_department"`
+	Name               string  `json:"name"`
+	OriginalName       string  `json:"original_name"`
+	Popularity         float64 `json:"popularity"`
+	ProfilePath        string  `json:"profile_path"`
+	CreditID           string  `json:"credit_id"`
+	Department         string  `json:"department"`
+	Job                string  `json:"job"`
+}
+
+type AggregateContentCredits struct {
+	ID   int                    `json:"id"`
+	Crew []AggregateCreditsCrew `json:"crew"`
+}
+
+type AggregateCreditsCrew struct {
+	ID   int                   `json:"id"`
+	Name string                `json:"name"`
+	Jobs []AggregateCreditsJob `json:"jobs"`
+}
+
+type AggregateCreditsJob struct {
+	CreditID     string `json:"credit_id"`
+	Job          string `json:"job"`
+	EpisodeCount int    `json:"episode_count"`
 }
 
 //
