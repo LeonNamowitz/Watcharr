@@ -36,6 +36,7 @@ export interface PublicListNavigation {
 }
 
 const MAX_SAVED_LISTS = 10;
+const PUBLIC_LIST_DEPTH_PARAM = "listDepth";
 const savedLists = new SvelteMap<string, SavedListState>();
 let nextToken = 0;
 
@@ -84,12 +85,49 @@ function validListDepth(depth: number | undefined) {
 		: undefined;
 }
 
+function listDepth(url: URL) {
+	const value = Number(url.searchParams.get(PUBLIC_LIST_DEPTH_PARAM));
+	return validListDepth(value);
+}
+
+function isPublicList(url: URL) {
+	return /^\/lists\/[^/]+\/[^/]+\/?$/.test(url.pathname);
+}
+
+export function setPublicListHistoryDepth(next: URL, current: URL) {
+	if (!next.searchParams.get("query")?.trim()) {
+		next.searchParams.delete(PUBLIC_LIST_DEPTH_PARAM);
+		return;
+	}
+
+	const currentDepth = listDepth(current);
+	if (currentDepth) {
+		next.searchParams.set(PUBLIC_LIST_DEPTH_PARAM, String(currentDepth + 1));
+	} else if (
+		isPublicList(current) &&
+		!current.searchParams.get("query")?.trim()
+	) {
+		next.searchParams.set(PUBLIC_LIST_DEPTH_PARAM, "1");
+	} else {
+		// A directly opened search/detail page has no known list entry in history.
+		next.searchParams.delete(PUBLIC_LIST_DEPTH_PARAM);
+	}
+}
+
+export function publicListDetailDepth(url: URL) {
+	if (!url.searchParams.get("query")?.trim()) return 1;
+	const depth = listDepth(url);
+	return depth ? depth + 1 : undefined;
+}
+
 export function withPublicListNavigation(
 	path: ResolvedPathname,
 	owner: PublicListNavigation,
 ): ResolvedPathname {
 	const depth = validListDepth(owner.listDepth);
-	return depth ? (`${path}?listDepth=${depth}` as ResolvedPathname) : path;
+	return depth
+		? (`${path}?${PUBLIC_LIST_DEPTH_PARAM}=${depth}` as ResolvedPathname)
+		: path;
 }
 
 export function publicListChild(

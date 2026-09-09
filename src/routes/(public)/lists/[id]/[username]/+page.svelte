@@ -23,6 +23,8 @@
 	import infScroll from "@/lib/util/infScroll.js";
 	import {
 		createListSnapshot,
+		publicListDetailDepth,
+		setPublicListHistoryDepth,
 		type PublicListNavigation,
 	} from "@/lib/util/listNavigation.svelte";
 	import { page } from "$app/state";
@@ -91,7 +93,7 @@
 	export const snapshot = createListSnapshot(dataLoader);
 	let publicListOwner: PublicListNavigation = $derived({
 		...meta,
-		listDepth: 1,
+		listDepth: publicListDetailDepth(page.url),
 	});
 
 	$effect(() => {
@@ -229,6 +231,7 @@
 	}
 
 	function gotoListLocation(location: URL) {
+		setPublicListHistoryDepth(location, page.url);
 		const searchParams = location.searchParams.toString();
 		goto(
 			searchParams

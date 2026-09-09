@@ -11,6 +11,7 @@
 	import { optionalAuthReq } from "@/lib/util/api";
 	import { ReqerError } from "@/lib/util/fetch";
 	import { isTouch } from "@/lib/util/helpers";
+	import { setPublicListHistoryDepth } from "@/lib/util/listNavigation.svelte";
 	import {
 		beginTemporaryWatchedListState,
 		defaultSort,
@@ -86,13 +87,21 @@
 					location.searchParams.delete("scope");
 					location.searchParams.delete("type");
 				}
-				const searchParams = location.searchParams.toString();
-				const listLocation = searchParams
+				let searchParams = location.searchParams.toString();
+				let listLocation = searchParams
 					? resolve(
 							`/lists/${page.params.id}/${page.params.username}?${searchParams}`,
 						)
 					: resolve(`/lists/${page.params.id}/${page.params.username}`);
 				if (listLocation === `${page.url.pathname}${page.url.search}`) return;
+
+				setPublicListHistoryDepth(location, page.url);
+				searchParams = location.searchParams.toString();
+				listLocation = searchParams
+					? resolve(
+							`/lists/${page.params.id}/${page.params.username}?${searchParams}`,
+						)
+					: resolve(`/lists/${page.params.id}/${page.params.username}`);
 
 				target.autofocus = true;
 				goto(listLocation).then(() => {
