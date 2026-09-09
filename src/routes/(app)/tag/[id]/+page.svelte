@@ -7,6 +7,7 @@
 	import PosterList from "@/lib/poster/PosterList.svelte";
 	import Spinner from "@/lib/Spinner.svelte";
 	import CreateTagModal from "@/lib/tag/CreateTagModal.svelte";
+	import BulkAddTagModal from "@/lib/tag/BulkAddTagModal.svelte";
 	import Tag from "@/lib/tag/Tag.svelte";
 	import { req } from "@/lib/util/api";
 	import infScroll from "@/lib/util/infScroll";
@@ -24,6 +25,7 @@
 	});
 	let tag = $derived(store.tags.find((t) => t.id === meta.tagId));
 	let tagEditModalShown = $state(false);
+	let bulkAddModalShown = $state(false);
 
 	const scroll = infScroll({ callback: onScrollToBottom });
 	const dataLoader = paginatedLoader<Media, undefined>(load);
@@ -111,13 +113,19 @@
 	<div class="content">
 		<div class="inner">
 			<div class="basic-ctr">
-				<Icon i="tag" wh={20} />
-				<Tag
-					{tag}
-					onClick={() => {
-						tagEditModalShown = !tagEditModalShown;
-					}}
-				/>
+				<div class="tag-title">
+					<Icon i="tag" wh={20} />
+					<Tag
+						{tag}
+						onClick={() => {
+							tagEditModalShown = !tagEditModalShown;
+						}}
+					/>
+				</div>
+				<button class="add-multiple" onclick={() => (bulkAddModalShown = true)}>
+					<Icon i="add" wh={18} />
+					Add multiple
+				</button>
 			</div>
 		</div>
 	</div>
@@ -172,6 +180,17 @@
 			<strong>Tag does not exist!</strong>
 		</div>
 	</div>
+{/if}
+
+{#if bulkAddModalShown && tag}
+	<BulkAddTagModal
+		{tag}
+		onClose={() => (bulkAddModalShown = false)}
+		onAdded={() => {
+			bulkAddModalShown = false;
+			dataLoader.runFn(PaginatedLoaderRunFnAction.Reset);
+		}}
+	/>
 {/if}
 
 {#if tagEditModalShown}
@@ -230,8 +249,19 @@
 		justify-content: center;
 		flex-wrap: wrap;
 		gap: 10px;
-		max-width: 300px;
+		max-width: 500px;
 		width: 100%;
 		fill: $text-color;
+	}
+
+	.tag-title {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+	}
+
+	.add-multiple {
+		width: max-content;
+		gap: 5px;
 	}
 </style>

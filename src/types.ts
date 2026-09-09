@@ -888,3 +888,33 @@ export interface TagAddRequest {
 	color: string;
 	bgColor: string;
 }
+
+export type TagSuggestionKind = "all" | "genre" | "company" | "future";
+
+export interface TagSuggestionOption {
+	id: number;
+	name: string;
+	count: number;
+}
+
+export interface TagSuggestionOptionsResponse {
+	genres: TagSuggestionOption[];
+	companies: TagSuggestionOption[];
+	futureReleaseCount: number;
+	incomplete: boolean;
+	skippedCount: number;
+}
+
+export interface TagCandidate {
+	media: Media;
+	reason?: string;
+}
+
+export interface TagCandidateMeta {
+	incomplete: boolean;
+	skippedCount: number;
+}
+
+export interface TagBulkAddResponse {
+	added: number;
+}

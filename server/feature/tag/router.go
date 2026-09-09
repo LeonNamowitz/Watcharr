@@ -28,12 +28,80 @@ func (r *Router) AddRoutes() {
 	tag := r.br.Router.Group("/tag").Use(authmiddleware.AuthRequired(nil, r.br.Cfg))
 
 	tag.GET("", r.GetTags)
+	tag.GET(":id/suggestion-options", r.GetSuggestionOptions)
+	tag.GET(":id/candidates", router.PaginatedRequest(true), r.GetCandidates)
 	tag.GET(":id", r.GetTag)
 	tag.GET(":id/watched", router.PaginatedRequest(true), r.GetTagWatched)
 	tag.POST("", r.CreateTag)
+	tag.POST(":id/watched", r.BulkAddWatched)
 	tag.PUT("order", r.ReorderTags)
 	tag.PUT(":id", r.UpdateTag)
 	tag.DELETE(":id", r.DeleteTag)
+}
+
+func (r *Router) GetSuggestionOptions(c *gin.Context) {
+	userID := c.MustGet("userId").(uint)
+	tagID, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, router.ErrorResponse{Error: "invalid tag id"})
+		return
+	}
+	response, err := r.service.GetSuggestionOptions(userID, uint(tagID))
+	if err != nil {
+		c.JSON(http.StatusBadGateway, router.ErrorResponse{Error: err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, response)
+}
+
+func (r *Router) GetCandidates(c *gin.Context) {
+	userID := c.MustGet("userId").(uint)
+	tagID, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, router.ErrorResponse{Error: "invalid tag id"})
+		return
+	}
+	criterionID := 0
+	if criterion := c.Query("criterionId"); criterion != "" {
+		criterionID, err = strconv.Atoi(criterion)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, router.ErrorResponse{Error: "invalid suggestion criterion"})
+			return
+		}
+	}
+	response, err := r.service.GetCandidates(
+		userID,
+		uint(tagID),
+		suggestionKind(c.DefaultQuery("kind", string(suggestionKindAll))),
+		criterionID,
+		c.Query("q"),
+		c.MustGet("paginationParams").(util.PaginationParams),
+	)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, router.ErrorResponse{Error: err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, response)
+}
+
+func (r *Router) BulkAddWatched(c *gin.Context) {
+	userID := c.MustGet("userId").(uint)
+	tagID, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, router.ErrorResponse{Error: "invalid tag id"})
+		return
+	}
+	var request domain.TagBulkAddRequest
+	if err := c.ShouldBindJSON(&request); err != nil {
+		c.JSON(http.StatusBadRequest, router.ErrorResponse{Error: err.Error()})
+		return
+	}
+	added, err := r.service.BulkAddWatched(userID, uint(tagID), request.WatchedIDs)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, router.ErrorResponse{Error: err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, domain.TagBulkAddResponse{Added: added})
 }
 
 // Get all of our tags.

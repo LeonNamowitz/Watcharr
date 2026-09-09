@@ -1,6 +1,6 @@
 import { req } from "../util/api";
 import { notify } from "../util/notify";
-import type { Tag } from "@/types";
+import type { Tag, TagBulkAddResponse } from "@/types";
 
 export async function tagWatched(
 	watchedId: number,
@@ -67,4 +67,13 @@ export async function reorderTags(tagIds: number[]): Promise<boolean> {
 		notify({ id: nid, text: "Failed To Save Tag Order!", type: "error" });
 		return false;
 	}
+}
+
+export async function bulkTagWatched(
+	tagId: number,
+	watchedIds: number[],
+): Promise<TagBulkAddResponse> {
+	return await req.post<TagBulkAddResponse>(`/tag/${tagId}/watched`, {
+		watchedIds,
+	});
 }
