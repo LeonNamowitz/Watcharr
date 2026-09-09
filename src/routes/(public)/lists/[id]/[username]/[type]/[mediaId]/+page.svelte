@@ -8,4 +8,5 @@
 	ownerName={page.params.username ?? ""}
 	mediaId={page.params.mediaId ?? ""}
 	mediaType={page.params.type ?? ""}
+	listDepth={Number(page.url.searchParams.get("listDepth")) || undefined}
 />

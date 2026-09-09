@@ -11,4 +11,5 @@
 		id: page.params.id ?? "",
 		username: page.params.username ?? "",
 	}}
+	publicListDepth={Number(page.url.searchParams.get("listDepth")) || undefined}
 />

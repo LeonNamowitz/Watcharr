@@ -1,11 +1,15 @@
 <script lang="ts">
 	import { resolve } from "$app/paths";
+	import {
+		withPublicListNavigation,
+		type PublicListNavigation,
+	} from "@/lib/util/listNavigation.svelte";
 	import type { TMDBContentCreditsCrew } from "@/types";
 
 	interface Props {
 		topCrew: TMDBContentCreditsCrew[];
 		disableInteraction?: boolean;
-		publicListOwner?: { id: string | number; username: string };
+		publicListOwner?: PublicListNavigation;
 	}
 
 	let {
@@ -16,11 +20,14 @@
 
 	function personLink(personId: number) {
 		if (publicListOwner) {
-			return resolve("/(public)/lists/[id]/[username]/person/[personId]", {
-				id: String(publicListOwner.id),
-				username: publicListOwner.username,
-				personId: String(personId),
-			});
+			return withPublicListNavigation(
+				resolve("/(public)/lists/[id]/[username]/person/[personId]", {
+					id: String(publicListOwner.id),
+					username: publicListOwner.username,
+					personId: String(personId),
+				}),
+				publicListOwner,
+			);
 		}
 		return resolve("/(app)/person/[id]", { id: String(personId) });
 	}

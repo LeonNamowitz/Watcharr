@@ -20,6 +20,7 @@
 	import { onDestroy, onMount } from "svelte";
 	import Error from "@/lib/Error.svelte";
 	import infScroll from "@/lib/util/infScroll.js";
+	import { createListSnapshot } from "@/lib/util/listNavigation.svelte";
 	import paginatedLoader, {
 		PaginatedLoaderRunFnAction,
 	} from "@/lib/util/paginatedLoader.svelte.js";
@@ -32,6 +33,7 @@
 
 	const scroll = infScroll({ callback: onScrollToBottom });
 	const dataLoader = paginatedLoader<Media, SearchResponseMeta>(load);
+	export const snapshot = createListSnapshot(dataLoader);
 
 	let searchType: SearchType | undefined = $derived.by(() => {
 		const t = page.url.searchParams.get("type");

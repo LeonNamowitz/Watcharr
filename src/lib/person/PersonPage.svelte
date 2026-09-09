@@ -18,6 +18,10 @@
 	import ExpandableText from "@/lib/content/ExpandableText.svelte";
 	import { resolve } from "$app/paths";
 	import {
+		backToPublicList,
+		publicListChild,
+	} from "@/lib/util/listNavigation.svelte";
+	import {
 		readPersonPageState,
 		savePersonPageState,
 		type PersonCreditFilter,
@@ -27,9 +31,10 @@
 	interface Props {
 		personId: number;
 		publicOwner?: { id: string; username: string };
+		publicListDepth?: number;
 	}
 
-	let { personId, publicOwner }: Props = $props();
+	let { personId, publicOwner, publicListDepth }: Props = $props();
 
 	let person: PersonDetailsResponse | undefined = $state();
 	let owner: PublicUser | undefined = $state();
@@ -41,6 +46,10 @@
 	let stateReady = $state(false);
 
 	let isPublic = $derived(Boolean(publicOwner));
+	let publicNavigationOwner = $derived.by(() => {
+		if (!publicOwner) return;
+		return publicListChild(publicOwner, publicListDepth);
+	});
 	let ownerName = $derived(owner?.username ?? publicOwner?.username ?? "");
 	let ratingSortLabel = $derived(
 		isPublic ? `${ownerName || "Owner"}'s rating` : "My rating",
@@ -302,7 +311,11 @@
 						</div>
 						{#if backToListHref}
 							<div class="btns">
-								<a class="btn back-to-list" href={backToListHref}>
+								<a
+									class="btn back-to-list"
+									href={backToListHref}
+									onclick={(event) => backToPublicList(event, publicListDepth)}
+								>
 									Back to {ownerName}'s list
 								</a>
 							</div>
@@ -405,7 +418,7 @@
 									hidden={!shouldShowCredit(credit)}
 									hideButtons={isPublic}
 									publicView={isPublic}
-									publicListOwner={publicOwner}
+									publicListOwner={publicNavigationOwner}
 									publicRatingSettings={isPublic ? ratingSettings : undefined}
 								/>
 							{/each}

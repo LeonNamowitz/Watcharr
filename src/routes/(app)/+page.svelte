@@ -8,6 +8,7 @@
 	import Spinner from "@/lib/Spinner.svelte";
 	import { req } from "@/lib/util/api";
 	import infScroll from "@/lib/util/infScroll";
+	import { createListSnapshot } from "@/lib/util/listNavigation.svelte";
 	import paginatedLoader from "@/lib/util/paginatedLoader.svelte";
 	import {
 		clearActiveFilters,
@@ -19,6 +20,7 @@
 
 	const scroll = infScroll({ callback: onScrollToBottom });
 	const dataLoader = paginatedLoader<Media, undefined>(load);
+	export const snapshot = createListSnapshot(dataLoader);
 
 	let nextLoadParams: {
 		page: number;

@@ -21,6 +21,10 @@
 	import { onDestroy, untrack } from "svelte";
 	import paginatedLoader from "@/lib/util/paginatedLoader.svelte.js";
 	import infScroll from "@/lib/util/infScroll.js";
+	import {
+		createListSnapshot,
+		type PublicListNavigation,
+	} from "@/lib/util/listNavigation.svelte";
 	import { page } from "$app/state";
 	import PosterList from "@/lib/poster/PosterList.svelte";
 	import Poster from "@/lib/poster/Poster.svelte";
@@ -84,7 +88,11 @@
 
 	const scroll = infScroll({ callback: onScrollToBottom });
 	const dataLoader = paginatedLoader<Media, SearchResponseMeta>(load);
-	let publicListOwner = $derived(meta);
+	export const snapshot = createListSnapshot(dataLoader);
+	let publicListOwner: PublicListNavigation = $derived({
+		...meta,
+		listDepth: 1,
+	});
 
 	$effect(() => {
 		const query = searchQuery;

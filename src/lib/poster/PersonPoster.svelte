@@ -1,6 +1,10 @@
 <script lang="ts">
-	import { goto } from "$app/navigation";
 	import { resolve } from "$app/paths";
+	import {
+		gotoResolved,
+		withPublicListNavigation,
+		type PublicListNavigation,
+	} from "@/lib/util/listNavigation.svelte";
 	import {
 		addClassToParent,
 		calculateTransformOrigin,
@@ -13,7 +17,7 @@
 		role?: string | undefined;
 		zoomOnHover?: boolean;
 		disableInteraction?: boolean;
-		publicListOwner?: { id: string | number; username: string };
+		publicListOwner?: PublicListNavigation;
 	}
 
 	let {
@@ -32,28 +36,20 @@
 	let link = $derived.by(() => {
 		if (!id || disableInteraction) return;
 		if (publicListOwner) {
-			return resolve("/(public)/lists/[id]/[username]/person/[personId]", {
-				id: String(publicListOwner.id),
-				username: publicListOwner.username,
-				personId: String(id),
-			});
-		}
-		return resolve("/(app)/person/[id]", { id: String(id) });
-	});
-
-	function navigateToPerson() {
-		if (!id || disableInteraction) return;
-		if (publicListOwner) {
-			goto(
+			return withPublicListNavigation(
 				resolve("/(public)/lists/[id]/[username]/person/[personId]", {
 					id: String(publicListOwner.id),
 					username: publicListOwner.username,
 					personId: String(id),
 				}),
+				publicListOwner,
 			);
-			return;
 		}
-		goto(resolve("/(app)/person/[id]", { id: String(id) }));
+		return resolve("/(app)/person/[id]", { id: String(id) });
+	});
+
+	function navigateToPerson() {
+		if (link) gotoResolved(link);
 	}
 </script>
 

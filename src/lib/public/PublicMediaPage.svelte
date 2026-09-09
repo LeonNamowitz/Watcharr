@@ -19,6 +19,10 @@
 	import { MediaStatusShow } from "@/lib/types/mediaStatus";
 	import { noAuthReq } from "@/lib/util/api";
 	import { getTopCrew } from "@/lib/util/helpers";
+	import {
+		backToPublicList,
+		publicListChild,
+	} from "@/lib/util/listNavigation.svelte";
 	import type {
 		PublicMediaDetails,
 		PublicUser,
@@ -35,9 +39,10 @@
 		ownerName: string;
 		mediaId: string;
 		mediaType: string;
+		listDepth?: number;
 	}
 
-	let { ownerId, ownerName, mediaId, mediaType }: Props = $props();
+	let { ownerId, ownerName, mediaId, mediaType, listDepth }: Props = $props();
 	let details: PublicMediaDetails | undefined = $state();
 	let owner: PublicUser | undefined = $state();
 	let pageError: unknown | undefined = $state();
@@ -52,7 +57,9 @@
 		ratingSystem: owner?.ratingSystem,
 		ratingStep: owner?.ratingStep,
 	});
-	let publicListOwner = $derived({ id: ownerId, username: ownerName });
+	let publicListOwner = $derived(
+		publicListChild({ id: ownerId, username: ownerName }, listDepth),
+	);
 	let similarOnList = $derived(
 		media?.similar?.filter((item) => Boolean(item.watched)) ?? [],
 	);
@@ -174,6 +181,7 @@
 							<a
 								class="btn back-to-list"
 								href={resolve(`/lists/${ownerId}/${ownerName}`)}
+								onclick={(event) => backToPublicList(event, listDepth)}
 							>
 								Back to {ownerName}'s list
 							</a>

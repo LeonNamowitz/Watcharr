@@ -11,7 +11,6 @@
 		isTouch,
 		mouseOverEl,
 	} from "@/lib/util/helpers";
-	import { goto } from "$app/navigation";
 	import { baseURL, removeWatched, updateWatched } from "../util/api";
 	import { notify } from "../util/notify";
 	import { onMount } from "svelte";
@@ -25,6 +24,11 @@
 	import Icon from "../Icon.svelte";
 	import PublicPosterDetails from "@/lib/public/PublicPosterDetails.svelte";
 	import type { RatingSettings } from "@/lib/rating/helpers";
+	import {
+		gotoResolved,
+		withPublicListNavigation,
+		type PublicListNavigation,
+	} from "@/lib/util/listNavigation.svelte";
 
 	interface Props {
 		media: Media;
@@ -40,7 +44,7 @@
 		/** Show an explicit, read-only status badge for shared-list visitors. */
 		publicView?: boolean;
 		/** Keep content navigation inside this owner's public list. */
-		publicListOwner?: { id: string | number; username: string };
+		publicListOwner?: PublicListNavigation;
 		/** Rating display preferences belonging to the public list owner. */
 		publicRatingSettings?: RatingSettings;
 		/**
@@ -158,12 +162,15 @@
 	const link = $derived.by(() => {
 		if (!meta?.id) return;
 		if (publicListOwner) {
-			return resolve("/(public)/lists/[id]/[username]/[type]/[mediaId]", {
-				id: String(publicListOwner.id),
-				username: publicListOwner.username,
-				type: meta.type,
-				mediaId: String(meta.id),
-			});
+			return withPublicListNavigation(
+				resolve("/(public)/lists/[id]/[username]/[type]/[mediaId]", {
+					id: String(publicListOwner.id),
+					username: publicListOwner.username,
+					type: meta.type,
+					mediaId: String(meta.id),
+				}),
+				publicListOwner,
+			);
 		}
 		switch (meta.type) {
 			case "movie":
@@ -179,29 +186,7 @@
 	);
 
 	function navigateToMedia() {
-		if (!meta?.id) return;
-		if (publicListOwner) {
-			goto(
-				resolve("/(public)/lists/[id]/[username]/[type]/[mediaId]", {
-					id: String(publicListOwner.id),
-					username: publicListOwner.username,
-					type: meta.type,
-					mediaId: String(meta.id),
-				}),
-			);
-			return;
-		}
-		switch (meta.type) {
-			case "movie":
-				goto(resolve("/(app)/movie/[id]", { id: String(meta.id) }));
-				break;
-			case "tv":
-				goto(resolve("/(app)/tv/[id]", { id: String(meta.id) }));
-				break;
-			case "game":
-				goto(resolve("/(app)/game/[id]", { id: String(meta.id) }));
-				break;
-		}
+		if (link) gotoResolved(link);
 	}
 
 	function updateWatchedVar(w: Watched | undefined) {

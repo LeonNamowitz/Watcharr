@@ -3,10 +3,11 @@
 	import HorizontalList from "../HorizontalList.svelte";
 	import Poster from "../poster/Poster.svelte";
 	import type { RatingSettings } from "../rating/helpers";
+	import type { PublicListNavigation } from "@/lib/util/listNavigation.svelte";
 
 	interface Props {
 		similar: Media[];
-		publicListOwner?: { id: string | number; username: string };
+		publicListOwner?: PublicListNavigation;
 		ratingSettings?: RatingSettings;
 	}
 
