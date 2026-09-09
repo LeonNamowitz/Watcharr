@@ -890,7 +890,13 @@ export interface TagAddRequest {
 }
 
 export type TagSuggestionKind =
-	"all" | "genre" | "keyword" | "language" | "collection" | "future";
+	| "all"
+	| "genre"
+	| "keyword"
+	| "composer"
+	| "language"
+	| "collection"
+	| "future";
 
 export interface TagSuggestionOption {
 	id: number;
@@ -907,6 +913,7 @@ export interface TagLanguageSuggestionOption {
 export interface TagSuggestionOptionsResponse {
 	genres: TagSuggestionOption[];
 	keywords: TagSuggestionOption[];
+	composers: TagSuggestionOption[];
 	languages: TagLanguageSuggestionOption[];
 	collections: TagSuggestionOption[];
 	futureReleaseCount: number;

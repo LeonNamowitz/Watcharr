@@ -30,6 +30,7 @@ type (
 	TagSuggestionOptionsResponse struct {
 		Genres             []TagSuggestionOption         `json:"genres"`
 		Keywords           []TagSuggestionOption         `json:"keywords"`
+		Composers          []TagSuggestionOption         `json:"composers"`
 		Languages          []TagLanguageSuggestionOption `json:"languages"`
 		Collections        []TagSuggestionOption         `json:"collections"`
 		FutureReleaseCount int                           `json:"futureReleaseCount"`
