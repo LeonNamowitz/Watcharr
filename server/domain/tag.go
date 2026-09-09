@@ -22,12 +22,19 @@ type (
 		Name  string `json:"name"`
 		Count int    `json:"count"`
 	}
+	TagLanguageSuggestionOption struct {
+		Code  string `json:"code"`
+		Name  string `json:"name"`
+		Count int    `json:"count"`
+	}
 	TagSuggestionOptionsResponse struct {
-		Genres             []TagSuggestionOption `json:"genres"`
-		Companies          []TagSuggestionOption `json:"companies"`
-		FutureReleaseCount int                   `json:"futureReleaseCount"`
-		Incomplete         bool                  `json:"incomplete"`
-		SkippedCount       int                   `json:"skippedCount"`
+		Genres             []TagSuggestionOption         `json:"genres"`
+		Keywords           []TagSuggestionOption         `json:"keywords"`
+		Languages          []TagLanguageSuggestionOption `json:"languages"`
+		Collections        []TagSuggestionOption         `json:"collections"`
+		FutureReleaseCount int                           `json:"futureReleaseCount"`
+		Incomplete         bool                          `json:"incomplete"`
+		SkippedCount       int                           `json:"skippedCount"`
 	}
 	TagCandidate struct {
 		Media  Media  `json:"media"`
