@@ -3,10 +3,12 @@ package tag
 import (
 	"errors"
 	"log/slog"
+	"time"
 
 	"github.com/sbondCo/Watcharr/database/dbmodel"
 	"github.com/sbondCo/Watcharr/database/entity"
 	"github.com/sbondCo/Watcharr/domain"
+	"github.com/sbondCo/Watcharr/media/tmdb"
 	"github.com/sbondCo/Watcharr/util"
 	"gorm.io/gorm"
 )
@@ -19,15 +21,28 @@ type WatchedProvider interface {
 	GetWatchedPage(userId uint, pp util.PaginationParams, wr domain.WatchedGetPageRequest, extraProps *domain.WatchedGetPageExtraProps) (util.PaginationResponse[entity.Watched, util.None], error)
 }
 
+type TMDBProvider interface {
+	MovieDetails(tmdb.MovieDetailsOptions) (tmdb.MovieDetails, error)
+	ShowDetails(tmdb.ShowDetailsOptions) (tmdb.ShowDetails, error)
+}
+
 type Service struct {
 	db              *gorm.DB
 	watchedProvider WatchedProvider
+	tmdb            TMDBProvider
+	now             func() time.Time
 }
 
-func NewService(db *gorm.DB, watchedProvider WatchedProvider) *Service {
+func NewService(
+	db *gorm.DB,
+	watchedProvider WatchedProvider,
+	tmdbProvider TMDBProvider,
+) *Service {
 	return &Service{
-		db,
-		watchedProvider,
+		db:              db,
+		watchedProvider: watchedProvider,
+		tmdb:            tmdbProvider,
+		now:             time.Now,
 	}
 }
 
