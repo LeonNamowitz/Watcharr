@@ -2,7 +2,6 @@
 	import { resolve } from "$app/paths";
 	import {
 		gotoResolved,
-		withPublicListNavigation,
 		type PublicListNavigation,
 	} from "@/lib/util/listNavigation.svelte";
 	import {
@@ -36,20 +35,17 @@
 	let link = $derived.by(() => {
 		if (!id || disableInteraction) return;
 		if (publicListOwner) {
-			return withPublicListNavigation(
-				resolve("/(public)/lists/[id]/[username]/person/[personId]", {
-					id: String(publicListOwner.id),
-					username: publicListOwner.username,
-					personId: String(id),
-				}),
-				publicListOwner,
-			);
+			return resolve("/(public)/lists/[id]/[username]/person/[personId]", {
+				id: String(publicListOwner.id),
+				username: publicListOwner.username,
+				personId: String(id),
+			});
 		}
 		return resolve("/(app)/person/[id]", { id: String(id) });
 	});
 
-	function navigateToPerson() {
-		if (link) gotoResolved(link);
+	function navigateToPerson(event?: MouseEvent) {
+		if (link) gotoResolved(link, event, publicListOwner);
 	}
 </script>
 
@@ -58,8 +54,8 @@
 <li
 	onmouseenter={(e) => calculateTransformOrigin(e)}
 	onfocusin={(e) => calculateTransformOrigin(e)}
-	onclick={() => {
-		if (link) navigateToPerson();
+	onclick={(event) => {
+		if (link) navigateToPerson(event);
 	}}
 	onkeypress={() => console.log("on kpress")}
 >

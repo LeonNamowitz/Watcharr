@@ -20,7 +20,11 @@
 
 	const scroll = infScroll({ callback: onScrollToBottom });
 	const dataLoader = paginatedLoader<Media, undefined>(load);
-	export const snapshot = createListSnapshot(dataLoader);
+	export const snapshot = createListSnapshot(dataLoader, {
+		key: () => JSON.stringify(store.sortAndFiltersForQueryParams),
+		onRevalidated: scroll.dataLoaded,
+		revalidatePage: loadPage,
+	});
 
 	let nextLoadParams: {
 		page: number;
@@ -30,16 +34,23 @@
 		...store.sortAndFiltersForQueryParams,
 	});
 
+	async function loadPage(page: number, signal: AbortSignal) {
+		return req.get<PaginationResponse<Media, undefined>>(`/watched`, {
+			params: {
+				page,
+				...store.sortAndFiltersForQueryParams,
+			},
+			signal,
+		});
+	}
+
 	async function load(signal: AbortSignal) {
 		console.debug("load: loadParams:", nextLoadParams);
 		if (nextLoadParams.page === dataLoader.state.page) {
 			console.warn("load: Already on this page, not loading it again!");
 			return;
 		}
-		const r = await req.get<PaginationResponse<Media, undefined>>(`/watched`, {
-			params: nextLoadParams,
-			signal,
-		});
+		const r = await loadPage(nextLoadParams.page, signal);
 		scroll.dataLoaded();
 		return r;
 	}

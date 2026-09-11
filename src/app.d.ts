@@ -5,6 +5,9 @@ declare global {
 		// interface Error {}
 		// interface Locals {}
 		// interface PageData {}
+		interface PageState {
+			publicListDepth?: number;
+		}
 		// interface Platform {}
 	}
 }

@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { resolve } from "$app/paths";
 	import {
-		withPublicListNavigation,
+		gotoResolved,
 		type PublicListNavigation,
 	} from "@/lib/util/listNavigation.svelte";
 	import type { TMDBContentCreditsCrew } from "@/types";
@@ -20,14 +20,11 @@
 
 	function personLink(personId: number) {
 		if (publicListOwner) {
-			return withPublicListNavigation(
-				resolve("/(public)/lists/[id]/[username]/person/[personId]", {
-					id: String(publicListOwner.id),
-					username: publicListOwner.username,
-					personId: String(personId),
-				}),
-				publicListOwner,
-			);
+			return resolve("/(public)/lists/[id]/[username]/person/[personId]", {
+				id: String(publicListOwner.id),
+				username: publicListOwner.username,
+				personId: String(personId),
+			});
 		}
 		return resolve("/(app)/person/[id]", { id: String(personId) });
 	}
@@ -39,7 +36,12 @@
 			{#if disableInteraction}
 				<strong>{crew.name}</strong>
 			{:else}
-				<a href={personLink(crew.id)}>{crew.name}</a>
+				<a
+					href={personLink(crew.id)}
+					onclick={(event) =>
+						gotoResolved(personLink(crew.id), event, publicListOwner)}
+					>{crew.name}</a
+				>
 			{/if}
 			<span>{crew.job}</span>
 		</div>

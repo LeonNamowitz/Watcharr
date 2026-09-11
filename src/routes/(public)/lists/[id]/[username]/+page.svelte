@@ -24,7 +24,7 @@
 	import {
 		createListSnapshot,
 		publicListDetailDepth,
-		setPublicListHistoryDepth,
+		publicListHistoryState,
 		type PublicListNavigation,
 	} from "@/lib/util/listNavigation.svelte";
 	import { page } from "$app/state";
@@ -75,8 +75,6 @@
 		"hold",
 		"dropped",
 	];
-	let previousSearchQuery = $state("");
-
 	let followBtnDisabled = $state(false);
 	let user: PublicUser | undefined = $state();
 	let loadedPublicUserKey = "";
@@ -93,21 +91,7 @@
 	export const snapshot = createListSnapshot(dataLoader);
 	let publicListOwner: PublicListNavigation = $derived({
 		...meta,
-		listDepth: publicListDetailDepth(page.url),
-	});
-
-	$effect(() => {
-		const query = searchQuery;
-		if (query && query !== previousSearchQuery) {
-			store.activeFilters = {
-				type: [],
-				status: [...allSearchStatuses],
-			};
-			store.activeSort = ["LASTFIN", "DOWN"];
-		} else if (!query && previousSearchQuery) {
-			setWatchedListPreset("recentlyWatched");
-		}
-		previousSearchQuery = query;
+		listDepth: publicListDetailDepth(page.url, page.state.publicListDepth),
 	});
 
 	let requestParams: Record<string, string> = $derived.by(() => {
@@ -231,7 +215,7 @@
 	}
 
 	function gotoListLocation(location: URL) {
-		setPublicListHistoryDepth(location, page.url);
+		location.searchParams.delete("listDepth");
 		const searchParams = location.searchParams.toString();
 		goto(
 			searchParams
@@ -239,6 +223,9 @@
 						`/lists/${page.params.id}/${page.params.username}?${searchParams}`,
 					)
 				: resolve(`/lists/${page.params.id}/${page.params.username}`),
+			{
+				state: publicListHistoryState(location, page.url, page.state),
+			},
 		);
 	}
 

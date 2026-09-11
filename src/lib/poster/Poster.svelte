@@ -26,7 +26,6 @@
 	import type { RatingSettings } from "@/lib/rating/helpers";
 	import {
 		gotoResolved,
-		withPublicListNavigation,
 		type PublicListNavigation,
 	} from "@/lib/util/listNavigation.svelte";
 
@@ -162,15 +161,12 @@
 	const link = $derived.by(() => {
 		if (!meta?.id) return;
 		if (publicListOwner) {
-			return withPublicListNavigation(
-				resolve("/(public)/lists/[id]/[username]/[type]/[mediaId]", {
-					id: String(publicListOwner.id),
-					username: publicListOwner.username,
-					type: meta.type,
-					mediaId: String(meta.id),
-				}),
-				publicListOwner,
-			);
+			return resolve("/(public)/lists/[id]/[username]/[type]/[mediaId]", {
+				id: String(publicListOwner.id),
+				username: publicListOwner.username,
+				type: meta.type,
+				mediaId: String(meta.id),
+			});
 		}
 		switch (meta.type) {
 			case "movie":
@@ -185,8 +181,8 @@
 		media.releaseDate ? new Date(media.releaseDate).getFullYear() : undefined,
 	);
 
-	function navigateToMedia() {
-		if (link) gotoResolved(link);
+	function navigateToMedia(event?: MouseEvent) {
+		if (link) gotoResolved(link, event, publicListOwner);
 	}
 
 	function updateWatchedVar(w: Watched | undefined) {
@@ -418,7 +414,7 @@
 					e.preventDefault();
 					return;
 				}
-				if (posterActive && link) navigateToMedia();
+				if (posterActive && link) navigateToMedia(e);
 			}}
 			onkeyup={handleInnerKeyUp}
 			id="ilikemoviessueme"

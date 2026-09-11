@@ -97,13 +97,29 @@ const _store: Store = $state({
 	tags: [],
 });
 
-type WatchedListStateSnapshot = {
+export type WatchedListStateSnapshot = {
 	sort: string[];
 	filters: Filters;
 	preset: WatchedListPresetId | undefined;
+	detailedView: WLDetailedViewOption[];
 };
 
 let temporaryWatchedListState: WatchedListStateSnapshot | undefined;
+
+export const captureWatchedListState = (): WatchedListStateSnapshot => ({
+	sort: [..._store.activeSort],
+	filters: cloneFilters(_store.activeFilters),
+	preset: _store.activeWatchedListPreset,
+	detailedView: [..._store.wlDetailedView],
+});
+
+export const applyWatchedListState = (state: WatchedListStateSnapshot) => {
+	_store.activeSort = [...state.sort];
+	_store.activeFilters = cloneFilters(state.filters);
+	_store.activeWatchedListPreset = state.preset;
+	_store.wlDetailedView = [...state.detailedView];
+	updateSortAndFiltersForQueryParams();
+};
 
 const updateSortAndFiltersForQueryParams = () => {
 	try {
@@ -141,20 +157,13 @@ export const beginTemporaryWatchedListState = () => {
 	if (temporaryWatchedListState) {
 		return () => {};
 	}
-	temporaryWatchedListState = {
-		sort: [..._store.activeSort],
-		filters: cloneFilters(_store.activeFilters),
-		preset: _store.activeWatchedListPreset,
-	};
+	temporaryWatchedListState = captureWatchedListState();
 
 	return () => {
 		if (!temporaryWatchedListState) return;
 		const original = temporaryWatchedListState;
 		temporaryWatchedListState = undefined;
-		_store.activeSort = original.sort;
-		_store.activeFilters = original.filters;
-		_store.activeWatchedListPreset = original.preset;
-		updateSortAndFiltersForQueryParams();
+		applyWatchedListState(original);
 	};
 };
 
@@ -273,13 +282,13 @@ export const store = {
 	},
 	set wlDetailedView(v) {
 		_store.wlDetailedView = v;
-		if (v) {
+		if (v && !temporaryWatchedListState) {
 			localStorage.setItem(
 				"wlDetailedView",
 				JSON.stringify(store.wlDetailedView),
 			);
 			console.debug("Store: Saved wlDetailedView:", v);
-		} else {
+		} else if (!v && !temporaryWatchedListState) {
 			localStorage.removeItem("wlDetailedView");
 			console.debug("Store: Removed wlDetailedView");
 		}

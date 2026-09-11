@@ -33,7 +33,11 @@
 
 	const scroll = infScroll({ callback: onScrollToBottom });
 	const dataLoader = paginatedLoader<Media, SearchResponseMeta>(load);
-	export const snapshot = createListSnapshot(dataLoader);
+	export const snapshot = createListSnapshot(dataLoader, {
+		key: searchKey,
+		onRevalidated: scroll.dataLoaded,
+		revalidatePage: loadPage,
+	});
 
 	let searchType: SearchType | undefined = $derived.by(() => {
 		const t = page.url.searchParams.get("type");
@@ -60,6 +64,26 @@
 		preferMyList: preferMyList,
 	});
 
+	function searchKey() {
+		return JSON.stringify({
+			query: store.searchQuery,
+			type: searchType,
+			preferMyList,
+		});
+	}
+
+	async function loadPage(page: number, signal: AbortSignal) {
+		return req.get<PaginationResponse<Media, SearchResponseMeta>>(`/search`, {
+			params: {
+				page,
+				query: store.searchQuery,
+				type: searchType,
+				preferMyList,
+			},
+			signal,
+		});
+	}
+
 	async function load(signal: AbortSignal) {
 		console.debug("load: loadParams:", nextLoadParams);
 		if (nextLoadParams.page === dataLoader.state.page) {
@@ -70,13 +94,7 @@
 			console.warn("load: There is no search query!");
 			return;
 		}
-		const r = await req.get<PaginationResponse<Media, SearchResponseMeta>>(
-			`/search`,
-			{
-				params: nextLoadParams,
-				signal,
-			},
-		);
+		const r = await loadPage(nextLoadParams.page ?? 1, signal);
 		scroll.dataLoaded();
 		return r;
 	}

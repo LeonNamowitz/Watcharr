@@ -11,15 +11,19 @@
 	import { optionalAuthReq } from "@/lib/util/api";
 	import { ReqerError } from "@/lib/util/fetch";
 	import { isTouch } from "@/lib/util/helpers";
-	import { setPublicListHistoryDepth } from "@/lib/util/listNavigation.svelte";
+	import { publicListHistoryState } from "@/lib/util/listNavigation.svelte";
 	import {
+		applyWatchedListState,
 		beginTemporaryWatchedListState,
+		captureWatchedListState,
 		defaultSort,
+		defaultWLDetailedView,
 		setWatchedListPreset,
 		store,
+		type WatchedListStateSnapshot,
 	} from "@/store.svelte";
 	import type { Follow, PrivateUser } from "@/types";
-	import { onMount } from "svelte";
+	import { onMount, untrack } from "svelte";
 
 	interface Props {
 		children?: import("svelte").Snippet;
@@ -27,6 +31,10 @@
 
 	let { children }: Props = $props();
 	const restoreWatchedListState = beginTemporaryWatchedListState();
+	let mainListState: WatchedListStateSnapshot;
+	let activeListState: "main" | "search" | undefined;
+	let activeSearchQuery = "";
+	let listStatesReady = $state(false);
 
 	let navEl: HTMLElement | undefined = $state();
 	let mainSearchEl: HTMLInputElement | undefined = $state();
@@ -54,6 +62,41 @@
 		`/lists/${page.params.id}/${page.params.username}` as `/lists/${string}/${string}`,
 	);
 
+	function defaultSearchState(): WatchedListStateSnapshot {
+		return {
+			sort: ["LASTFIN", "DOWN"],
+			filters: {
+				type: [],
+				status: ["planned", "watching", "finished", "hold", "dropped"],
+			},
+			preset: undefined,
+			detailedView: [...defaultWLDetailedView],
+		};
+	}
+
+	$effect(() => {
+		if (!listStatesReady || !isListPage) return;
+		const query = page.url.searchParams.get("query")?.trim() ?? "";
+		const nextState = isSearchActive ? "search" : "main";
+		if (
+			nextState === activeListState &&
+			(nextState === "main" || query === activeSearchQuery)
+		) {
+			return;
+		}
+
+		untrack(() => {
+			if (activeListState === "main") {
+				mainListState = captureWatchedListState();
+			}
+			applyWatchedListState(
+				nextState === "main" ? mainListState : defaultSearchState(),
+			);
+			activeListState = nextState;
+			activeSearchQuery = nextState === "search" ? query : "";
+		});
+	});
+
 	function closeMenus(except?: "detailed" | "sort" | "filter") {
 		if (except !== "detailed") detailedMenuShown = false;
 		if (except !== "sort") sortMenuShown = false;
@@ -80,6 +123,7 @@
 			() => {
 				const query = target.value.trim();
 				const location = new URL(page.url);
+				location.searchParams.delete("listDepth");
 				if (query) {
 					location.searchParams.set("query", query);
 				} else {
@@ -95,16 +139,10 @@
 					: resolve(`/lists/${page.params.id}/${page.params.username}`);
 				if (listLocation === `${page.url.pathname}${page.url.search}`) return;
 
-				setPublicListHistoryDepth(location, page.url);
-				searchParams = location.searchParams.toString();
-				listLocation = searchParams
-					? resolve(
-							`/lists/${page.params.id}/${page.params.username}?${searchParams}`,
-						)
-					: resolve(`/lists/${page.params.id}/${page.params.username}`);
-
 				target.autofocus = true;
-				goto(listLocation).then(() => {
+				goto(listLocation, {
+					state: publicListHistoryState(location, page.url, page.state),
+				}).then(() => {
 					if (!document.body.classList.contains("split-nav")) {
 						mainSearchEl?.focus();
 						if (mainSearchEl) mainSearchEl.autofocus = false;
@@ -194,6 +232,14 @@
 
 	onMount(() => {
 		setWatchedListPreset("recentlyWatched");
+		mainListState = captureWatchedListState();
+		activeListState = "main";
+		if (isListPage && isSearchActive) {
+			applyWatchedListState(defaultSearchState());
+			activeListState = "search";
+			activeSearchQuery = page.url.searchParams.get("query")?.trim() ?? "";
+		}
+		listStatesReady = true;
 
 		const token = localStorage.getItem("token");
 		if (token) {
