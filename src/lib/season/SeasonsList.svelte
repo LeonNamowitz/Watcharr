@@ -218,7 +218,7 @@
 						)}
 						{#if !readOnly || ws}
 							{#if !readOnly || ws?.rating}
-								<div class="rating">
+								<div class:public-rating={readOnly} class="rating">
 									<PosterRating
 										rating={ws?.rating}
 										btnTooltip="Season Rating"
@@ -469,6 +469,21 @@
 			&.rating {
 				height: 40px;
 				min-height: 40px;
+
+				&.public-rating {
+					:global(button.rating.interaction-disabled) {
+						color: gold;
+						fill: gold;
+					}
+
+					:global(button.rating.interaction-disabled span) {
+						color: gold !important;
+					}
+
+					:global(button.rating.interaction-disabled span.star) {
+						-webkit-text-stroke: 1px gold;
+					}
+				}
 			}
 
 			&.status {
