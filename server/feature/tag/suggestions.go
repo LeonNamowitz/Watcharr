@@ -27,14 +27,36 @@ const (
 type suggestionKind string
 
 const (
-	suggestionKindAll        suggestionKind = "all"
-	suggestionKindGenre      suggestionKind = "genre"
-	suggestionKindKeyword    suggestionKind = "keyword"
-	suggestionKindComposer   suggestionKind = "composer"
-	suggestionKindLanguage   suggestionKind = "language"
-	suggestionKindCollection suggestionKind = "collection"
-	suggestionKindFuture     suggestionKind = "future"
+	suggestionKindAll          suggestionKind = "all"
+	suggestionKindGenre        suggestionKind = "genre"
+	suggestionKindKeyword      suggestionKind = "keyword"
+	suggestionKindComposer     suggestionKind = "composer"
+	suggestionKindLanguage     suggestionKind = "language"
+	suggestionKindCollection   suggestionKind = "collection"
+	suggestionKindFuture       suggestionKind = "future"
+	suggestionKindGameGenre    suggestionKind = "game_genre"
+	suggestionKindGameMode     suggestionKind = "game_mode"
+	suggestionKindGameFuture   suggestionKind = "game_future"
+	suggestionKindGameCategory suggestionKind = "game_category"
 )
+
+var gameCategoryNames = map[int]string{
+	0:  "Main game",
+	1:  "DLC / add-on",
+	2:  "Expansion",
+	3:  "Bundle",
+	4:  "Standalone expansion",
+	5:  "Mod",
+	6:  "Episode",
+	7:  "Season",
+	8:  "Remake",
+	9:  "Remaster",
+	10: "Expanded game",
+	11: "Port",
+	12: "Fork",
+	13: "Pack",
+	14: "Update",
+}
 
 type contentMetadata struct {
 	media            domain.Media
@@ -252,24 +274,27 @@ func (s *Service) GetSuggestionOptions(userID uint, tagID uint) (domain.TagSugge
 	}
 	metadata, skipped, metadataErr := s.scanContentMetadata(watched)
 	response := domain.TagSuggestionOptionsResponse{
-		Genres:       []domain.TagSuggestionOption{},
-		Keywords:     []domain.TagSuggestionOption{},
-		Composers:    []domain.TagSuggestionOption{},
-		Languages:    []domain.TagLanguageSuggestionOption{},
-		Collections:  []domain.TagSuggestionOption{},
-		Incomplete:   skipped > 0,
-		SkippedCount: skipped,
+		Genres:         []domain.TagSuggestionOption{},
+		Keywords:       []domain.TagSuggestionOption{},
+		Composers:      []domain.TagSuggestionOption{},
+		Languages:      []domain.TagLanguageSuggestionOption{},
+		Collections:    []domain.TagSuggestionOption{},
+		GameGenres:     []domain.TagValueSuggestionOption{},
+		GameModes:      []domain.TagValueSuggestionOption{},
+		GameCategories: []domain.TagValueSuggestionOption{},
+		Incomplete:     skipped > 0,
+		SkippedCount:   skipped,
 	}
-	response.FutureReleaseCount = len(s.futureCandidates(watched))
-	if metadataErr != nil && response.FutureReleaseCount == 0 {
-		return response, metadataErr
-	}
-
+	response.FutureReleaseCount = len(s.futureCandidates(watched, false))
+	response.GameFutureReleaseCount = len(s.futureCandidates(watched, true))
 	genreCounts := map[int]domain.TagSuggestionOption{}
 	keywordCounts := map[int]domain.TagSuggestionOption{}
 	composerCounts := map[int]domain.TagSuggestionOption{}
 	languageCounts := map[string]domain.TagLanguageSuggestionOption{}
 	collectionCounts := map[int]domain.TagSuggestionOption{}
+	gameGenreCounts := map[string]domain.TagValueSuggestionOption{}
+	gameModeCounts := map[string]domain.TagValueSuggestionOption{}
+	gameCategoryCounts := map[string]domain.TagValueSuggestionOption{}
 	for _, item := range metadata {
 		for _, genre := range item.genres {
 			genre.Count = genreCounts[genre.ID].Count + 1
@@ -296,6 +321,20 @@ func (s *Service) GetSuggestionOptions(userID uint, tagID uint) (domain.TagSugge
 			collectionCounts[collection.ID] = collection
 		}
 	}
+	for i := range watched {
+		game := watched[i].Game
+		if game == nil {
+			continue
+		}
+		countGameValues(gameGenreCounts, splitGameValues(game.Genres))
+		countGameValues(gameModeCounts, splitGameValues(game.GameModes))
+		categoryValue := strconv.Itoa(game.Category)
+		option := gameCategoryCounts[categoryValue]
+		option.Value = categoryValue
+		option.Name = gameCategoryName(game.Category)
+		option.Count++
+		gameCategoryCounts[categoryValue] = option
+	}
 	for _, genre := range genreCounts {
 		response.Genres = append(response.Genres, genre)
 	}
@@ -311,6 +350,12 @@ func (s *Service) GetSuggestionOptions(userID uint, tagID uint) (domain.TagSugge
 	for _, collection := range collectionCounts {
 		response.Collections = append(response.Collections, collection)
 	}
+	response.GameGenres = gameSuggestionOptionValues(gameGenreCounts)
+	response.GameModes = gameSuggestionOptionValues(gameModeCounts)
+	response.GameCategories = gameSuggestionOptionValues(gameCategoryCounts)
+	if metadataErr != nil && response.FutureReleaseCount == 0 && len(response.GameGenres) == 0 && len(response.GameModes) == 0 && len(response.GameCategories) == 0 {
+		return response, metadataErr
+	}
 	sortSuggestionOptions(response.Genres)
 	sortSuggestionOptions(response.Keywords)
 	sortSuggestionOptions(response.Composers)
@@ -319,6 +364,54 @@ func (s *Service) GetSuggestionOptions(userID uint, tagID uint) (domain.TagSugge
 		return strings.ToLower(response.Languages[i].Name) < strings.ToLower(response.Languages[j].Name)
 	})
 	return response, nil
+}
+
+func splitGameValues(values string) []string {
+	parts := strings.Split(values, "|")
+	result := make([]string, 0, len(parts))
+	seen := map[string]struct{}{}
+	for _, value := range parts {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		key := strings.ToLower(value)
+		if _, exists := seen[key]; exists {
+			continue
+		}
+		seen[key] = struct{}{}
+		result = append(result, value)
+	}
+	return result
+}
+
+func countGameValues(counts map[string]domain.TagValueSuggestionOption, values []string) {
+	for _, value := range values {
+		key := strings.ToLower(value)
+		option := counts[key]
+		option.Value = value
+		option.Name = value
+		option.Count++
+		counts[key] = option
+	}
+}
+
+func gameSuggestionOptionValues(counts map[string]domain.TagValueSuggestionOption) []domain.TagValueSuggestionOption {
+	values := make([]domain.TagValueSuggestionOption, 0, len(counts))
+	for _, option := range counts {
+		values = append(values, option)
+	}
+	sort.Slice(values, func(i, j int) bool {
+		return strings.ToLower(values[i].Name) < strings.ToLower(values[j].Name)
+	})
+	return values
+}
+
+func gameCategoryName(category int) string {
+	if name, ok := gameCategoryNames[category]; ok {
+		return name
+	}
+	return "Category " + strconv.Itoa(category)
 }
 
 func languageName(code string) string {
@@ -344,6 +437,7 @@ func (s *Service) GetCandidates(
 	tagID uint,
 	kind suggestionKind,
 	criterionID int,
+	criterion string,
 	originalLanguage string,
 	query string,
 	pp util.PaginationParams,
@@ -357,7 +451,10 @@ func (s *Service) GetCandidates(
 	if kind == suggestionKindLanguage && strings.TrimSpace(originalLanguage) == "" {
 		return domain.TagCandidatesResponse{}, errors.New("a language criterion is required")
 	}
-	if kind != suggestionKindAll && kind != suggestionKindGenre && kind != suggestionKindKeyword && kind != suggestionKindComposer && kind != suggestionKindLanguage && kind != suggestionKindCollection && kind != suggestionKindFuture {
+	if (kind == suggestionKindGameGenre || kind == suggestionKindGameMode || kind == suggestionKindGameCategory) && strings.TrimSpace(criterion) == "" {
+		return domain.TagCandidatesResponse{}, errors.New("a game suggestion criterion is required")
+	}
+	if kind != suggestionKindAll && kind != suggestionKindGenre && kind != suggestionKindKeyword && kind != suggestionKindComposer && kind != suggestionKindLanguage && kind != suggestionKindCollection && kind != suggestionKindFuture && kind != suggestionKindGameGenre && kind != suggestionKindGameMode && kind != suggestionKindGameFuture && kind != suggestionKindGameCategory {
 		return domain.TagCandidatesResponse{}, errors.New("unsupported suggestion kind")
 	}
 
@@ -379,9 +476,43 @@ func (s *Service) GetCandidates(
 			candidates = append(candidates, domain.TagCandidate{Media: media})
 		}
 	case suggestionKindFuture:
-		for _, candidate := range s.futureCandidates(watched) {
+		for _, candidate := range s.futureCandidates(watched, false) {
 			if query == "" || strings.Contains(strings.ToLower(candidate.Media.Name), query) {
 				candidates = append(candidates, candidate)
+			}
+		}
+	case suggestionKindGameFuture:
+		for _, candidate := range s.futureCandidates(watched, true) {
+			if query == "" || strings.Contains(strings.ToLower(candidate.Media.Name), query) {
+				candidates = append(candidates, candidate)
+			}
+		}
+	case suggestionKindGameGenre, suggestionKindGameMode, suggestionKindGameCategory:
+		for i := range watched {
+			item := &watched[i]
+			if item.Game == nil || (query != "" && !strings.Contains(strings.ToLower(item.Game.Name), query)) {
+				continue
+			}
+			label := "Game genre"
+			matched := false
+			reasonValue := criterion
+			switch kind {
+			case suggestionKindGameGenre:
+				matched = containsGameValue(item.Game.Genres, criterion)
+			case suggestionKindGameMode:
+				label = "Game mode"
+				matched = containsGameValue(item.Game.GameModes, criterion)
+			case suggestionKindGameCategory:
+				label = "Game category"
+				matched = strconv.Itoa(item.Game.Category) == criterion
+				reasonValue = gameCategoryName(item.Game.Category)
+			}
+			if matched {
+				media := domain.NewMediaFromWatched(item, ptr(domain.NewWatchedDtoForLists(item)))
+				candidates = append(candidates, domain.TagCandidate{
+					Media:  media,
+					Reason: fmt.Sprintf("%s: %s", label, reasonValue),
+				})
 			}
 		}
 	case suggestionKindGenre, suggestionKindKeyword, suggestionKindComposer, suggestionKindLanguage, suggestionKindCollection:
@@ -438,22 +569,37 @@ func (s *Service) GetCandidates(
 	return paginateCandidates(candidates, meta, pp), nil
 }
 
+func containsGameValue(values string, criterion string) bool {
+	for _, value := range splitGameValues(values) {
+		if strings.EqualFold(value, criterion) {
+			return true
+		}
+	}
+	return false
+}
+
 func ptr[T any](value T) *T {
 	return &value
 }
 
-func (s *Service) futureCandidates(watched []entity.Watched) []domain.TagCandidate {
+func (s *Service) futureCandidates(watched []entity.Watched, gamesOnly bool) []domain.TagCandidate {
 	today := s.now().UTC().Truncate(24 * time.Hour)
 	candidates := []domain.TagCandidate{}
 	for i := range watched {
 		item := &watched[i]
-		if item.Content == nil || item.Content.ReleaseDate == nil || !item.Content.ReleaseDate.After(today) {
+		var releaseDate *time.Time
+		if item.Game != nil {
+			releaseDate = item.Game.ReleaseDate
+		} else if !gamesOnly && item.Content != nil {
+			releaseDate = item.Content.ReleaseDate
+		}
+		if releaseDate == nil || !releaseDate.After(today) {
 			continue
 		}
 		media := domain.NewMediaFromWatched(item, ptr(domain.NewWatchedDtoForLists(item)))
 		candidates = append(candidates, domain.TagCandidate{
 			Media:  media,
-			Reason: "Releases " + item.Content.ReleaseDate.UTC().Format("2 Jan 2006"),
+			Reason: "Releases " + releaseDate.UTC().Format("2 Jan 2006"),
 		})
 	}
 	return candidates
@@ -476,9 +622,10 @@ func paginateCandidates(
 		Results:          []domain.TagCandidate{},
 		Meta:             meta,
 	}
-	start := (pp.Page - 1) * pp.Limit
-	if start < len(candidates) {
-		end := min(start+pp.Limit, len(candidates))
+	pageOffset := pp.Page - 1
+	if len(candidates) > 0 && pageOffset <= (len(candidates)-1)/pp.Limit {
+		start := pageOffset * pp.Limit
+		end := start + min(pp.Limit, len(candidates)-start)
 		response.Results = candidates[start:end]
 	}
 	response.Finished(pp)

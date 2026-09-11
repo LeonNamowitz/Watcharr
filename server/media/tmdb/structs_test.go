@@ -2,8 +2,19 @@ package tmdb
 
 import (
 	"encoding/json"
+	"reflect"
 	"testing"
 )
+
+func TestTransformProvidersAllowsMissingAppendResponse(t *testing.T) {
+	var missing any
+	if got := transformProviders(&missing, "US"); !reflect.DeepEqual(got, WatchProviders{}) {
+		t.Fatalf("missing providers = %#v, want empty response", got)
+	}
+	if got := transformProviders(nil, "US"); !reflect.DeepEqual(got, WatchProviders{}) {
+		t.Fatalf("nil providers = %#v, want empty response", got)
+	}
+}
 
 func TestAppendedSuggestionMetadataResponseShapes(t *testing.T) {
 	var movie MovieDetails

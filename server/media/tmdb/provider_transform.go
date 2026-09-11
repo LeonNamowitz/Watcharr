@@ -10,6 +10,12 @@ import (
 func transformProviders(c *any, country string) WatchProviders {
 	slog.Debug("transformProviders called", "country", country)
 	resp := WatchProviders{}
+	// Detail callers do not always request `watch/providers` through
+	// append_to_response. An absent response is expected in that case and should
+	// not be treated as a failed type assertion.
+	if c == nil || *c == nil {
+		return resp
+	}
 
 	cmap, ok := (*c).(map[string]any)
 	if !ok {

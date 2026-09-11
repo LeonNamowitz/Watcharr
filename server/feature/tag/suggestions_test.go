@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/sbondCo/Watcharr/database/entity"
+	"github.com/sbondCo/Watcharr/domain"
 	"github.com/sbondCo/Watcharr/internal/testutil"
 	"github.com/sbondCo/Watcharr/media/tmdb"
 	"github.com/sbondCo/Watcharr/util"
@@ -66,7 +67,14 @@ func TestSuggestionsUseExactMetadataAndPreservePartialResults(t *testing.T) {
 	collectionMovie := entity.Content{TmdbID: 25, Title: "Collection Film", Type: entity.MOVIE, ReleaseDate: &past}
 	failing := entity.Content{TmdbID: 30, Title: "Unavailable", Type: entity.MOVIE, ReleaseDate: &past}
 	alreadyTagged := entity.Content{TmdbID: 40, Title: "Already Tagged", Type: entity.MOVIE, ReleaseDate: &past}
-	game := entity.Game{IgdbID: 50, Name: "A Game"}
+	game := entity.Game{
+		IgdbID:      50,
+		Name:        "A Game",
+		ReleaseDate: &future,
+		Genres:      "Role-playing (RPG)|Adventure|",
+		GameModes:   "Single player|Co-operative|",
+		Category:    8,
+	}
 	for _, value := range []any{&documentary, &musicShow, &collectionMovie, &failing, &alreadyTagged, &game} {
 		mustSave(t, db.Create(value).Error)
 	}
@@ -152,11 +160,20 @@ func TestSuggestionsUseExactMetadataAndPreservePartialResults(t *testing.T) {
 	if len(options.Collections) != 1 || options.Collections[0].Name != "Example Collection" {
 		t.Fatalf("collections = %#v", options.Collections)
 	}
-	if options.FutureReleaseCount != 1 {
-		t.Fatalf("future count = %d, want 1", options.FutureReleaseCount)
+	if options.FutureReleaseCount != 2 || options.GameFutureReleaseCount != 1 {
+		t.Fatalf("future counts = (%d, %d), want (2, 1)", options.FutureReleaseCount, options.GameFutureReleaseCount)
+	}
+	if len(options.GameGenres) != 2 || options.GameGenres[0].Name != "Adventure" || options.GameGenres[1].Name != "Role-playing (RPG)" {
+		t.Fatalf("game genres = %#v", options.GameGenres)
+	}
+	if len(options.GameModes) != 2 || options.GameModes[0].Name != "Co-operative" || options.GameModes[1].Name != "Single player" {
+		t.Fatalf("game modes = %#v", options.GameModes)
+	}
+	if len(options.GameCategories) != 1 || options.GameCategories[0].Value != "8" || options.GameCategories[0].Name != "Remake" {
+		t.Fatalf("game categories = %#v", options.GameCategories)
 	}
 
-	genre, err := service.GetCandidates(user.ID, tag.ID, suggestionKindGenre, 16, "", "", util.PaginationParams{Page: 1, Limit: 10})
+	genre, err := service.GetCandidates(user.ID, tag.ID, suggestionKindGenre, 16, "", "", "", util.PaginationParams{Page: 1, Limit: 10})
 	if err != nil {
 		t.Fatalf("genre candidates failed: %v", err)
 	}
@@ -167,7 +184,7 @@ func TestSuggestionsUseExactMetadataAndPreservePartialResults(t *testing.T) {
 		t.Fatalf("genre partial metadata = %#v", genre.Meta)
 	}
 
-	keyword, err := service.GetCandidates(user.ID, tag.ID, suggestionKindKeyword, 4344, "", "", util.PaginationParams{Page: 1, Limit: 10})
+	keyword, err := service.GetCandidates(user.ID, tag.ID, suggestionKindKeyword, 4344, "", "", "", util.PaginationParams{Page: 1, Limit: 10})
 	if err != nil {
 		t.Fatalf("keyword candidates failed: %v", err)
 	}
@@ -175,7 +192,7 @@ func TestSuggestionsUseExactMetadataAndPreservePartialResults(t *testing.T) {
 		t.Fatalf("keyword candidates = %#v", keyword.Results)
 	}
 
-	composer, err := service.GetCandidates(user.ID, tag.ID, suggestionKindComposer, 3, "", "", util.PaginationParams{Page: 1, Limit: 10})
+	composer, err := service.GetCandidates(user.ID, tag.ID, suggestionKindComposer, 3, "", "", "", util.PaginationParams{Page: 1, Limit: 10})
 	if err != nil {
 		t.Fatalf("composer candidates failed: %v", err)
 	}
@@ -183,44 +200,75 @@ func TestSuggestionsUseExactMetadataAndPreservePartialResults(t *testing.T) {
 		t.Fatalf("composer candidates = %#v", composer.Results)
 	}
 
-	languageCandidates, err := service.GetCandidates(user.ID, tag.ID, suggestionKindLanguage, 0, "en", "", util.PaginationParams{Page: 1, Limit: 10})
+	languageCandidates, err := service.GetCandidates(user.ID, tag.ID, suggestionKindLanguage, 0, "", "en", "", util.PaginationParams{Page: 1, Limit: 10})
 	if err != nil || len(languageCandidates.Results) != 2 || languageCandidates.Results[0].Reason != "Original language: English" {
 		t.Fatalf("language candidates = %#v, err = %v", languageCandidates.Results, err)
 	}
 
-	collectionCandidates, err := service.GetCandidates(user.ID, tag.ID, suggestionKindCollection, 119, "", "collection", util.PaginationParams{Page: 1, Limit: 10})
+	collectionCandidates, err := service.GetCandidates(user.ID, tag.ID, suggestionKindCollection, 119, "", "", "collection", util.PaginationParams{Page: 1, Limit: 10})
 	if err != nil || len(collectionCandidates.Results) != 1 || collectionCandidates.Results[0].Reason != "Collection: Example Collection" {
 		t.Fatalf("collection candidates = %#v, err = %v", collectionCandidates.Results, err)
 	}
 
-	upcoming, err := service.GetCandidates(user.ID, tag.ID, suggestionKindFuture, 0, "", "", util.PaginationParams{Page: 1, Limit: 10})
+	upcoming, err := service.GetCandidates(user.ID, tag.ID, suggestionKindFuture, 0, "", "", "", util.PaginationParams{Page: 1, Limit: 10})
 	if err != nil {
 		t.Fatalf("future candidates failed: %v", err)
 	}
-	if len(upcoming.Results) != 1 || upcoming.Results[0].Media.Name != "Music Show" {
+	if len(upcoming.Results) != 2 || upcoming.Results[0].Media.Name != "A Game" || upcoming.Results[1].Media.Name != "Music Show" {
 		t.Fatalf("future candidates = %#v", upcoming.Results)
 	}
+	gameGenre, err := service.GetCandidates(user.ID, tag.ID, suggestionKindGameGenre, 0, "Adventure", "", "", util.PaginationParams{Page: 1, Limit: 10})
+	if err != nil || len(gameGenre.Results) != 1 || gameGenre.Results[0].Reason != "Game genre: Adventure" {
+		t.Fatalf("game genre candidates = %#v, err = %v", gameGenre.Results, err)
+	}
+	gameMode, err := service.GetCandidates(user.ID, tag.ID, suggestionKindGameMode, 0, "Co-operative", "", "", util.PaginationParams{Page: 1, Limit: 10})
+	if err != nil || len(gameMode.Results) != 1 || gameMode.Results[0].Reason != "Game mode: Co-operative" {
+		t.Fatalf("game mode candidates = %#v, err = %v", gameMode.Results, err)
+	}
+	gameCategory, err := service.GetCandidates(user.ID, tag.ID, suggestionKindGameCategory, 0, "8", "", "", util.PaginationParams{Page: 1, Limit: 10})
+	if err != nil || len(gameCategory.Results) != 1 || gameCategory.Results[0].Reason != "Game category: Remake" {
+		t.Fatalf("game category candidates = %#v, err = %v", gameCategory.Results, err)
+	}
+	gameFuture, err := service.GetCandidates(user.ID, tag.ID, suggestionKindGameFuture, 0, "", "", "", util.PaginationParams{Page: 1, Limit: 10})
+	if err != nil || len(gameFuture.Results) != 1 || gameFuture.Results[0].Media.Name != "A Game" {
+		t.Fatalf("future game candidates = %#v, err = %v", gameFuture.Results, err)
+	}
 
-	manual, err := service.GetCandidates(user.ID, tag.ID, suggestionKindAll, 0, "", "game", util.PaginationParams{Page: 1, Limit: 1})
+	manual, err := service.GetCandidates(user.ID, tag.ID, suggestionKindAll, 0, "", "", "game", util.PaginationParams{Page: 1, Limit: 1})
 	if err != nil {
 		t.Fatalf("manual candidates failed: %v", err)
 	}
 	if manual.TotalResults != 1 || len(manual.Results) != 1 || manual.Results[0].Media.Name != "A Game" {
 		t.Fatalf("manual candidates = %#v", manual)
 	}
-	manual, err = service.GetCandidates(user.ID, tag.ID, suggestionKindAll, 0, "", "", util.PaginationParams{Page: 2, Limit: 3})
+	manual, err = service.GetCandidates(user.ID, tag.ID, suggestionKindAll, 0, "", "", "", util.PaginationParams{Page: 2, Limit: 3})
 	if err != nil || manual.TotalResults != 5 || manual.TotalPages != 2 || len(manual.Results) != 2 {
 		t.Fatalf("paginated manual candidates = %#v, err = %v", manual, err)
 	}
-	empty, err := service.GetCandidates(user.ID, tag.ID, suggestionKindAll, 0, "", "not present", util.PaginationParams{Page: 1, Limit: 10})
+	empty, err := service.GetCandidates(user.ID, tag.ID, suggestionKindAll, 0, "", "", "not present", util.PaginationParams{Page: 1, Limit: 10})
 	if err != nil || empty.TotalResults != 0 || len(empty.Results) != 0 {
 		t.Fatalf("empty manual candidates = %#v, err = %v", empty, err)
 	}
-	if _, err := service.GetCandidates(user.ID, tag.ID, suggestionKindKeyword, 0, "", "", util.PaginationParams{}); err == nil {
+	if _, err := service.GetCandidates(user.ID, tag.ID, suggestionKindKeyword, 0, "", "", "", util.PaginationParams{}); err == nil {
 		t.Fatal("keyword candidates should require an exact criterion id")
 	}
-	if _, err := service.GetCandidates(user.ID, tag.ID, suggestionKindLanguage, 0, "", "", util.PaginationParams{}); err == nil {
+	if _, err := service.GetCandidates(user.ID, tag.ID, suggestionKindLanguage, 0, "", "", "", util.PaginationParams{}); err == nil {
 		t.Fatal("language candidates should require an exact language code")
+	}
+	if _, err := service.GetCandidates(user.ID, tag.ID, suggestionKindGameGenre, 0, "", "", "", util.PaginationParams{}); err == nil {
+		t.Fatal("game genre candidates should require an exact criterion")
+	}
+}
+
+func TestPaginateCandidatesHandlesOverflowingPageOffset(t *testing.T) {
+	maxInt := int(^uint(0) >> 1)
+	response := paginateCandidates(
+		[]domain.TagCandidate{{}},
+		domain.TagCandidateMeta{},
+		util.PaginationParams{Page: maxInt, Limit: 2},
+	)
+	if len(response.Results) != 0 || response.Page != maxInt {
+		t.Fatalf("overflow page response = %#v", response)
 	}
 }
 

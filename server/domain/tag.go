@@ -27,15 +27,24 @@ type (
 		Name  string `json:"name"`
 		Count int    `json:"count"`
 	}
+	TagValueSuggestionOption struct {
+		Value string `json:"value"`
+		Name  string `json:"name"`
+		Count int    `json:"count"`
+	}
 	TagSuggestionOptionsResponse struct {
-		Genres             []TagSuggestionOption         `json:"genres"`
-		Keywords           []TagSuggestionOption         `json:"keywords"`
-		Composers          []TagSuggestionOption         `json:"composers"`
-		Languages          []TagLanguageSuggestionOption `json:"languages"`
-		Collections        []TagSuggestionOption         `json:"collections"`
-		FutureReleaseCount int                           `json:"futureReleaseCount"`
-		Incomplete         bool                          `json:"incomplete"`
-		SkippedCount       int                           `json:"skippedCount"`
+		Genres                 []TagSuggestionOption         `json:"genres"`
+		Keywords               []TagSuggestionOption         `json:"keywords"`
+		Composers              []TagSuggestionOption         `json:"composers"`
+		Languages              []TagLanguageSuggestionOption `json:"languages"`
+		Collections            []TagSuggestionOption         `json:"collections"`
+		GameGenres             []TagValueSuggestionOption    `json:"gameGenres"`
+		GameModes              []TagValueSuggestionOption    `json:"gameModes"`
+		GameCategories         []TagValueSuggestionOption    `json:"gameCategories"`
+		FutureReleaseCount     int                           `json:"futureReleaseCount"`
+		GameFutureReleaseCount int                           `json:"gameFutureReleaseCount"`
+		Incomplete             bool                          `json:"incomplete"`
+		SkippedCount           int                           `json:"skippedCount"`
 	}
 	TagCandidate struct {
 		Media  Media  `json:"media"`
