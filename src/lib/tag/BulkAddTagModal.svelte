@@ -17,6 +17,7 @@
 		type TagSuggestionOption,
 		type TagSuggestionKind,
 		type TagSuggestionOptionsResponse,
+		type TagValueSuggestionOption,
 	} from "@/types";
 
 	interface Props {
@@ -28,10 +29,9 @@
 	let { tag, onClose, onAdded }: Props = $props();
 
 	let mode: "browse" | "suggestions" = $state("browse");
-	let source:
-		"genre" | "keyword" | "composer" | "language" | "collection" | "future" =
-		$state("genre");
+	let source = $state<Exclude<TagSuggestionKind, "all">>("genre");
 	let criterionId = $state("");
+	let criterionValue = $state("");
 	let languageCode = $state("");
 	let facetQuery = $state("");
 	let options: TagSuggestionOptionsResponse | undefined = $state();
@@ -70,6 +70,15 @@
 						? (options?.collections ?? [])
 						: [],
 	);
+	let activeGameOptions: TagValueSuggestionOption[] = $derived(
+		source === "game_genre"
+			? (options?.gameGenres ?? [])
+			: source === "game_mode"
+				? (options?.gameModes ?? [])
+				: source === "game_category"
+					? (options?.gameCategories ?? [])
+					: [],
+	);
 	let filteredOptions = $derived(
 		activeOptions.filter((option) =>
 			option.name.toLowerCase().includes(facetQuery.trim().toLowerCase()),
@@ -85,8 +94,15 @@
 			.filter((option): option is TagSuggestionOption => option !== undefined);
 	});
 	function criterionIsMissing() {
-		if (mode !== "suggestions" || source === "future") return false;
-		return source === "language" ? !languageCode : !criterionId;
+		if (
+			mode !== "suggestions" ||
+			source === "future" ||
+			source === "game_future"
+		)
+			return false;
+		if (source === "language") return !languageCode;
+		if (source.startsWith("game_")) return !criterionValue;
+		return !criterionId;
 	}
 
 	function sourceLabel() {
@@ -101,6 +117,12 @@
 				return "original language";
 			case "collection":
 				return "TMDB collection";
+			case "game_genre":
+				return "game genre";
+			case "game_mode":
+				return "game mode";
+			case "game_category":
+				return "game category";
 			default:
 				return "source";
 		}
@@ -194,9 +216,12 @@
 					kind: currentKind(),
 					criterionId:
 						mode === "suggestions" &&
-						source !== "future" &&
-						source !== "language"
+						["genre", "keyword", "composer", "collection"].includes(source)
 							? Number(criterionId)
+							: undefined,
+					criterion:
+						mode === "suggestions" && source.startsWith("game_")
+							? criterionValue
 							: undefined,
 					language:
 						mode === "suggestions" && source === "language"
@@ -234,6 +259,7 @@
 	async function changeSource(event: Event) {
 		source = (event.currentTarget as HTMLSelectElement).value as typeof source;
 		criterionId = "";
+		criterionValue = "";
 		languageCode = "";
 		facetQuery = "";
 		page = 1;
@@ -253,6 +279,11 @@
 
 	async function changeLanguage(event: Event) {
 		languageCode = (event.currentTarget as HTMLSelectElement).value;
+		await loadCandidates(1);
+	}
+
+	async function changeGameCriterion(event: Event) {
+		criterionValue = (event.currentTarget as HTMLSelectElement).value;
 		await loadCandidates(1);
 	}
 
@@ -339,12 +370,22 @@
 				<label>
 					<span>Match using</span>
 					<select value={source} onchange={changeSource}>
-						<option value="genre">Genre</option>
-						<option value="keyword">Keyword</option>
-						<option value="composer">Composer</option>
-						<option value="language">Original language</option>
-						<option value="collection">TMDB collection</option>
-						<option value="future">Future release</option>
+						<optgroup label="Movies &amp; TV">
+							<option value="genre">Genre</option>
+							<option value="keyword">Keyword</option>
+							<option value="composer">Composer</option>
+							<option value="language">Original language</option>
+							<option value="collection">TMDB collection</option>
+						</optgroup>
+						<optgroup label="Games">
+							<option value="game_genre">Game genre</option>
+							<option value="game_mode">Game mode</option>
+							<option value="game_future">Future release</option>
+							<option value="game_category">Game category</option>
+						</optgroup>
+						<optgroup label="All media">
+							<option value="future">Any future release</option>
+						</optgroup>
 					</select>
 				</label>
 				{#if source === "genre"}
@@ -379,13 +420,30 @@
 							{/each}
 						</select>
 					</label>
+				{:else if source === "game_genre" || source === "game_mode" || source === "game_category"}
+					<label>
+						<span>{sourceLabel()}</span>
+						<select
+							value={criterionValue}
+							onchange={changeGameCriterion}
+							disabled={loadingOptions}
+						>
+							<option value="">Choose one...</option>
+							{#each activeGameOptions as option (option.value)}
+								<option value={option.value}>
+									{option.name} ({option.count})
+								</option>
+							{/each}
+						</select>
+					</label>
 				{:else if options}
-					{#if source === "future"}
+					{#if source === "future" || source === "game_future"}
+						{@const futureCount =
+							source === "game_future"
+								? options.gameFutureReleaseCount
+								: options.futureReleaseCount}
 						<span class="future-count">
-							{options.futureReleaseCount} future release{options.futureReleaseCount ===
-							1
-								? ""
-								: "s"} available
+							{futureCount} future release{futureCount === 1 ? "" : "s"} available
 						</span>
 					{/if}
 				{/if}

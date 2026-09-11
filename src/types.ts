@@ -896,7 +896,11 @@ export type TagSuggestionKind =
 	| "composer"
 	| "language"
 	| "collection"
-	| "future";
+	| "future"
+	| "game_genre"
+	| "game_mode"
+	| "game_future"
+	| "game_category";
 
 export interface TagSuggestionOption {
 	id: number;
@@ -910,13 +914,23 @@ export interface TagLanguageSuggestionOption {
 	count: number;
 }
 
+export interface TagValueSuggestionOption {
+	value: string;
+	name: string;
+	count: number;
+}
+
 export interface TagSuggestionOptionsResponse {
 	genres: TagSuggestionOption[];
 	keywords: TagSuggestionOption[];
 	composers: TagSuggestionOption[];
 	languages: TagLanguageSuggestionOption[];
 	collections: TagSuggestionOption[];
+	gameGenres: TagValueSuggestionOption[];
+	gameModes: TagValueSuggestionOption[];
+	gameCategories: TagValueSuggestionOption[];
 	futureReleaseCount: number;
+	gameFutureReleaseCount: number;
 	incomplete: boolean;
 	skippedCount: number;
 }
