@@ -40,28 +40,28 @@ const rubrics: Record<RatingHelperMediaType, RatingRubric> = {
 			{
 				id: "content",
 				label: "Content",
-				max: 40,
-				weight: 1,
+				max: 10,
+				weight: 4,
 				description: "Story, characters, themes, screenplay, and ideas.",
 			},
 			{
 				id: "technical",
 				label: "Technical",
-				max: 40,
-				weight: 1,
+				max: 10,
+				weight: 4,
 				description:
 					"Cinematography, editing, sound design, acting, music, and craft.",
 			},
 			{
 				id: "bias",
 				label: "Personal bias",
-				max: 20,
-				weight: 1,
+				max: 10,
+				weight: 2,
 				description: "Your personal taste, attachment, mood, and preferences.",
 			},
 		],
 		intro:
-			"Build the score from 40 points of content, 40 technical points, and 20 points of personal bias.",
+			"Score each category from 0–10, then weighted as 40% content, 40% technical, and 20% personal bias.",
 		guidance:
 			"Around 70 is generally a good movie. 80+ usually means great elements and a broadly recommended, fantastic movie.",
 	},
@@ -70,28 +70,28 @@ const rubrics: Record<RatingHelperMediaType, RatingRubric> = {
 			{
 				id: "content",
 				label: "Content",
-				max: 40,
-				weight: 1,
+				max: 10,
+				weight: 4,
 				description: "Story, characters, themes, screenplay, and ideas.",
 			},
 			{
 				id: "technical",
 				label: "Technical",
-				max: 40,
-				weight: 1,
+				max: 10,
+				weight: 4,
 				description:
 					"Cinematography, editing, sound design, acting, music, and craft.",
 			},
 			{
 				id: "bias",
 				label: "Personal bias",
-				max: 20,
-				weight: 1,
+				max: 10,
+				weight: 2,
 				description: "Your personal taste, attachment, mood, and preferences.",
 			},
 		],
 		intro:
-			"Build the score from 40 points of content, 40 technical points, and 20 points of personal bias.",
+			"Score each category from 0–10, then weighted as 40% content, 40% design, and 20% personal bias.",
 		guidance:
 			"Around 70 is generally a good show. 80+ usually means great elements and a broadly recommended, fantastic show.",
 	},
@@ -122,7 +122,7 @@ const rubrics: Record<RatingHelperMediaType, RatingRubric> = {
 			},
 		],
 		intro:
-			"Score each category from 0–10, then weight them as 40% content, 40% design, and 20% personal bias.",
+			"Score each category from 0–10, then weighted as 40% content, 40% design, and 20% personal bias.",
 		guidance:
 			"Around 70 is generally a good game. 80+ usually means great elements and a broadly recommended, fantastic game.",
 	},
