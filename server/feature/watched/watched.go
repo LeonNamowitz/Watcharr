@@ -118,6 +118,10 @@ func (s *Service) GetWatchedPage(
 		Joins("Content").
 		Joins("Game").
 		Preload("Game.Poster").
+		// List DTOs expose only the derived last-seen date, not this filtered
+		// history. Avoid loading unrelated rating/review activity for posters.
+		Preload("Activity", "count_as_play = ? OR type IN ?",
+			true, domain.LastSeenStatusActivityTypes()).
 		Preload("Tags").
 		Preload("WatchedSeasons").
 		Preload("WatchedEpisodes").

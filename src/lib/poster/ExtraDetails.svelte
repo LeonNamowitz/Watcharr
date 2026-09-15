@@ -16,6 +16,7 @@
 		rating,
 		status,
 		dateAdded,
+		dateLastSeen,
 		dateModified,
 		progress,
 	}: PosterExtraDetails = $props();
@@ -51,6 +52,13 @@
 					<i><Icon i="calendar" /></i>
 					<span>
 						{formatDate(Date.parse(dateAdded))}
+					</span>
+				</span>
+			{/if}{#if dateLastSeen && store.wlDetailedView.includes("dateLastSeen")}
+				<span title="Date last seen">
+					<i><Icon i="check" /></i>
+					<span>
+						{formatDate(Date.parse(dateLastSeen))}
 					</span>
 				</span>
 			{/if}{#if dateModified && store.wlDetailedView.includes("dateModified")}

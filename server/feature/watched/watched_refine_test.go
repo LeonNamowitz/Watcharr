@@ -228,6 +228,46 @@ func TestGetWatchedPageLastChangedUsesLatestActivityDate(t *testing.T) {
 	})
 }
 
+func TestGetWatchedPageProvidesLastSeenForPosterDTO(t *testing.T) {
+	db := testutil.SetupDB(t)
+	user := entity.User{Username: "owner", Password: "password"}
+	mustCreate(t, db.Create(&user).Error)
+	content := entity.Content{TmdbID: 21, Title: "Finished episode", Type: entity.SHOW}
+	mustCreate(t, db.Create(&content).Error)
+	watched := entity.Watched{
+		UserID:    user.ID,
+		ContentID: &content.ID,
+		Status:    entity.WATCHING,
+	}
+	mustCreate(t, db.Create(&watched).Error)
+	finishedAt := time.Date(2025, time.June, 7, 12, 0, 0, 0, time.UTC)
+	mustCreate(t, db.Create(&entity.Activity{
+		UserID:     user.ID,
+		WatchedID:  watched.ID,
+		Type:       entity.EPISODE_STATUS_CHANGED,
+		Data:       `{"season":1,"episode":2,"status":"FINISHED"}`,
+		CustomDate: &finishedAt,
+	}).Error)
+
+	service := NewService(db, nil, nil, nil, watchedSortUserProvider{})
+	page, err := service.GetWatchedPage(
+		user.ID,
+		util.PaginationParams{Page: 1, Limit: 10},
+		domain.WatchedGetPageRequest{},
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("watched page failed: %v", err)
+	}
+	if len(page.Results) != 1 {
+		t.Fatalf("result count = %d, want 1", len(page.Results))
+	}
+	dto := domain.NewWatchedDtoForLists(&page.Results[0])
+	if dto.LastSeen == nil || !dto.LastSeen.Equal(finishedAt) {
+		t.Fatalf("poster last seen = %v, want %v", dto.LastSeen, finishedAt)
+	}
+}
+
 func timePtr(value time.Time) *time.Time {
 	return &value
 }

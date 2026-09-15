@@ -4,6 +4,7 @@
 	import Status from "../Status.svelte";
 	import MyThoughts from "./MyThoughts.svelte";
 	import Playtime from "./Playtime.svelte";
+	import { formatLastSeen, getLastSeen } from "../watched/lastSeen";
 
 	interface Props {
 		watched?: Watched;
@@ -22,6 +23,8 @@
 		onThoughtsChanged,
 		onPlaytimeChanged,
 	}: Props = $props();
+
+	let lastSeen = $derived(formatLastSeen(getLastSeen(watched)));
 </script>
 
 <div class="review">
@@ -36,10 +39,15 @@
 			thoughts={watched?.thoughts}
 			onChange={onThoughtsChanged}
 		/>
-		{#if typeof watched.plays == "number" && watched.plays > 0}
-			<div>
-				{watched.plays}
-				{watched.plays > 1 ? "Plays" : "Play"}
+		{#if (typeof watched.plays == "number" && watched.plays > 0) || lastSeen}
+			<div class="watch-summary">
+				{#if typeof watched.plays == "number" && watched.plays > 0}
+					<span>
+						{watched.plays}
+						{watched.plays > 1 ? "Plays" : "Play"}
+					</span>
+				{/if}
+				{#if lastSeen}<span class="last-seen">Last: {lastSeen}</span>{/if}
 			</div>
 		{/if}
 	{/if}
@@ -59,6 +67,17 @@
 
 		@media screen and (max-width: 420px) {
 			max-width: 340px;
+		}
+	}
+
+	.watch-summary {
+		display: flex;
+		justify-content: space-between;
+		gap: 12px;
+
+		.last-seen {
+			margin-left: auto;
+			text-align: right;
 		}
 	}
 </style>
