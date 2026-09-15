@@ -2,6 +2,7 @@
 	import { store } from "@/store.svelte";
 	import type { WLDetailedViewOption } from "@/types";
 	import { page } from "$app/state";
+	import { hasPeopleSearch, parseSearchTypes } from "../search/searchTypes";
 	import Menu, { type MenuConfig } from "../Menu.svelte";
 
 	interface Props {
@@ -13,6 +14,14 @@
 	let isPublicListSearch = $derived(
 		page.url.pathname.startsWith("/lists/") &&
 			!!page.url.searchParams.get("query")?.trim(),
+	);
+	let searchTypes = $derived(
+		parseSearchTypes(page.url.searchParams.get("type")),
+	);
+	let isGlobalSearch = $derived(
+		page.route?.id === "/(app)/search" &&
+			(page.url.searchParams.get("scope") === "all" ||
+				hasPeopleSearch(searchTypes)),
 	);
 
 	function detailClicked(d: WLDetailedViewOption) {
@@ -29,11 +38,12 @@
 	conf={conf ?? {
 		width: "200px",
 		right: "92px",
-		arrowLeft: page.url?.pathname.startsWith("/person")
-			? "84px"
-			: isPublicListSearch
-				? "43px"
-				: "3px",
+		arrowLeft:
+			isGlobalSearch || page.url?.pathname.startsWith("/person")
+				? "84px"
+				: isPublicListSearch
+					? "43px"
+					: "3px",
 	}}
 >
 	<h4 class="norm sm-caps">Shown Details</h4>
