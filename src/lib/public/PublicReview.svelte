@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { RatingSettings } from "@/lib/rating/helpers";
 	import { toRatingLabel } from "@/lib/rating/helpers";
-	import { watchedStatuses } from "@/lib/util/helpers";
+	import { formatDateDDMMYYYY, watchedStatuses } from "@/lib/util/helpers";
 	import {
 		toPublicLastSeenLabel,
 		toPublicPlaytimeLabel,
@@ -9,7 +9,6 @@
 	} from "./helpers";
 	import type { SupportedMedia, Watched } from "@/types";
 	import Icon from "../Icon.svelte";
-	import { formatLastSeen, getLastSeen } from "../watched/lastSeen";
 
 	interface Props {
 		watched: Watched;
@@ -23,7 +22,10 @@
 		$props();
 	let expanded = $state(false);
 	let reviewRevealed = $state(false);
-	let lastSeen = $derived(formatLastSeen(getLastSeen(watched)));
+	let lastSeen = $derived(formatDateDDMMYYYY(watched.lastSeen));
+	let lastSeenDateLabel = $derived(
+		mediaType === "game" ? "Last played" : "Last seen",
+	);
 
 	let statusLabel = $derived(toPublicStatusLabel(watched.status, mediaType));
 	let lastSeenLabel = $derived(
@@ -58,7 +60,7 @@
 	<div class="review-card">
 		<div class="heading">
 			<h2>{ownerName}'s review</h2>
-			{#if lastSeen}<span>Last seen: {lastSeen}</span>{/if}
+			{#if lastSeen}<span>{lastSeenDateLabel}: {lastSeen}</span>{/if}
 		</div>
 		<div class="summary">
 			<span class="status {watched.status.toLowerCase()}">
@@ -68,7 +70,7 @@
 					<span class="playtime">— {playtimeLabel}</span>
 				{/if}
 				{#if lastSeenLabel}
-					<span class="progress">— Progress: {lastSeenLabel}</span>
+					<span class="last-seen">— Last seen: {lastSeenLabel}</span>
 				{/if}
 			</span>
 			<span class:unrated={!watched.rating} class="rating">
@@ -177,7 +179,7 @@
 			flex-wrap: wrap;
 			gap: 7px;
 
-			.progress,
+			.last-seen,
 			.playtime {
 				color: rgba(255, 255, 255, 0.82);
 				font-size: 13px;

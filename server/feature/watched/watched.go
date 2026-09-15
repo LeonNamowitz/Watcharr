@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"time"
 
 	"github.com/sbondCo/Watcharr/database/dbmodel"
 	"github.com/sbondCo/Watcharr/database/entity"
@@ -118,10 +119,6 @@ func (s *Service) GetWatchedPage(
 		Joins("Content").
 		Joins("Game").
 		Preload("Game.Poster").
-		// List DTOs expose only the derived last-seen date, not this filtered
-		// history. Avoid loading unrelated rating/review activity for posters.
-		Preload("Activity", "count_as_play = ? OR type IN ?",
-			true, domain.LastSeenStatusActivityTypes()).
 		Preload("Tags").
 		Preload("WatchedSeasons").
 		Preload("WatchedEpisodes").
@@ -142,9 +139,58 @@ func (s *Service) GetWatchedPage(
 		slog.Error("GetWatchedPage: Failed!", "error", res.Error)
 		return util.PaginationResponse[entity.Watched, util.None]{}, res.Error
 	}
+	if err := s.populateLastSeen(userId, *watched); err != nil {
+		return util.PaginationResponse[entity.Watched, util.None]{}, err
+	}
 	pRes.Results = *watched
 	pRes.Finished(pp)
 	return *pRes, nil
+}
+
+// populateLastSeen loads one aggregate date per watched item instead of
+// preloading every matching activity into each list result.
+func (s *Service) populateLastSeen(userId uint, watched []entity.Watched) error {
+	if len(watched) == 0 {
+		return nil
+	}
+	watchedIDs := make([]uint, len(watched))
+	for i := range watched {
+		watchedIDs[i] = watched[i].ID
+	}
+	type result struct {
+		WatchedID    uint
+		LastSeenUnix int64
+	}
+	var results []result
+	res := s.db.Model(&entity.Activity{}).
+		Select(`watched_id,
+			MAX(unixepoch(COALESCE(custom_date, created_at))) AS last_seen_unix`).
+		Where("user_id = ? AND watched_id IN ?", userId, watchedIDs).
+		Where(`count_as_play = ? OR (
+			type IN ? AND (
+				data IN ? OR
+				CASE WHEN json_valid(data) THEN json_extract(data, '$.status') END = ?
+			)
+		)`, true, domain.LastSeenStatusActivityTypes(),
+			[]string{string(entity.FINISHED), `"FINISHED"`}, entity.FINISHED).
+		Group("watched_id").
+		Scan(&results)
+	if res.Error != nil {
+		slog.Error("GetWatchedPage: Failed to derive last seen dates.",
+			"error", res.Error)
+		return errors.New("failed to derive last seen dates")
+	}
+	lastSeenByWatchedID := make(map[uint]time.Time, len(results))
+	for i := range results {
+		lastSeenByWatchedID[results[i].WatchedID] =
+			time.Unix(results[i].LastSeenUnix, 0).UTC()
+	}
+	for i := range watched {
+		if lastSeen, ok := lastSeenByWatchedID[watched[i].ID]; ok {
+			watched[i].LastSeen = &lastSeen
+		}
+	}
+	return nil
 }
 
 func (s *Service) getPublicListOwner(userId uint, username string) (entity.User, error) {

@@ -59,7 +59,7 @@
 		class={`plain ${store.wlDetailedView?.includes("dateLastSeen") ? "on" : ""}`}
 		onclick={() => detailClicked("dateLastSeen")}
 	>
-		Date Last Seen
+		Date Finished
 	</button>
 	<button
 		class={`plain ${store.wlDetailedView?.includes("dateModified") ? "on" : ""}`}

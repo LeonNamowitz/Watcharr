@@ -65,7 +65,7 @@
 					</span>
 				{/if}
 				{#if showDateLastSeen && watched.lastSeen}
-					<span title="Date last seen">
+					<span title="Date finished">
 						<i><Icon i="check" /></i>
 						<span>{formatDate(watched.lastSeen)}</span>
 					</span>
