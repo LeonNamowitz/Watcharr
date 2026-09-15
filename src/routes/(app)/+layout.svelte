@@ -12,6 +12,12 @@
 	import FollowingMenu from "@/lib/nav/FollowingMenu.svelte";
 	import NavShell from "@/lib/nav/NavShell.svelte";
 	import SortMenu from "@/lib/nav/SortMenu.svelte";
+	import {
+		hasPeopleSearch,
+		parseSearchTypes,
+		setSearchTypesOnUrl,
+		type SelectableSearchType,
+	} from "@/lib/search/searchTypes";
 	import TagMenu from "@/lib/tag/TagMenu.svelte";
 	import { req } from "@/lib/util/api";
 	import { isTouch } from "@/lib/util/helpers";
@@ -42,6 +48,16 @@
 	let tagMenuShown = $state(false);
 	let tagOrderEditMode = $state(false);
 	let scroll = window.scrollY;
+	let isSearchPage = $derived(page.route?.id === "/(app)/search");
+	let searchTypes = $derived(
+		parseSearchTypes(page.url.searchParams.get("type")),
+	);
+	let isGlobalSearch = $derived(
+		isSearchPage &&
+			(page.url.searchParams.get("scope") === "all" ||
+				hasPeopleSearch(searchTypes)),
+	);
+	let isLocalSearch = $derived(isSearchPage && !isGlobalSearch);
 
 	function handleProfileClick() {
 		if (!localStorage.getItem("token")) {
@@ -59,17 +75,13 @@
 		searchTimeout = window.setTimeout(
 			() => {
 				const query = target?.value.trim();
-				if (!query) return;
-				const currentSearchType = page.url.searchParams.get("type");
+				if (!query) {
+					goto(resolve("/"));
+					return;
+				}
 				const searchParams = new SvelteURLSearchParams({
 					query: encodeURIComponent(query),
-					preferMyList: "true",
 				});
-				if (page.route?.id === "/(app)/search" && currentSearchType) {
-					// If we are already on the search page, we can attempt
-					// to keep any existing type filter on the next query.
-					searchParams.set("type", currentSearchType);
-				}
 				// Enable autofocus before running `goto` because on chromium
 				// the .focus() call won't work, even after a timeout.
 				// Using autofocus seems to work. Disables after goto runs.
@@ -88,6 +100,12 @@
 			},
 			isTouch() ? 800 : 400,
 		);
+	}
+
+	function setActiveSearchTypes(types: SelectableSearchType[]) {
+		const location = new URL(page.url);
+		setSearchTypesOnUrl(location, types);
+		goto(resolve(`/search?${location.searchParams.toString()}`));
 	}
 
 	async function getInitialData() {
@@ -237,7 +255,7 @@
 			}}
 		>
 			<Icon i="eye" />
-			{#if store.activeFilters?.type?.length > 0 || store.activeFilters?.status?.length > 0}
+			{#if store.activeFilters?.type?.length > 0 || store.activeFilters?.status?.length > 0 || (isLocalSearch && searchTypes.length > 0)}
 				<div class="indicator"></div>
 			{/if}
 		</button>
@@ -246,7 +264,7 @@
 		{/if}
 	{/if}
 	<!-- Show on the watched list and tag lists. -->
-	{#if page.url?.pathname === "/" || page.url?.pathname.includes("/tag/")}
+	{#if page.url?.pathname === "/" || page.url?.pathname.includes("/tag/") || isLocalSearch}
 		<button
 			class="plain other sort"
 			onclick={() => {
@@ -274,12 +292,16 @@
 			}}
 		>
 			<Icon i="filter" />
-			{#if store.activeFilters?.type?.length > 0 || store.activeFilters?.status?.length > 0}
+			{#if store.activeFilters?.type?.length > 0 || store.activeFilters?.status?.length > 0 || (isLocalSearch && searchTypes.length > 0)}
 				<div class="indicator"></div>
 			{/if}
 		</button>
 		{#if filterMenuShown}
-			<FilterMenu />
+			<FilterMenu
+				showTypes={true}
+				searchTypes={isLocalSearch ? searchTypes : undefined}
+				onSearchTypesChange={isLocalSearch ? setActiveSearchTypes : undefined}
+			/>
 		{/if}
 		{#if sortMenuShown}
 			<SortMenu />

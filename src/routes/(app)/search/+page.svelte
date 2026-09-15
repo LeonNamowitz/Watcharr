@@ -1,35 +1,65 @@
 <script lang="ts">
-	import { page } from "$app/state";
 	import { afterNavigate, goto } from "$app/navigation";
-	import { req } from "@/lib/util/api.js";
+	import { resolve } from "$app/paths";
+	import { page } from "$app/state";
+	import Error from "@/lib/Error.svelte";
+	import Icon from "@/lib/Icon.svelte";
+	import Spinner from "@/lib/Spinner.svelte";
+	import UsersList from "@/lib/UsersList.svelte";
+	import PageTitle from "@/lib/generic/PageTitle.svelte";
+	import PersonPoster from "@/lib/poster/PersonPoster.svelte";
 	import Poster from "@/lib/poster/Poster.svelte";
 	import PosterList from "@/lib/poster/PosterList.svelte";
-	import { store } from "@/store.svelte.js";
-	import Spinner from "@/lib/Spinner.svelte";
-	import PersonPoster from "@/lib/poster/PersonPoster.svelte";
+	import SearchControls from "@/lib/search/SearchControls.svelte";
 	import {
-		MediaTypeE,
-		SearchType,
-		type Media,
-		type PaginationResponse,
-		type PublicUser,
-		type SearchRequest,
-		type SearchResponseMeta,
-	} from "@/types";
-	import UsersList from "@/lib/UsersList.svelte";
-	import { onDestroy, onMount } from "svelte";
-	import Error from "@/lib/Error.svelte";
-	import infScroll from "@/lib/util/infScroll.js";
+		hasPeopleSearch,
+		parseSearchTypes,
+		searchTypesParam,
+		setSearchTypesOnUrl,
+		type SelectableSearchType,
+	} from "@/lib/search/searchTypes";
+	import { req } from "@/lib/util/api";
+	import infScroll from "@/lib/util/infScroll";
 	import { createListSnapshot } from "@/lib/util/listNavigation.svelte";
 	import paginatedLoader, {
 		PaginatedLoaderRunFnAction,
-	} from "@/lib/util/paginatedLoader.svelte.js";
-	import PageTitle from "@/lib/generic/PageTitle.svelte";
-	import MediaTypeFilter from "@/lib/search/MediaTypeFilter.svelte";
-	import { resolve } from "$app/paths";
+	} from "@/lib/util/paginatedLoader.svelte";
+	import {
+		applyWatchedListState,
+		beginTemporaryWatchedListState,
+		defaultWLDetailedView,
+		store,
+		type WatchedListStateSnapshot,
+	} from "@/store.svelte";
+	import {
+		MediaTypeE,
+		type Media,
+		type PaginationResponse,
+		type PublicUser,
+		type SearchResponseMeta,
+	} from "@/types";
+	import { onDestroy, onMount, untrack } from "svelte";
 	import Filters from "./components/Filters.svelte";
 
 	let { data } = $props();
+	const restoreWatchedListState = beginTemporaryWatchedListState();
+	const allSearchStatuses = [
+		"planned",
+		"watching",
+		"finished",
+		"hold",
+		"dropped",
+	];
+	let searchReady = $state(false);
+	let stateQuery = $state("");
+	let searchQuery = $derived(data?.query ? decodeURIComponent(data.query) : "");
+	let searchTypes = $derived(
+		parseSearchTypes(page.url.searchParams.get("type")),
+	);
+	let isPersonSearch = $derived(hasPeopleSearch(searchTypes));
+	let isGlobalSearch = $derived(
+		page.url.searchParams.get("scope") === "all" || isPersonSearch,
+	);
 
 	const scroll = infScroll({ callback: onScrollToBottom });
 	const dataLoader = paginatedLoader<Media, SearchResponseMeta>(load);
@@ -39,156 +69,138 @@
 		revalidatePage: loadPage,
 	});
 
-	let searchType: SearchType | undefined = $derived.by(() => {
-		const t = page.url.searchParams.get("type");
-		if (t) {
-			return t as SearchType;
+	let requestParams: Record<string, string> = $derived.by(() => {
+		const type = searchTypesParam(searchTypes);
+		if (isGlobalSearch) {
+			return {
+				query: searchQuery,
+				scope: "all",
+				...(type ? { type } : {}),
+			};
 		}
-		return SearchType.multi;
+		const params = { ...store.sortAndFiltersForQueryParams };
+		delete params.type;
+		return {
+			...params,
+			query: searchQuery,
+			scope: "list",
+			...(type ? { type } : {}),
+		};
 	});
-
-	let preferMyList: boolean = $derived.by(() => {
-		const t = page.url.searchParams.get("preferMyList");
-		return Boolean(t);
-	});
-	let showingResultsFromMyList: boolean = $derived(
-		Boolean(
-			dataLoader.state.data?.length > 0 && dataLoader.state.meta?.fromMyList,
-		),
-	);
-
-	let nextLoadParams: SearchRequest = $derived({
+	let requestKey = $derived(JSON.stringify(requestParams));
+	let nextLoadParams: Record<string, string | number> = $derived({
 		page: dataLoader.state.page + 1,
-		query: store.searchQuery,
-		type: searchType,
-		preferMyList: preferMyList,
+		...requestParams,
 	});
 
-	function searchKey() {
-		return JSON.stringify({
-			query: store.searchQuery,
-			type: searchType,
-			preferMyList,
-		});
+	function defaultSearchState(): WatchedListStateSnapshot {
+		return {
+			sort: ["LASTFIN", "DOWN"],
+			filters: {
+				type: [],
+				status: [...allSearchStatuses],
+			},
+			preset: undefined,
+			detailedView: [...defaultWLDetailedView],
+		};
 	}
 
-	async function loadPage(page: number, signal: AbortSignal) {
-		return req.get<PaginationResponse<Media, SearchResponseMeta>>(`/search`, {
-			params: {
-				page,
-				query: store.searchQuery,
-				type: searchType,
-				preferMyList,
-			},
+	function searchKey() {
+		return requestKey;
+	}
+
+	async function loadPage(pageNumber: number, signal: AbortSignal) {
+		return req.get<PaginationResponse<Media, SearchResponseMeta>>("/search", {
+			params: { ...requestParams, page: pageNumber },
 			signal,
 		});
 	}
 
 	async function load(signal: AbortSignal) {
-		console.debug("load: loadParams:", nextLoadParams);
-		if (nextLoadParams.page === dataLoader.state.page) {
-			console.warn("load: Already on this page, not loading it again!");
-			return;
-		}
-		if (!nextLoadParams.query) {
-			console.warn("load: There is no search query!");
-			return;
-		}
-		const r = await loadPage(nextLoadParams.page ?? 1, signal);
+		if (nextLoadParams.page === dataLoader.state.page || !searchQuery) return;
+		const response = await req.get<
+			PaginationResponse<Media, SearchResponseMeta>
+		>("/search", { params: nextLoadParams, signal });
 		scroll.dataLoaded();
-		return r;
+		return response;
 	}
 
 	async function onScrollToBottom() {
-		// If an error is being shown, no more infinite scroll.
-		if (dataLoader.state.reqLoadError) {
-			return;
-		}
-		dataLoader.runFn();
-	}
-
-	function setActiveSearchFilter(to: SearchType | undefined) {
-		console.debug("setActiveSearchFilter: to:", to);
-		const curLocation = new URL(page.url);
-		if (!to || searchType === to) {
-			curLocation.searchParams.delete("type");
-		} else {
-			curLocation.searchParams.set("type", to);
-		}
-		// Running the goto will cause afterNavigate hook to be called,
-		// which will run a fresh search, so nothing else to do here.
-		goto(resolve(`/search?${curLocation.searchParams.toString()}`));
+		if (!dataLoader.state.reqLoadError) await dataLoader.runFn();
 	}
 
 	async function searchUsers(query: string) {
-		return await req.get<PublicUser[]>(`/user/search`, {
-			params: { q: query },
-		});
+		return req.get<PublicUser[]>("/user/search", { params: { q: query } });
 	}
 
-	onMount(() => {
-		if (!store.searchQuery && data?.query) {
-			store.searchQuery = decodeURIComponent(data?.query);
+	function setActiveSearchTypes(types: SelectableSearchType[]) {
+		const location = new URL(page.url);
+		setSearchTypesOnUrl(location, types);
+		window.scrollTo({ top: 0 });
+		goto(resolve(`/search?${location.searchParams.toString()}`));
+	}
+
+	function selectAllSearchTypes() {
+		applyWatchedListState(defaultSearchState());
+		setActiveSearchTypes([]);
+	}
+
+	function setSearchScope(global: boolean) {
+		const location = new URL(page.url);
+		if (global) {
+			location.searchParams.set("scope", "all");
+		} else if (!isPersonSearch) {
+			location.searchParams.delete("scope");
 		}
-		dataLoader.runFn(PaginatedLoaderRunFnAction.Reset);
+		window.scrollTo({ top: 0 });
+		goto(resolve(`/search?${location.searchParams.toString()}`));
+	}
+
+	$effect(() => {
+		if (!searchReady || stateQuery !== searchQuery || !requestKey) return;
+		untrack(() => {
+			dataLoader.reset();
+			dataLoader.runFn();
+		});
 	});
 
-	afterNavigate((e) => {
-		if (!e.from?.route?.id?.toLowerCase()?.includes("/search")) {
-			// AfterNavigate will also be called when this page is mounted,
-			// but that won't work for us since the OnMount hook also runs
-			// a clean search, which can cause errors when both ran at same
-			// time. We can't remove the OnMount hook since it's the only
-			// hook to be ran if watcharr is first loaded at a search url.
-			// `e.type` is always `goto` (that's how we search) so we can't
-			// use that. The only alternative to only run this hook after a
-			// navigation on the search page (query change), seems to be
-			// checking the `from` property an making sure it's from the
-			// `/search` route already.
-			return;
+	onMount(() => {
+		store.searchQuery = searchQuery;
+		applyWatchedListState(defaultSearchState());
+		stateQuery = searchQuery;
+		searchReady = true;
+	});
+
+	afterNavigate((event) => {
+		if (!searchReady || !event.from?.route?.id?.includes("/search")) return;
+		store.searchQuery = searchQuery;
+		if (stateQuery !== searchQuery) {
+			applyWatchedListState(defaultSearchState());
+			stateQuery = searchQuery;
 		}
-		console.log(
-			"afterNavigate: Query changed, performing search.",
-			"searchParams:",
-			page.url.searchParams,
-		);
-		// Sync state (so back button updates search correctly)
-		store.searchQuery = data?.query ? decodeURIComponent(data?.query) : "";
-		dataLoader.abortReq("navigated away");
-		dataLoader.runFn(PaginatedLoaderRunFnAction.Reset);
 	});
 
 	onDestroy(() => {
-		console.debug("SEARCH PAGE DESTROYED");
+		searchReady = false;
 		store.searchQuery = "";
 		scroll.destroy();
 		dataLoader.abortReq("page destroyed");
+		restoreWatchedListState();
 	});
-
-	function dontPreferMyListClicked() {
-		const curLocation = new URL(page.url);
-		curLocation.searchParams.delete("preferMyList");
-		// Running the goto will cause afterNavigate hook to be called,
-		// which will run a fresh search, so nothing else to do here.
-		goto(resolve(`/search?${curLocation.searchParams.toString()}`));
-	}
 </script>
 
 <svelte:head>
-	<title
-		>Search Results{store.searchQuery
-			? ` for '${store.searchQuery}'`
-			: ""}</title
-	>
+	<title>Search Results{searchQuery ? ` for '${searchQuery}'` : ""}</title>
 </svelte:head>
 
-<!-- <span style="position: sticky;top: 70px;">{curPage} / {maxContentPage}</span> -->
+{#snippet filterHelp()}
+	<Filters />
+{/snippet}
+
 <div class="content">
 	<div class="inner">
-		{#if data?.query}
-			<!-- Uses data?.query instead of store.searchQuery,
-			 	so that the debounce of search is respected. -->
-			{#await searchUsers(data?.query) then results}
+		{#if searchQuery}
+			{#await searchUsers(searchQuery) then results}
 				{#if results?.length > 0}
 					<UsersList users={results} />
 				{/if}
@@ -197,25 +209,18 @@
 			{/await}
 
 			<PageTitle title="Results">
-				<MediaTypeFilter
-					active={searchType}
-					disabled={dataLoader.state.reqLoading || showingResultsFromMyList}
-					onChange={(nowActive) => {
-						setActiveSearchFilter(nowActive as SearchType | undefined);
-					}}
+				<SearchControls
+					activeTypes={searchTypes}
+					global={isGlobalSearch}
+					localLabel="Your list"
+					disabled={dataLoader.state.reqLoading}
+					showGames={Boolean(store.serverFeatures?.games)}
+					onTypesChange={setActiveSearchTypes}
+					onScopeChange={setSearchScope}
+					onAll={selectAllSearchTypes}
+					accessory={filterHelp}
 				/>
-				<Filters />
 			</PageTitle>
-
-			{#if showingResultsFromMyList}
-				<button
-					class="from-my-list-msg plain"
-					onclick={dontPreferMyListClicked}
-				>
-					<b>Showing results from your list.</b>
-					<span>Do a full search instead?</span>
-				</button>
-			{/if}
 
 			<PosterList>
 				{#if dataLoader.state.data?.length > 0}
@@ -235,21 +240,32 @@
 						{/if}
 					{/each}
 				{:else if !dataLoader.state.reqLoading && !dataLoader.state.reqLoadError}
-					<!-- If search is running or we have an error, no point in showing 'no results' message. -->
-					<h2 class="norm" title="Hovering over me doesn't change the facts ;(">
-						No Results!
-					</h2>
+					<div class="empty-results">
+						<Icon i="search" wh={80} />
+						<h2 class="norm">No Results!</h2>
+						<h4 class="norm">
+							{isGlobalSearch
+								? `Nothing global matches “${searchQuery}”.`
+								: `Nothing on your list matches “${searchQuery}”.`}
+						</h4>
+						{#if !isGlobalSearch}
+							<button
+								class="search-global"
+								onclick={() => setSearchScope(true)}
+							>
+								Search Global
+							</button>
+						{/if}
+					</div>
 				{/if}
 			</PosterList>
 
 			{#if dataLoader.state.reqLoading}
-				<div style="margin-bottom: 60px;">
-					<Spinner />
-				</div>
+				<div class="loader"><Spinner /></div>
 			{/if}
 
 			{#if dataLoader.state.reqLoadError}
-				<div style="margin-bottom: 60px;">
+				<div class="loader">
 					<Error
 						pretty="Failed to load results!"
 						error={dataLoader.state.reqLoadError}
@@ -280,24 +296,26 @@
 		}
 	}
 
-	button.from-my-list-msg {
+	.empty-results {
 		display: flex;
 		flex-flow: column;
-		align-items: flex-start;
-		margin: 10px auto 0 auto;
-		padding: 12px 20px;
-		border-radius: 10px;
-		color: $text-color;
-		background-color: $accent-color;
-		font-size: 16px;
-		user-select: none;
-		transition:
-			color 100ms ease,
-			background-color 100ms ease;
+		gap: 5px;
+		align-items: center;
+		max-width: 400px;
 
-		&:hover {
-			color: $bg-color;
-			background-color: $accent-color-hover;
+		h4 {
+			font-weight: normal;
+			text-align: center;
 		}
+
+		.search-global {
+			width: max-content;
+			padding: 7px 12px;
+			margin-top: 10px;
+		}
+	}
+
+	.loader {
+		margin-bottom: 60px;
 	}
 </style>
