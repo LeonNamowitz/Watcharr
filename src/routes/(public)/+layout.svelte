@@ -8,6 +8,12 @@
 	import FilterMenu from "@/lib/nav/FilterMenu.svelte";
 	import NavShell from "@/lib/nav/NavShell.svelte";
 	import SortMenu from "@/lib/nav/SortMenu.svelte";
+	import {
+		hasPeopleSearch,
+		parseSearchTypes,
+		setSearchTypesOnUrl,
+		type SelectableSearchType,
+	} from "@/lib/search/searchTypes";
 	import { optionalAuthReq } from "@/lib/util/api";
 	import { ReqerError } from "@/lib/util/fetch";
 	import { isTouch } from "@/lib/util/helpers";
@@ -50,10 +56,13 @@
 	let isSearchActive = $derived(
 		isListPage && Boolean(page.url.searchParams.get("query")?.trim()),
 	);
+	let searchTypes = $derived(
+		parseSearchTypes(page.url.searchParams.get("type")),
+	);
+	let isPersonSearch = $derived(hasPeopleSearch(searchTypes));
 	let isGlobalSearch = $derived(
 		isSearchActive &&
-			(page.url.searchParams.get("scope") === "all" ||
-				page.url.searchParams.get("type") === "person"),
+			(page.url.searchParams.get("scope") === "all" || isPersonSearch),
 	);
 	let isPersonPage = $derived(
 		/^\/lists\/[^/]+\/[^/]+\/person\/[^/]+\/?$/.test(page.url.pathname),
@@ -113,6 +122,20 @@
 		} else {
 			filterMenuShown = true;
 		}
+	}
+
+	function setActiveSearchTypes(types: SelectableSearchType[]) {
+		const location = new URL(page.url);
+		setSearchTypesOnUrl(location, types);
+		const searchParams = location.searchParams.toString();
+		goto(
+			resolve(
+				`/lists/${page.params.id}/${page.params.username}${searchParams ? `?${searchParams}` : ""}`,
+			),
+			{
+				state: publicListHistoryState(location, page.url, page.state),
+			},
+		);
 	}
 
 	function handleSearch(ev: Event) {
@@ -335,14 +358,18 @@
 				}}
 			>
 				<Icon i="filter" />
-				{#if store.hasActiveFilters}
+				{#if store.hasActiveFilters || (isSearchActive && searchTypes.length > 0)}
 					<span class="indicator"></span>
 				{/if}
 			</button>
 			{#if filterMenuShown}
 				<FilterMenu
 					showGames={true}
-					showTypes={!isSearchActive}
+					showTypes={true}
+					searchTypes={isSearchActive ? searchTypes : undefined}
+					onSearchTypesChange={isSearchActive
+						? setActiveSearchTypes
+						: undefined}
 					conf={{
 						width: "200px",
 						top: "49px",

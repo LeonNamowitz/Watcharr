@@ -1,48 +1,68 @@
 <script lang="ts">
 	import Icon from "../Icon.svelte";
 	import { store } from "@/store.svelte";
-
-	type FilterType = "movie" | "show" | "game" | "person";
+	import { SearchType } from "@/types";
+	import type { SelectableSearchType } from "./searchTypes";
 
 	interface Props {
-		active?: string;
+		active?: string | string[];
 		disabled?: boolean;
 		showGames?: boolean;
-		onChange: (nowActive: FilterType) => void;
+		showAll?: boolean;
+		onClear?: () => void;
+		onChange: (nowActive: SelectableSearchType) => void;
 	}
 
-	let { active, disabled, showGames, onChange }: Props = $props();
+	let {
+		active,
+		disabled,
+		showGames,
+		showAll = false,
+		onClear,
+		onChange,
+	}: Props = $props();
 	let gamesVisible = $derived(showGames ?? store.serverFeatures?.games);
+	let allActive = $derived(
+		Array.isArray(active) ? active.length === 0 : !active,
+	);
+	let isActive = $derived((type: SelectableSearchType) =>
+		Array.isArray(active) ? active.includes(type) : active === type,
+	);
 </script>
 
 <div class:disabled>
+	{#if showAll}
+		<button class="plain" data-active={allActive} onclick={() => onClear?.()}>
+			All
+		</button>
+	{/if}
 	<button
 		class="plain"
-		data-active={active === "movie"}
-		onclick={() => onChange("movie")}
+		data-active={isActive(SearchType.movie)}
+		onclick={() => onChange(SearchType.movie)}
 	>
 		<Icon i="film" wh={20} /> Movies
 	</button>
 	<button
 		class="plain"
-		data-active={active === "show"}
-		onclick={() => onChange("show")}
+		data-active={isActive(SearchType.show)}
+		onclick={() => onChange(SearchType.show)}
 	>
 		<Icon i="tv" wh={20} /> TV Shows
 	</button>
 	{#if gamesVisible}
 		<button
 			class="plain"
-			data-active={active === "game"}
-			onclick={() => onChange("game")}
+			data-active={isActive(SearchType.game)}
+			onclick={() => onChange(SearchType.game)}
 		>
 			<Icon i="gamepad" wh={20} /> Games
 		</button>
 	{/if}
 	<button
 		class="plain"
-		data-active={active === "person"}
-		onclick={() => onChange("person")}
+		data-active={isActive(SearchType.person)}
+		onclick={() => onChange(SearchType.person)}
 	>
 		<Icon i="people-nocircle" wh={20} /> People
 	</button>

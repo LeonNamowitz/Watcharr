@@ -1,6 +1,7 @@
 package search
 
 import (
+	"errors"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -41,34 +42,119 @@ func NewRouter(br *router.BaseRouter, service SearchProvider, watchedProvider Wa
 	}
 }
 
-func publicSearchType(value string) (domain.SearchType, bool) {
-	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "", string(domain.SearchTypeMulti):
-		return domain.SearchTypeMulti, true
-	case string(domain.SearchTypeMovie):
-		return domain.SearchTypeMovie, true
-	case string(domain.SearchTypeShow), string(util.SupportedMediaShow):
-		return domain.SearchTypeShow, true
-	case string(domain.SearchTypePerson):
-		return domain.SearchTypePerson, true
-	case string(domain.SearchTypeGame):
-		return domain.SearchTypeGame, true
+func parseSearchTypes(value string) ([]domain.SearchType, bool) {
+	value = strings.ToLower(strings.TrimSpace(value))
+	if value == "" || value == string(domain.SearchTypeMulti) {
+		return nil, true
+	}
+
+	searchTypes := make([]domain.SearchType, 0, 3)
+	seen := make(map[domain.SearchType]bool)
+	for _, rawType := range strings.Split(value, ",") {
+		var searchType domain.SearchType
+		switch strings.TrimSpace(rawType) {
+		case string(domain.SearchTypeMovie):
+			searchType = domain.SearchTypeMovie
+		case string(domain.SearchTypeShow), string(util.SupportedMediaShow):
+			searchType = domain.SearchTypeShow
+		case string(domain.SearchTypePerson):
+			searchType = domain.SearchTypePerson
+		case string(domain.SearchTypeGame):
+			searchType = domain.SearchTypeGame
+		default:
+			return nil, false
+		}
+		if !seen[searchType] {
+			seen[searchType] = true
+			searchTypes = append(searchTypes, searchType)
+		}
+	}
+
+	if len(searchTypes) == 0 || (seen[domain.SearchTypePerson] && len(searchTypes) != 1) {
+		return nil, false
+	}
+	return searchTypes, true
+}
+
+func watchedTypesForSearchTypes(searchTypes []domain.SearchType) []util.SupportedMedia {
+	filterTypes := make([]util.SupportedMedia, 0, len(searchTypes))
+	for _, searchType := range searchTypes {
+		switch searchType {
+		case domain.SearchTypeMovie:
+			filterTypes = append(filterTypes, util.SupportedMediaMovie)
+		case domain.SearchTypeShow:
+			filterTypes = append(filterTypes, util.SupportedMediaShow)
+		case domain.SearchTypeGame:
+			filterTypes = append(filterTypes, util.SupportedMediaGame)
+		}
+	}
+	return filterTypes
+}
+
+func mergeSearchResponses(
+	responses []domain.SearchResponse,
+	pp util.PaginationParams,
+) domain.SearchResponse {
+	merged := domain.SearchResponse{
+		PaginationResponse: util.PaginationResponse[domain.Media, domain.SearchResponseMeta]{
+			PaginationParams: pp,
+		},
+	}
+	maxResults := 0
+	for _, response := range responses {
+		merged.TotalResults += response.TotalResults
+		if response.TotalPages > merged.TotalPages {
+			merged.TotalPages = response.TotalPages
+		}
+		if len(response.Results) > maxResults {
+			maxResults = len(response.Results)
+		}
+	}
+	for resultIndex := 0; resultIndex < maxResults; resultIndex++ {
+		for _, response := range responses {
+			if resultIndex < len(response.Results) {
+				merged.Results = append(merged.Results, response.Results[resultIndex])
+			}
+		}
+	}
+	return merged
+}
+
+func mediaMatchesSearchType(mediaType domain.MediaType, searchType domain.SearchType) bool {
+	switch searchType {
+	case domain.SearchTypeMovie:
+		return mediaType == domain.MediaTypeTMDBMovie
+	case domain.SearchTypeShow:
+		return mediaType == domain.MediaTypeTMDBShow
+	case domain.SearchTypePerson:
+		return mediaType == domain.MediaTypeTMDBPerson
+	case domain.SearchTypeGame:
+		return mediaType == domain.MediaTypeIGDBGame
 	default:
-		return "", false
+		return true
 	}
 }
 
-func watchedTypeForSearchType(searchType domain.SearchType) []util.SupportedMedia {
-	switch searchType {
-	case domain.SearchTypeMovie:
-		return []util.SupportedMedia{util.SupportedMediaMovie}
-	case domain.SearchTypeShow:
-		return []util.SupportedMedia{util.SupportedMediaShow}
-	case domain.SearchTypeGame:
-		return []util.SupportedMedia{util.SupportedMediaGame}
-	default:
-		return nil
+func filterSearchResponse(
+	response domain.SearchResponse,
+	searchType domain.SearchType,
+) domain.SearchResponse {
+	results := make([]domain.Media, 0, len(response.Results))
+	for _, result := range response.Results {
+		if mediaMatchesSearchType(result.Type, searchType) {
+			results = append(results, result)
+		}
 	}
+	if len(results) != len(response.Results) {
+		response.Results = results
+		response.TotalResults = int64(len(results))
+		if len(results) == 0 {
+			response.TotalPages = 0
+		} else {
+			response.TotalPages = 1
+		}
+	}
+	return response
 }
 
 func (r *Router) AddRoutes() {
@@ -96,6 +182,14 @@ func (r *Router) AddRoutes() {
 func (r *Router) GetSearch(c *gin.Context) {
 	userId := c.MustGet("userId").(uint)
 	pp := c.MustGet("paginationParams").(util.PaginationParams)
+	scope, hasScope := c.GetQuery("scope")
+	if hasScope {
+		r.getScopedSearch(c, userId, pp, scope)
+		return
+	}
+
+	// Preserve the original preferMyList API for clients that do not opt in to
+	// the explicit list/global scope used by the web interface.
 	req := domain.SearchRequest{
 		// Defaults...
 		Type: domain.SearchTypeMulti,
@@ -125,6 +219,14 @@ func (r *Router) GetSearch(c *gin.Context) {
 		return
 	}
 
+	r.addPrivateWatchedData(c, userId, resp)
+}
+
+func (r *Router) addPrivateWatchedData(
+	c *gin.Context,
+	userID uint,
+	resp domain.SearchResponse,
+) {
 	ww := domain.SearchResponse{}
 	if err := copier.Copy(&ww, &resp); err != nil {
 		slog.Error("GetSearch: Failed to copy", "error", err)
@@ -136,7 +238,7 @@ func (r *Router) GetSearch(c *gin.Context) {
 	}
 	if err := addedtocontent.AddList(
 		r.watchedProvider,
-		userId,
+		userID,
 		ww.Results,
 		func(i int, w *entity.Watched) {
 			ww.Results[i].Watched = domain.NewWatchedDtoForLists(w)
@@ -152,23 +254,120 @@ func (r *Router) GetSearch(c *gin.Context) {
 	c.JSON(http.StatusOK, ww)
 }
 
+func (r *Router) getGlobalSearch(
+	query string,
+	searchTypes []domain.SearchType,
+	pp util.PaginationParams,
+	userID uint,
+) (domain.SearchResponse, error) {
+	if r.service == nil {
+		return domain.SearchResponse{}, errors.New("search is unavailable")
+	}
+	if len(searchTypes) == 0 {
+		searchTypes = []domain.SearchType{domain.SearchTypeMulti}
+	}
+	if len(searchTypes) == 1 {
+		response, err := r.service.Search(domain.SearchRequest{
+			Type:         searchTypes[0],
+			Query:        query,
+			PreferMyList: false,
+		}, pp, userID)
+		return filterSearchResponse(response, searchTypes[0]), err
+	}
+
+	responses := make([]domain.SearchResponse, 0, len(searchTypes))
+	for _, searchType := range searchTypes {
+		// IGDB search is not paginated. This mirrors the existing broad search,
+		// which only adds games to its first page.
+		if searchType == domain.SearchTypeGame && pp.Page > 1 {
+			continue
+		}
+		response, err := r.service.Search(domain.SearchRequest{
+			Type:         searchType,
+			Query:        query,
+			PreferMyList: false,
+		}, pp, userID)
+		if err != nil {
+			return domain.SearchResponse{}, err
+		}
+		responses = append(responses, filterSearchResponse(response, searchType))
+	}
+	return mergeSearchResponses(responses, pp), nil
+}
+
+func (r *Router) getScopedSearch(
+	c *gin.Context,
+	userID uint,
+	pp util.PaginationParams,
+	rawScope string,
+) {
+	query := strings.TrimSpace(c.Query("query"))
+	if query == "" {
+		c.JSON(http.StatusBadRequest, router.ErrorResponse{Error: "a query is required"})
+		return
+	}
+	scope := strings.ToLower(strings.TrimSpace(rawScope))
+	if scope != "list" && scope != "all" {
+		c.JSON(http.StatusBadRequest, router.ErrorResponse{Error: "invalid search scope"})
+		return
+	}
+	searchTypes, valid := parseSearchTypes(c.Query("type"))
+	if !valid {
+		c.JSON(http.StatusBadRequest, router.ErrorResponse{Error: "invalid search type"})
+		return
+	}
+	if scope == "list" {
+		if len(searchTypes) == 1 && searchTypes[0] == domain.SearchTypePerson {
+			c.JSON(http.StatusBadRequest, router.ErrorResponse{Error: "people search is global only"})
+			return
+		}
+		wpr := domain.WatchedGetPageRequest{
+			Sort:    domain.WatchedSortDateAdded,
+			SortDir: domain.WatchedSortDirAsc,
+		}
+		if err := c.ShouldBindQuery(&wpr); err != nil {
+			c.JSON(http.StatusBadRequest, router.ErrorResponse{Error: "failed to get request parameters or they are invalid"})
+			return
+		}
+		wpr.FilterType = watchedTypesForSearchTypes(searchTypes)
+		wp, err := r.watchedProvider.GetWatchedPage(
+			userID,
+			pp,
+			wpr,
+			&domain.WatchedGetPageExtraProps{Query: query},
+		)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, router.ErrorResponse{Error: "failed to search list"})
+			return
+		}
+		c.JSON(http.StatusOK, domain.SearchResponse{
+			PaginationResponse: util.PaginationResponse[domain.Media, domain.SearchResponseMeta]{
+				PaginationParams: wp.PaginationParams,
+				TotalPages:       wp.TotalPages,
+				TotalResults:     wp.TotalResults,
+				Results:          domain.NewWatchedGetPageResponse(wp.Results),
+				Meta:             domain.SearchResponseMeta{FromMyList: true},
+			},
+		})
+		return
+	}
+
+	resp, err := r.getGlobalSearch(query, searchTypes, pp, userID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, router.ErrorResponse{Error: err.Error()})
+		return
+	}
+	r.addPrivateWatchedData(c, userID, resp)
+}
+
 func (r *Router) getPublicFullSearch(
 	c *gin.Context,
 	ownerID uint,
 	query string,
-	searchType domain.SearchType,
+	searchTypes []domain.SearchType,
 	pp util.PaginationParams,
 ) {
-	if r.service == nil {
-		c.JSON(http.StatusInternalServerError, router.ErrorResponse{Error: "search is unavailable"})
-		return
-	}
-
-	resp, err := r.service.Search(domain.SearchRequest{
-		Type:         searchType,
-		Query:        query,
-		PreferMyList: false,
-	}, pp, ownerID)
+	resp, err := r.getGlobalSearch(query, searchTypes, pp, ownerID)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, router.ErrorResponse{Error: err.Error()})
 		return
@@ -245,18 +444,14 @@ func (r *Router) GetPublicListSearch(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, router.ErrorResponse{Error: "invalid search scope"})
 		return
 	}
-	rawType := c.Query("type")
-	searchType, valid := publicSearchType(rawType)
-	if scope == "list" && strings.Contains(rawType, ",") {
-		// Preserve the original public-list API's comma-separated type filter.
-		searchType, valid = domain.SearchTypeMulti, true
-	}
+	searchTypes, valid := parseSearchTypes(c.Query("type"))
 	if !valid {
 		c.JSON(http.StatusBadRequest, router.ErrorResponse{Error: "invalid search type"})
 		return
 	}
-	if scope == "all" || searchType == domain.SearchTypePerson {
-		r.getPublicFullSearch(c, ownerID, query, searchType, pp)
+	isPersonSearch := len(searchTypes) == 1 && searchTypes[0] == domain.SearchTypePerson
+	if scope == "all" || isPersonSearch {
+		r.getPublicFullSearch(c, ownerID, query, searchTypes, pp)
 		return
 	}
 
@@ -273,12 +468,9 @@ func (r *Router) GetPublicListSearch(c *gin.Context) {
 		)
 		return
 	}
-	// The master search calls shows "show", while watched-list filters call
-	// them "tv". A single selected result type owns the list filter here;
-	// legacy comma-separated watched-list filters continue to bind unchanged.
-	if !strings.Contains(rawType, ",") {
-		wpr.FilterType = watchedTypeForSearchType(searchType)
-	}
+	// Search controls use "show", while watched-list filters use "tv".
+	// Normalize both current and legacy values before querying the list.
+	wpr.FilterType = watchedTypesForSearchTypes(searchTypes)
 
 	wp, err := r.watchedProvider.GetWatchedPage(
 		ownerID,

@@ -7,8 +7,12 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/gin-gonic/gin/binding"
+	"github.com/go-playground/validator/v10"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/sbondCo/Watcharr/config"
 	"github.com/sbondCo/Watcharr/database/entity"
 	"github.com/sbondCo/Watcharr/domain"
@@ -21,6 +25,8 @@ type publicSearchWatchedProvider struct {
 	validatedUserId   uint
 	validatedUsername string
 	request           domain.WatchedGetPageRequest
+	requestUserID     uint
+	requestQuery      string
 	pageCalls         int
 	validateErr       error
 	watchedItems      []entity.Watched
@@ -42,13 +48,17 @@ func (p *publicSearchWatchedProvider) GetWatchedItemsBySupportedMediaIds(
 }
 
 func (p *publicSearchWatchedProvider) GetWatchedPage(
-	_ uint,
+	userID uint,
 	_ util.PaginationParams,
 	request domain.WatchedGetPageRequest,
-	_ *domain.WatchedGetPageExtraProps,
+	extra *domain.WatchedGetPageExtraProps,
 ) (util.PaginationResponse[entity.Watched, util.None], error) {
 	p.pageCalls++
 	p.request = request
+	p.requestUserID = userID
+	if extra != nil {
+		p.requestQuery = extra.Query
+	}
 	content := entity.Content{TmdbID: 101, Title: "Dune", Type: entity.MOVIE}
 	return util.PaginationResponse[entity.Watched, util.None]{
 		PaginationParams: util.PaginationParams{Page: 1, Limit: 40},
@@ -73,11 +83,13 @@ func (p *publicSearchWatchedProvider) ValidatePublicWatchedList(
 }
 
 type publicFullSearchProvider struct {
-	request domain.SearchRequest
-	userID  uint
-	calls   int
-	resp    domain.SearchResponse
-	err     error
+	request   domain.SearchRequest
+	requests  []domain.SearchRequest
+	userID    uint
+	calls     int
+	resp      domain.SearchResponse
+	responses map[domain.SearchType]domain.SearchResponse
+	err       error
 }
 
 func (p *publicFullSearchProvider) Search(
@@ -86,8 +98,12 @@ func (p *publicFullSearchProvider) Search(
 	userID uint,
 ) (domain.SearchResponse, error) {
 	p.request = request
+	p.requests = append(p.requests, request)
 	p.userID = userID
 	p.calls++
+	if response, ok := p.responses[request.Type]; ok {
+		return response, p.err
+	}
 	return p.resp, p.err
 }
 
@@ -98,11 +114,31 @@ func newPublicSearchEngine(
 ) http.Handler {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
+	if validate, ok := binding.Validator.Engine().(*validator.Validate); ok {
+		if err := validate.RegisterValidation("validsearchtype", domain.ValidSearchType); err != nil {
+			t.Fatalf("register search validator: %v", err)
+		}
+	}
 	engine := gin.New()
 	api := engine.Group("/api")
 	br := appRouter.NewBaseRouter(nil, api, &config.ServerConfig{JWT_SECRET: "test"})
 	NewRouter(br, service, provider).AddRoutes()
 	return engine
+}
+
+func authToken(t *testing.T, userID uint) string {
+	t.Helper()
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, entity.TokenClaims{
+		UserID: userID,
+		RegisteredClaims: jwt.RegisteredClaims{
+			IssuedAt: jwt.NewNumericDate(time.Now()),
+		},
+	})
+	signed, err := token.SignedString([]byte("test"))
+	if err != nil {
+		t.Fatalf("sign auth token: %v", err)
+	}
+	return signed
 }
 
 func TestPublicListSearchDoesNotRequireAuthentication(t *testing.T) {
@@ -186,7 +222,7 @@ func TestPublicListFullSearchUsesOwnerDataWithoutPrivateFields(t *testing.T) {
 	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
 		t.Fatalf("decode full search response: %v", err)
 	}
-	if len(response.Results) != 2 || response.Results[0].Watched.Rating != 9 {
+	if len(response.Results) != 1 || response.Results[0].Watched.Rating != 9 {
 		t.Fatalf("owner watched data missing from response: %#v", response.Results)
 	}
 	if response.Results[0].Watched.Thoughts != "" || strings.Contains(recorder.Body.String(), "private review") {
@@ -285,10 +321,166 @@ func TestPublicListSearchKeepsLegacyCommaSeparatedTypes(t *testing.T) {
 	}
 }
 
+func TestAuthenticatedListSearchBindsControls(t *testing.T) {
+	provider := &publicSearchWatchedProvider{}
+	service := &publicFullSearchProvider{}
+	engine := newPublicSearchEngine(t, service, provider)
+	req := httptest.NewRequest(
+		http.MethodGet,
+		"/api/search?query=dune&scope=list&type=movie,show&status=planned,finished&sort=RATING&sortDir=asc",
+		nil,
+	)
+	req.Header.Set("Authorization", authToken(t, 12))
+	recorder := httptest.NewRecorder()
+	engine.ServeHTTP(recorder, req)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("authenticated list search status = %d, want 200; body=%s",
+			recorder.Code, recorder.Body.String())
+	}
+	if service.calls != 0 || provider.pageCalls != 1 {
+		t.Fatalf("search calls = %d external, %d list; want 0 and 1",
+			service.calls, provider.pageCalls)
+	}
+	if provider.requestUserID != 12 || provider.requestQuery != "dune" {
+		t.Fatalf("list search owner/query = %d/%q, want 12/dune",
+			provider.requestUserID, provider.requestQuery)
+	}
+	if len(provider.request.FilterType) != 2 ||
+		provider.request.FilterType[0] != util.SupportedMediaMovie ||
+		provider.request.FilterType[1] != util.SupportedMediaShow ||
+		len(provider.request.FilterStatus) != 2 ||
+		provider.request.Sort != domain.WatchedSortRating ||
+		provider.request.SortDir != domain.WatchedSortDirAsc {
+		t.Fatalf("authenticated list controls were not bound: %#v", provider.request)
+	}
+}
+
+func TestAuthenticatedGlobalSearchMergesExactTypes(t *testing.T) {
+	provider := &publicSearchWatchedProvider{}
+	service := &publicFullSearchProvider{responses: map[domain.SearchType]domain.SearchResponse{
+		domain.SearchTypeMovie: {
+			PaginationResponse: util.PaginationResponse[domain.Media, domain.SearchResponseMeta]{
+				PaginationParams: util.PaginationParams{Page: 1, Limit: 40},
+				TotalPages:       3,
+				TotalResults:     3,
+				Results: []domain.Media{
+					{Type: domain.MediaTypeTMDBMovie, Name: "Movie One"},
+					{Type: domain.MediaTypeTMDBMovie, Name: "Movie Two"},
+					{Type: domain.MediaTypeTMDBPerson, Name: "Unselected Person"},
+				},
+			},
+		},
+		domain.SearchTypeShow: {
+			PaginationResponse: util.PaginationResponse[domain.Media, domain.SearchResponseMeta]{
+				PaginationParams: util.PaginationParams{Page: 1, Limit: 40},
+				TotalPages:       2,
+				TotalResults:     1,
+				Results: []domain.Media{
+					{Type: domain.MediaTypeTMDBShow, Name: "Show One"},
+				},
+			},
+		},
+	}}
+	engine := newPublicSearchEngine(t, service, provider)
+	req := httptest.NewRequest(
+		http.MethodGet,
+		"/api/search?query=dune&scope=all&type=movie,tv",
+		nil,
+	)
+	req.Header.Set("Authorization", authToken(t, 12))
+	recorder := httptest.NewRecorder()
+	engine.ServeHTTP(recorder, req)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("authenticated global search status = %d, want 200; body=%s",
+			recorder.Code, recorder.Body.String())
+	}
+	if service.calls != 2 || len(service.requests) != 2 ||
+		service.requests[0].Type != domain.SearchTypeMovie ||
+		service.requests[1].Type != domain.SearchTypeShow {
+		t.Fatalf("global requests = %#v", service.requests)
+	}
+	var response domain.SearchResponse
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode global response: %v", err)
+	}
+	if response.TotalResults != 3 || response.TotalPages != 2 || len(response.Results) != 3 ||
+		response.Results[0].Name != "Movie One" ||
+		response.Results[1].Name != "Show One" ||
+		response.Results[2].Name != "Movie Two" {
+		t.Fatalf("merged response = %#v", response.PaginationResponse)
+	}
+}
+
+func TestPublicGlobalSearchMergesExactMediaTypes(t *testing.T) {
+	provider := &publicSearchWatchedProvider{}
+	service := &publicFullSearchProvider{responses: map[domain.SearchType]domain.SearchResponse{
+		domain.SearchTypeMovie: {
+			PaginationResponse: util.PaginationResponse[domain.Media, domain.SearchResponseMeta]{
+				PaginationParams: util.PaginationParams{Page: 1, Limit: 40},
+				TotalPages:       1,
+				TotalResults:     1,
+				Results:          []domain.Media{{Type: domain.MediaTypeTMDBMovie, Name: "Movie"}},
+			},
+		},
+		domain.SearchTypeGame: {
+			PaginationResponse: util.PaginationResponse[domain.Media, domain.SearchResponseMeta]{
+				PaginationParams: util.PaginationParams{Page: 1, Limit: 40},
+				TotalPages:       1,
+				TotalResults:     1,
+				Results:          []domain.Media{{Type: domain.MediaTypeIGDBGame, Name: "Game"}},
+			},
+		},
+	}}
+	engine := newPublicSearchEngine(t, service, provider)
+	req := httptest.NewRequest(
+		http.MethodGet,
+		"/api/public/users/7/alice/search?query=dune&scope=all&type=movie,game",
+		nil,
+	)
+	recorder := httptest.NewRecorder()
+	engine.ServeHTTP(recorder, req)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("public exact search status = %d, want 200; body=%s",
+			recorder.Code, recorder.Body.String())
+	}
+	if service.calls != 2 || service.requests[0].Type != domain.SearchTypeMovie ||
+		service.requests[1].Type != domain.SearchTypeGame {
+		t.Fatalf("public exact requests = %#v", service.requests)
+	}
+}
+
+func TestAuthenticatedSearchKeepsLegacyPreferMyList(t *testing.T) {
+	provider := &publicSearchWatchedProvider{}
+	service := &publicFullSearchProvider{resp: domain.SearchResponse{
+		PaginationResponse: util.PaginationResponse[domain.Media, domain.SearchResponseMeta]{
+			Meta: domain.SearchResponseMeta{FromMyList: true},
+		},
+	}}
+	engine := newPublicSearchEngine(t, service, provider)
+	req := httptest.NewRequest(
+		http.MethodGet,
+		"/api/search?query=dune&type=movie&preferMyList=true",
+		nil,
+	)
+	req.Header.Set("Authorization", authToken(t, 12))
+	recorder := httptest.NewRecorder()
+	engine.ServeHTTP(recorder, req)
+
+	if recorder.Code != http.StatusOK || service.calls != 1 ||
+		service.request.Type != domain.SearchTypeMovie || !service.request.PreferMyList {
+		t.Fatalf("legacy request status=%d request=%#v calls=%d body=%s",
+			recorder.Code, service.request, service.calls, recorder.Body.String())
+	}
+}
+
 func TestPublicSearchRejectsInvalidScopeAndType(t *testing.T) {
 	for name, query := range map[string]string{
-		"scope": "query=dune&scope=somewhere",
-		"type":  "query=dune&type=book",
+		"scope":        "query=dune&scope=somewhere",
+		"type":         "query=dune&type=book",
+		"mixed_people": "query=dune&type=person,movie",
 	} {
 		t.Run(name, func(t *testing.T) {
 			provider := &publicSearchWatchedProvider{}

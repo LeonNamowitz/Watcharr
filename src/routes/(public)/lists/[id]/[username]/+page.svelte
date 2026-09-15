@@ -5,10 +5,13 @@
 	import UserAvatar from "@/lib/img/UserAvatar.svelte";
 	import { followUser, noAuthReq, unfollowUser } from "@/lib/util/api.js";
 	import {
+		applyWatchedListState,
 		clearActiveFilters,
 		defaultSort,
+		defaultWLDetailedView,
 		setWatchedListPreset,
 		store,
+		type WatchedListStateSnapshot,
 	} from "@/store.svelte.js";
 	import {
 		MediaTypeE,
@@ -22,6 +25,7 @@
 	import paginatedLoader from "@/lib/util/paginatedLoader.svelte.js";
 	import infScroll from "@/lib/util/infScroll.js";
 	import {
+		backToPublicList,
 		createListSnapshot,
 		publicListDetailDepth,
 		publicListHistoryState,
@@ -34,7 +38,14 @@
 	import { goto } from "$app/navigation";
 	import { resolve } from "$app/paths";
 	import { parseTokenPayload } from "@/lib/util/helpers";
-	import MediaTypeFilter from "@/lib/search/MediaTypeFilter.svelte";
+	import SearchControls from "@/lib/search/SearchControls.svelte";
+	import {
+		hasPeopleSearch,
+		parseSearchTypes,
+		searchTypesParam,
+		setSearchTypesOnUrl,
+		type SelectableSearchType,
+	} from "@/lib/search/searchTypes";
 	import PageTitle from "@/lib/generic/PageTitle.svelte";
 	import PersonPoster from "@/lib/poster/PersonPoster.svelte";
 
@@ -44,37 +55,25 @@
 
 	let searchQuery = $derived(page.url.searchParams.get("query")?.trim() ?? "");
 	let isSearching = $derived(searchQuery.length > 0);
-	let searchType: SearchType | undefined = $derived.by(() => {
-		const value = page.url.searchParams.get("type");
-		switch (value) {
-			case SearchType.movie:
-			case SearchType.show:
-			case SearchType.game:
-			case SearchType.person:
-				return value;
-			default:
-				return undefined;
-		}
-	});
+	let searchTypes = $derived(
+		parseSearchTypes(page.url.searchParams.get("type")),
+	);
+	let isPersonSearch = $derived(hasPeopleSearch(searchTypes));
 	let searchScope = $derived(
-		page.url.searchParams.get("scope") === "all" ||
-			searchType === SearchType.person
+		page.url.searchParams.get("scope") === "all" || isPersonSearch
 			? "all"
 			: "list",
 	);
 	let isGlobalSearch = $derived(isSearching && searchScope === "all");
 	let globalSource = $derived.by(() => {
-		if (searchType === SearchType.game) return "IGDB";
-		if (!searchType) return "TMDB and IGDB";
+		if (searchTypes.length === 1 && searchTypes[0] === SearchType.game) {
+			return "IGDB";
+		}
+		if (searchTypes.length === 0 || searchTypes.includes(SearchType.game)) {
+			return "TMDB and IGDB";
+		}
 		return "TMDB";
 	});
-	const allSearchStatuses = [
-		"planned",
-		"watching",
-		"finished",
-		"hold",
-		"dropped",
-	];
 	let followBtnDisabled = $state(false);
 	let user: PublicUser | undefined = $state();
 	let loadedPublicUserKey = "";
@@ -103,7 +102,9 @@
 			...params,
 			query: searchQuery,
 			scope: searchScope,
-			...(searchType ? { type: searchType } : {}),
+			...(searchTypesParam(searchTypes)
+				? { type: searchTypesParam(searchTypes) }
+				: {}),
 		};
 	});
 	let requestKey = $derived(
@@ -206,14 +207,6 @@
 		store.searchQuery = searchQuery;
 	});
 
-	function clearSearch() {
-		const location = new URL(page.url);
-		location.searchParams.delete("query");
-		location.searchParams.delete("scope");
-		location.searchParams.delete("type");
-		gotoListLocation(location);
-	}
-
 	function gotoListLocation(location: URL) {
 		location.searchParams.delete("listDepth");
 		const searchParams = location.searchParams.toString();
@@ -229,28 +222,28 @@
 		);
 	}
 
-	function resetSearchListControls() {
-		store.activeFilters = {
-			type: [],
-			status: [...allSearchStatuses],
-		};
-		store.activeSort = ["LASTFIN", "DOWN"];
-	}
-
-	function setActiveSearchFilter(to: SearchType) {
+	function setActiveSearchTypes(types: SelectableSearchType[]) {
 		const location = new URL(page.url);
-		const nextType = searchType === to ? undefined : to;
-		if (nextType) {
-			location.searchParams.set("type", nextType);
-		} else {
-			location.searchParams.delete("type");
-		}
-		if (nextType === SearchType.person) {
-			location.searchParams.set("scope", "all");
-		}
-		resetSearchListControls();
+		setSearchTypesOnUrl(location, types);
 		window.scrollTo({ top: 0 });
 		gotoListLocation(location);
+	}
+
+	function defaultSearchState(): WatchedListStateSnapshot {
+		return {
+			sort: ["LASTFIN", "DOWN"],
+			filters: {
+				type: [],
+				status: ["planned", "watching", "finished", "hold", "dropped"],
+			},
+			preset: undefined,
+			detailedView: [...defaultWLDetailedView],
+		};
+	}
+
+	function selectAllSearchTypes() {
+		applyWatchedListState(defaultSearchState());
+		setActiveSearchTypes([]);
 	}
 
 	function setSearchScope(global: boolean) {
@@ -259,7 +252,7 @@
 			if (isGlobalSearch) return;
 			location.searchParams.set("scope", "all");
 		} else {
-			if (!isGlobalSearch || searchType === SearchType.person) return;
+			if (!isGlobalSearch || isPersonSearch) return;
 			location.searchParams.delete("scope");
 		}
 		window.scrollTo({ top: 0 });
@@ -285,12 +278,26 @@
 
 <div class="content" class:logged-out={!isAuthenticated}>
 	<div class="inner">
-		<UserAvatar img={user?.avatar} />
+		<a
+			class="profile-return"
+			href={resolve(`/lists/${meta.id}/${meta.username}`)}
+			aria-label={`Back to ${meta.username}'s list`}
+			onclick={(event) => backToPublicList(event, page.state.publicListDepth)}
+		>
+			<UserAvatar img={user?.avatar} />
+		</a>
 		<div class="basic-ctr">
 			<div class="name-row">
-				<h2 title={user?.username}>
-					{meta.username}
-				</h2>
+				<a
+					class="profile-return name"
+					href={resolve(`/lists/${meta.id}/${meta.username}`)}
+					onclick={(event) =>
+						backToPublicList(event, page.state.publicListDepth)}
+				>
+					<h2 title={user?.username}>
+						{meta.username}
+					</h2>
+				</a>
 				{#if canFollow}
 					<button
 						class="plain follow"
@@ -338,35 +345,16 @@
 {#if isSearching}
 	<div class="search-results">
 		<PageTitle title="Results">
-			<div class="search-controls">
-				<div class="search-type-filter">
-					<MediaTypeFilter
-						active={searchType}
-						disabled={dataLoader.state.reqLoading}
-						showGames={true}
-						onChange={(nowActive) => {
-							setActiveSearchFilter(nowActive as SearchType);
-						}}
-					/>
-				</div>
-				<div class="source-control">
-					<span class="control-label">Show results from:</span>
-					<button
-						class="plain source-toggle"
-						class:global={isGlobalSearch}
-						class:locked={searchType === SearchType.person}
-						type="button"
-						role="switch"
-						aria-checked={isGlobalSearch}
-						aria-label="Show results from"
-						disabled={searchType === SearchType.person}
-						onclick={() => setSearchScope(!isGlobalSearch)}
-					>
-						<span class="source-option local">{meta.username}'s list</span>
-						<span class="source-option global">Global</span>
-					</button>
-				</div>
-			</div>
+			<SearchControls
+				activeTypes={searchTypes}
+				global={isGlobalSearch}
+				localLabel={`${meta.username}'s list`}
+				disabled={dataLoader.state.reqLoading}
+				showGames={true}
+				onTypesChange={setActiveSearchTypes}
+				onScopeChange={setSearchScope}
+				onAll={selectAllSearchTypes}
+			/>
 		</PageTitle>
 	</div>
 {/if}
@@ -408,12 +396,16 @@
 						No {globalSource} results match “{searchQuery}”.
 					</h4>
 				{:else}
-					<h2 class="norm">No matching items!</h2>
+					<h2 class="norm">No results!</h2>
 					<h4 class="norm">
 						Nothing on {meta.username}'s list matches “{searchQuery}”.
 					</h4>
 				{/if}
-				<button onclick={clearSearch}>Clear Search</button>
+				{#if !isGlobalSearch}
+					<button class="search-global" onclick={() => setSearchScope(true)}>
+						Search Global
+					</button>
+				{/if}
 			{:else}
 				<Icon i={store.hasActiveFilters ? "filter-circle" : "reel"} wh={80} />
 				<h2 class="norm">This list is empty!</h2>
@@ -482,6 +474,16 @@
 		width: max-content;
 	}
 
+	.profile-return {
+		display: flex;
+		color: inherit;
+		text-decoration: none;
+
+		&.name {
+			min-width: 0;
+		}
+	}
+
 	.type-toggle {
 		display: flex;
 		flex-flow: row;
@@ -523,111 +525,6 @@
 		width: 100%;
 		max-width: 1200px;
 		margin: 0 auto;
-	}
-
-	.search-controls {
-		flex: 1 1 100%;
-		min-width: 0;
-		display: flex;
-		flex-flow: column;
-		gap: 12px;
-	}
-
-	.search-type-filter {
-		width: 100%;
-	}
-
-	.source-control {
-		display: flex;
-		flex-flow: column;
-		gap: 8px;
-		width: 100%;
-		min-width: 0;
-		padding: 8px;
-		border: 1px solid rgba($color: $accent-color, $alpha: 0.45);
-		border-radius: 10px;
-		background-color: rgba($color: $accent-color, $alpha: 0.08);
-		box-shadow: 0 3px 12px rgba(0, 0, 0, 0.14);
-	}
-
-	.control-label {
-		display: block;
-		font-size: 14px;
-		font-weight: 600;
-		line-height: 1.2;
-		text-align: left;
-		color: $text-color;
-	}
-
-	.source-toggle {
-		position: relative;
-		display: flex;
-		align-items: center;
-		width: 100%;
-		min-height: 42px;
-		padding: 4px;
-		border: 2px solid $text-color;
-		border-radius: 8px;
-		background-color: transparent;
-		color: $text-color;
-		fill: $text-color;
-		font-size: 14px;
-		font-weight: 500;
-		cursor: pointer;
-		overflow: hidden;
-		transition:
-			background-color 150ms ease,
-			border-color 150ms ease,
-			outline 150ms ease;
-
-		&::before {
-			position: absolute;
-			top: 4px;
-			bottom: 4px;
-			left: 4px;
-			width: calc(50% - 4px);
-			border-radius: 5px;
-			background-color: $accent-color-hover;
-			content: "";
-			transition: transform 150ms ease;
-		}
-
-		&.global::before {
-			transform: translateX(100%);
-		}
-
-		&:disabled {
-			cursor: not-allowed;
-			opacity: 1;
-		}
-
-		.source-option {
-			position: relative;
-			z-index: 1;
-			flex: 1 1 0;
-			padding: 7px 8px;
-			border-radius: 5px;
-			text-align: center;
-			cursor: pointer;
-			transition:
-				background-color 150ms ease,
-				color 150ms ease;
-
-			&:hover {
-				color: $bg-color;
-				background-color: $accent-color-hover;
-			}
-		}
-
-		&:not(.global) .source-option.local,
-		&.global .source-option.global {
-			color: $bg-color;
-			font-weight: 600;
-		}
-
-		&.locked .source-option.local {
-			opacity: 0.4;
-		}
 	}
 
 	.basic-ctr {
@@ -683,9 +580,8 @@
 
 		button {
 			width: max-content;
-			padding-left: 20px;
-			padding-right: 20px;
-			margin-top: 15px;
+			padding: 7px 12px;
+			margin-top: 10px;
 		}
 	}
 </style>

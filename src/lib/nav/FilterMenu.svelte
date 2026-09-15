@@ -4,18 +4,48 @@
 	import Icon from "../Icon.svelte";
 	import tooltip from "../actions/tooltip";
 	import Menu, { type MenuConfig } from "../Menu.svelte";
+	import { SearchType } from "@/types";
+	import {
+		toggleSearchType,
+		type SelectableSearchType,
+	} from "@/lib/search/searchTypes";
 
 	interface Props {
 		conf?: MenuConfig;
 		showGames?: boolean;
 		showTypes?: boolean;
+		searchTypes?: SelectableSearchType[];
+		onSearchTypesChange?: (types: SelectableSearchType[]) => void;
 	}
 
 	let {
 		conf,
 		showGames = store.serverFeatures?.games,
 		showTypes = true,
+		searchTypes,
+		onSearchTypesChange,
 	}: Props = $props();
+	let controlledTypes = $derived(searchTypes !== undefined);
+	let hasFilters = $derived(
+		store.activeFilters.status.length > 0 ||
+			(controlledTypes
+				? (searchTypes?.length ?? 0) > 0
+				: store.activeFilters.type.length > 0),
+	);
+
+	function typeIsActive(searchType: SelectableSearchType, watchedType: string) {
+		return controlledTypes
+			? searchTypes?.includes(searchType)
+			: store.activeFilters.type.includes(watchedType);
+	}
+
+	function typeClicked(searchType: SelectableSearchType, watchedType: string) {
+		if (controlledTypes && searchTypes) {
+			onSearchTypesChange?.(toggleSearchType(searchTypes, searchType));
+			return;
+		}
+		filterClicked("type", watchedType);
+	}
 
 	function filterClicked(type: keyof Filters, f: string) {
 		if (store.activeFilters[type]?.includes(f)) {
@@ -35,12 +65,13 @@
 		{#if showTypes}
 			<h4 class="norm sm-caps">type</h4>
 		{/if}
-		{#if store.activeFilters?.type?.length > 0 || store.activeFilters?.status?.length > 0}
+		{#if hasFilters}
 			<button
 				class="plain"
 				use:tooltip={{ text: "Clear", pos: "left" }}
 				onclick={() => {
 					clearActiveFilters();
+					onSearchTypesChange?.([]);
 					window.scrollTo({ top: 0 });
 				}}
 			>
@@ -51,21 +82,21 @@
 	{#if showTypes}
 		<div class="type-filter">
 			<button
-				class:active={store.activeFilters.type.includes("tv")}
-				onclick={() => filterClicked("type", "tv")}
+				class:active={typeIsActive(SearchType.show, "tv")}
+				onclick={() => typeClicked(SearchType.show, "tv")}
 			>
 				SHOW
 			</button>
 			<button
-				class:active={store.activeFilters.type.includes("movie")}
-				onclick={() => filterClicked("type", "movie")}
+				class:active={typeIsActive(SearchType.movie, "movie")}
+				onclick={() => typeClicked(SearchType.movie, "movie")}
 			>
 				MOVIE
 			</button>
 			{#if showGames}
 				<button
-					class:active={store.activeFilters.type.includes("game")}
-					onclick={() => filterClicked("type", "game")}
+					class:active={typeIsActive(SearchType.game, "game")}
+					onclick={() => typeClicked(SearchType.game, "game")}
 				>
 					GAME
 				</button>
