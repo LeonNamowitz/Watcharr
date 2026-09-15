@@ -55,7 +55,7 @@
 					</span>
 				</span>
 			{/if}{#if dateLastSeen && store.wlDetailedView.includes("dateLastSeen")}
-				<span title="Date last seen">
+				<span title="Date finished">
 					<i><Icon i="check" /></i>
 					<span>
 						{formatDate(Date.parse(dateLastSeen))}

@@ -102,7 +102,7 @@ type WatchedDto struct {
 // New dto with base properties that we have for all WatchedDtos.
 // Note: If this is updated, ensure whatever uses this still makes sense.
 func NewWatchedDtoWithBaseProps(w *entity.Watched) WatchedDto {
-	return WatchedDto{
+	dto := WatchedDto{
 		ID:            w.ID,
 		CreatedAt:     w.CreatedAt,
 		UpdatedAt:     w.UpdatedAt,
@@ -110,12 +110,16 @@ func NewWatchedDtoWithBaseProps(w *entity.Watched) WatchedDto {
 		Rating:        w.Rating,
 		Pinned:        w.Pinned,
 		PlaytimeHours: w.PlaytimeHours,
+		LastSeen:      w.LastSeen,
 	}
+	if dto.LastSeen == nil {
+		dto.LastSeen = getLastSeenFromActivity(w.Activity)
+	}
+	return dto
 }
 
 func NewWatchedDtoForLists(w *entity.Watched) WatchedDto {
 	dto := NewWatchedDtoWithBaseProps(w)
-	dto.LastSeen = getLastSeenFromActivity(w.Activity)
 
 	if w.Content != nil && w.Content.Type == entity.SHOW {
 		dto.WatchingSeason = watchedutil.GetLatestWatchedInTv(
@@ -128,7 +132,6 @@ func NewWatchedDtoForLists(w *entity.Watched) WatchedDto {
 // For public lists showing other users watched data.
 func NewWatchedDtoForPublicLists(w *entity.Watched) WatchedDto {
 	dto := NewWatchedDtoWithBaseProps(w)
-	dto.LastSeen = getLastSeenFromActivity(w.Activity)
 
 	if w.Content != nil && w.Content.Type == entity.SHOW {
 		dto.WatchingSeason = watchedutil.GetLatestProgressInTv(
@@ -184,7 +187,6 @@ func NewWatchedDtoForContentPage(w *entity.Watched) WatchedDto {
 	dto.LastViewedSeason = w.LastViewedSeason
 	dto.PlaytimeHours = w.PlaytimeHours
 	dto.Plays = getPlaysFromActivity(w.Activity)
-	dto.LastSeen = getLastSeenFromActivity(w.Activity)
 
 	return dto
 }

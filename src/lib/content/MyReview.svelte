@@ -4,7 +4,7 @@
 	import Status from "../Status.svelte";
 	import MyThoughts from "./MyThoughts.svelte";
 	import Playtime from "./Playtime.svelte";
-	import { formatLastSeen, getLastSeen } from "../watched/lastSeen";
+	import { formatDateDDMMYYYY } from "../util/helpers";
 
 	interface Props {
 		watched?: Watched;
@@ -24,7 +24,8 @@
 		onPlaytimeChanged,
 	}: Props = $props();
 
-	let lastSeen = $derived(formatLastSeen(getLastSeen(watched)));
+	let lastSeen = $derived(formatDateDDMMYYYY(watched?.lastSeen));
+	let lastSeenLabel = $derived(onPlaytimeChanged ? "Last" : "Last");
 </script>
 
 <div class="review">
@@ -47,7 +48,9 @@
 						{watched.plays > 1 ? "Plays" : "Play"}
 					</span>
 				{/if}
-				{#if lastSeen}<span class="last-seen">Last: {lastSeen}</span>{/if}
+				{#if lastSeen}
+					<span class="last-seen">{lastSeenLabel}: {lastSeen}</span>
+				{/if}
 			</div>
 		{/if}
 	{/if}

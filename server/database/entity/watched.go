@@ -1,6 +1,10 @@
 package entity
 
-import "github.com/sbondCo/Watcharr/database/dbmodel"
+import (
+	"time"
+
+	"github.com/sbondCo/Watcharr/database/dbmodel"
+)
 
 type WatchedStatus string
 
@@ -48,4 +52,6 @@ type Watched struct {
 	// The last season that was viewed by the user for this watched entry.
 	// Only applies to tv shows of course.
 	LastViewedSeason *int `json:"lastViewedSeason,omitempty"`
+	// Derived by list queries; not stored in the watcheds table.
+	LastSeen *time.Time `json:"-" gorm:"-"`
 }

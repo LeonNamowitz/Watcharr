@@ -248,6 +248,14 @@ func TestGetWatchedPageProvidesLastSeenForPosterDTO(t *testing.T) {
 		Data:       `{"season":1,"episode":2,"status":"FINISHED"}`,
 		CustomDate: &finishedAt,
 	}).Error)
+	newerWatchingAt := finishedAt.Add(24 * time.Hour)
+	mustCreate(t, db.Create(&entity.Activity{
+		UserID:     user.ID,
+		WatchedID:  watched.ID,
+		Type:       entity.EPISODE_STATUS_CHANGED,
+		Data:       `{"season":1,"episode":3,"status":"WATCHING"}`,
+		CustomDate: &newerWatchingAt,
+	}).Error)
 
 	service := NewService(db, nil, nil, nil, watchedSortUserProvider{})
 	page, err := service.GetWatchedPage(
