@@ -165,10 +165,15 @@
 					: resolve(`/lists/${page.params.id}/${page.params.username}`);
 				if (listLocation === `${page.url.pathname}${page.url.search}`) return;
 
-				target.autofocus = true;
+				const restoreFocus = document.activeElement === target;
+				if (restoreFocus) target.autofocus = true;
 				goto(listLocation, {
 					state: publicListHistoryState(location, page.url, page.state),
 				}).then(() => {
+					if (!restoreFocus || document.activeElement !== target) {
+						target.autofocus = false;
+						return;
+					}
 					if (!document.body.classList.contains("split-nav")) {
 						mainSearchEl?.focus();
 						if (mainSearchEl) mainSearchEl.autofocus = false;
@@ -178,7 +183,7 @@
 					target.autofocus = false;
 				});
 			},
-			isTouch() ? 800 : 400,
+			isTouch() ? (target.value.trim() ? 800 : 1600) : 400,
 		);
 	}
 

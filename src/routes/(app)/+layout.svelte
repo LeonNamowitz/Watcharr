@@ -85,12 +85,17 @@
 					isSearchPage ? page.url.searchParams : "",
 				);
 				searchParams.set("query", encodeURIComponent(query));
+				const restoreFocus = document.activeElement === target;
 				// Enable autofocus before running `goto` because on chromium
 				// the .focus() call won't work, even after a timeout.
 				// Using autofocus seems to work. Disables after goto runs.
 				// https://github.com/sbondCo/Watcharr/issues/169
-				target.autofocus = true;
+				if (restoreFocus) target.autofocus = true;
 				goto(resolve(`/search?${searchParams.toString()}`)).then(() => {
+					if (!restoreFocus || document.activeElement !== target) {
+						target.autofocus = false;
+						return;
+					}
 					// Use mainSearchEl if nav not split, otherwise use ev target.
 					if (!document.body.classList.contains("split-nav") && mainSearchEl) {
 						mainSearchEl.focus();
@@ -101,7 +106,7 @@
 					target.autofocus = false;
 				});
 			},
-			isTouch() ? 800 : 400,
+			isTouch() ? (target.value.trim() ? 800 : 1600) : 400,
 		);
 	}
 

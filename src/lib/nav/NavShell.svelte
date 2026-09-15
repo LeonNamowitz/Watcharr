@@ -1,7 +1,9 @@
 <script lang="ts">
 	import { resolve } from "$app/paths";
+	import { onMount } from "svelte";
 	import type { Snippet } from "svelte";
 	import Icon from "../Icon.svelte";
+	import { isTouch } from "../util/helpers";
 
 	interface Props {
 		navEl?: HTMLElement;
@@ -24,6 +26,37 @@
 		actions,
 		variant,
 	}: Props = $props();
+
+	function blurOnEnter(event: KeyboardEvent) {
+		if (event.key === "Enter") {
+			(event.currentTarget as HTMLInputElement).blur();
+		}
+	}
+
+	onMount(() => {
+		if (!isTouch() || !window.visualViewport) return;
+
+		const viewport = window.visualViewport;
+		let previousHeight = viewport.height;
+
+		function blurOnKeyboardClose() {
+			const currentHeight = viewport.height;
+			const viewportExpanded = currentHeight - previousHeight > 100;
+			previousHeight = currentHeight;
+			if (!viewportExpanded) return;
+
+			const activeElement = document.activeElement;
+			if (
+				activeElement instanceof HTMLInputElement &&
+				navEl?.contains(activeElement)
+			) {
+				activeElement.blur();
+			}
+		}
+
+		viewport.addEventListener("resize", blurOnKeyboardClose);
+		return () => viewport.removeEventListener("resize", blurOnKeyboardClose);
+	});
 </script>
 
 <nav bind:this={navEl} class={variant}>
@@ -41,6 +74,7 @@
 				placeholder={searchPlaceholder}
 				bind:value={searchValue}
 				oninput={onSearch}
+				onkeydown={blurOnEnter}
 			/>
 			<Icon i="search" wh={19} />
 		</div>
@@ -54,6 +88,7 @@
 		placeholder={searchPlaceholder}
 		bind:value={searchValue}
 		oninput={onSearch}
+		onkeydown={blurOnEnter}
 	/>
 </nav>
 
