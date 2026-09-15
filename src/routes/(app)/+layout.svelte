@@ -81,9 +81,10 @@
 					goto(resolve("/"));
 					return;
 				}
-				const searchParams = new SvelteURLSearchParams({
-					query: encodeURIComponent(query),
-				});
+				const searchParams = new SvelteURLSearchParams(
+					isSearchPage ? page.url.searchParams : "",
+				);
+				searchParams.set("query", encodeURIComponent(query));
 				// Enable autofocus before running `goto` because on chromium
 				// the .focus() call won't work, even after a timeout.
 				// Using autofocus seems to work. Disables after goto runs.
