@@ -94,6 +94,9 @@ type WatchedDto struct {
 	PlaytimeHours *uint `json:"playtimeHours,omitempty"`
 	// Amount of plays this media has, calculated from activity.
 	Plays int `json:"plays,omitempty"`
+	// Effective date of the latest activity that finished this media, or for TV,
+	// the show, one of its seasons, or one of its episodes.
+	LastSeen *time.Time `json:"lastSeen,omitempty"`
 }
 
 // New dto with base properties that we have for all WatchedDtos.
@@ -112,6 +115,7 @@ func NewWatchedDtoWithBaseProps(w *entity.Watched) WatchedDto {
 
 func NewWatchedDtoForLists(w *entity.Watched) WatchedDto {
 	dto := NewWatchedDtoWithBaseProps(w)
+	dto.LastSeen = getLastSeenFromActivity(w.Activity)
 
 	if w.Content != nil && w.Content.Type == entity.SHOW {
 		dto.WatchingSeason = watchedutil.GetLatestWatchedInTv(
@@ -124,6 +128,7 @@ func NewWatchedDtoForLists(w *entity.Watched) WatchedDto {
 // For public lists showing other users watched data.
 func NewWatchedDtoForPublicLists(w *entity.Watched) WatchedDto {
 	dto := NewWatchedDtoWithBaseProps(w)
+	dto.LastSeen = getLastSeenFromActivity(w.Activity)
 
 	if w.Content != nil && w.Content.Type == entity.SHOW {
 		dto.WatchingSeason = watchedutil.GetLatestProgressInTv(
@@ -179,6 +184,7 @@ func NewWatchedDtoForContentPage(w *entity.Watched) WatchedDto {
 	dto.LastViewedSeason = w.LastViewedSeason
 	dto.PlaytimeHours = w.PlaytimeHours
 	dto.Plays = getPlaysFromActivity(w.Activity)
+	dto.LastSeen = getLastSeenFromActivity(w.Activity)
 
 	return dto
 }

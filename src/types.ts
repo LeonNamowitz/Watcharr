@@ -66,7 +66,7 @@ export type Icon =
 export type Theme = "light" | "dark" | "system";
 
 export type WLDetailedViewOption =
-	"statusRating" | "progress" | "dateAdded" | "dateModified";
+	"statusRating" | "progress" | "dateAdded" | "dateLastSeen" | "dateModified";
 
 export enum UserType {
 	Watcharr = 0,
@@ -151,6 +151,7 @@ export interface Watched {
 	tags?: Tag[];
 	lastViewedSeason?: number;
 	plays?: number;
+	lastSeen?: string;
 
 	// 'Watching Season/Ep' Extra detail.
 	watchingSeason?: string;

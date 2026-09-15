@@ -9,6 +9,7 @@
 	} from "./helpers";
 	import type { SupportedMedia, Watched } from "@/types";
 	import Icon from "../Icon.svelte";
+	import { formatLastSeen, getLastSeen } from "../watched/lastSeen";
 
 	interface Props {
 		watched: Watched;
@@ -22,6 +23,7 @@
 		$props();
 	let expanded = $state(false);
 	let reviewRevealed = $state(false);
+	let lastSeen = $derived(formatLastSeen(getLastSeen(watched)));
 
 	let statusLabel = $derived(toPublicStatusLabel(watched.status, mediaType));
 	let lastSeenLabel = $derived(
@@ -54,7 +56,10 @@
 
 <div class="review">
 	<div class="review-card">
-		<h2>{ownerName}'s review</h2>
+		<div class="heading">
+			<h2>{ownerName}'s review</h2>
+			{#if lastSeen}<span>Last seen: {lastSeen}</span>{/if}
+		</div>
 		<div class="summary">
 			<span class="status {watched.status.toLowerCase()}">
 				<i><Icon i={watchedStatuses[watched.status]} wh={18} /></i>
@@ -63,7 +68,7 @@
 					<span class="playtime">— {playtimeLabel}</span>
 				{/if}
 				{#if lastSeenLabel}
-					<span class="last-seen">— Last seen: {lastSeenLabel}</span>
+					<span class="progress">— Progress: {lastSeenLabel}</span>
 				{/if}
 			</span>
 			<span class:unrated={!watched.rating} class="rating">
@@ -140,6 +145,19 @@
 		text-shadow: 0 1px 5px rgba(0, 0, 0, 0.95);
 	}
 
+	.heading {
+		display: flex;
+		align-items: baseline;
+		justify-content: space-between;
+		gap: 16px;
+
+		span {
+			flex: 0 0 auto;
+			color: rgba(255, 255, 255, 0.82);
+			font-size: 14px;
+		}
+	}
+
 	.summary {
 		display: flex;
 		align-items: center;
@@ -159,7 +177,7 @@
 			flex-wrap: wrap;
 			gap: 7px;
 
-			.last-seen,
+			.progress,
 			.playtime {
 				color: rgba(255, 255, 255, 0.82);
 				font-size: 13px;

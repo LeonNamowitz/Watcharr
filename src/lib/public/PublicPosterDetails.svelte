@@ -23,6 +23,9 @@
 	let statusLabel = $derived(toPublicStatusLabel(watched.status, mediaType));
 	let ratingLabel = $derived(toRatingLabel(watched.rating, ratingSettings));
 	let showDateAdded = $derived(store.wlDetailedView.includes("dateAdded"));
+	let showDateLastSeen = $derived(
+		Boolean(watched.lastSeen) && store.wlDetailedView.includes("dateLastSeen"),
+	);
 	let showDateModified = $derived(
 		store.wlDetailedView.includes("dateModified"),
 	);
@@ -35,7 +38,8 @@
 		Boolean(progress) && store.wlDetailedView.includes("progress"),
 	);
 	let showOptional = $derived(
-		!active && (showDateAdded || showDateModified || showProgress),
+		!active &&
+			(showDateAdded || showDateLastSeen || showDateModified || showProgress),
 	);
 	let showStatusRating = $derived(
 		store.wlDetailedView.includes("statusRating"),
@@ -58,6 +62,12 @@
 					<span title="Date added to watch list">
 						<i><Icon i="calendar" /></i>
 						<span>{formatDate(watched.createdAt)}</span>
+					</span>
+				{/if}
+				{#if showDateLastSeen && watched.lastSeen}
+					<span title="Date last seen">
+						<i><Icon i="check" /></i>
+						<span>{formatDate(watched.lastSeen)}</span>
 					</span>
 				{/if}
 				{#if showDateModified}

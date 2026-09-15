@@ -1,9 +1,11 @@
 import type { SupportedMedia, Watched, WatchedStatus } from "@/types";
+import { getLastSeen } from "../watched/lastSeen";
 
 export type PosterExtraDetails = {
 	rating: number | undefined;
 	status: WatchedStatus | undefined;
 	dateAdded?: string;
+	dateLastSeen?: string;
 	dateModified?: string;
 	progress?: string;
 };
@@ -23,6 +25,7 @@ export function buildExtraDetails(
 		rating: w.rating,
 		status: w.status,
 		dateAdded: w.createdAt,
+		dateLastSeen: getLastSeen(w),
 		dateModified: w.updatedAt,
 		progress,
 	} as PosterExtraDetails;
