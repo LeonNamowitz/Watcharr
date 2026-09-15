@@ -13,6 +13,7 @@ export default defineConfig({
 				short_name: "Watcharr",
 				description: "Your movie and show watched list.",
 				background_color: "#f1da83",
+				theme_color: "#0156b0",
 				categories: ["entertainment"],
 				start_url: "/",
 				scope: "/",
