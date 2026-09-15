@@ -11,6 +11,7 @@
 	import Poster from "@/lib/poster/Poster.svelte";
 	import PosterList from "@/lib/poster/PosterList.svelte";
 	import SearchControls from "@/lib/search/SearchControls.svelte";
+	import SearchAllButton from "@/lib/search/SearchAllButton.svelte";
 	import {
 		hasPeopleSearch,
 		parseSearchTypes,
@@ -194,6 +195,11 @@
 </svelte:head>
 
 {#snippet filterHelp()}
+	<SearchAllButton
+		active={searchTypes.length === 0}
+		disabled={dataLoader.state.reqLoading}
+		onclick={selectAllSearchTypes}
+	/>
 	<Filters />
 {/snippet}
 
@@ -208,7 +214,7 @@
 				<Error pretty="Failed to load users!" error={err} />
 			{/await}
 
-			<PageTitle title="Results">
+			<PageTitle title="Results" actions={filterHelp}>
 				<SearchControls
 					activeTypes={searchTypes}
 					global={isGlobalSearch}
@@ -217,8 +223,6 @@
 					showGames={Boolean(store.serverFeatures?.games)}
 					onTypesChange={setActiveSearchTypes}
 					onScopeChange={setSearchScope}
-					onAll={selectAllSearchTypes}
-					accessory={filterHelp}
 				/>
 			</PageTitle>
 

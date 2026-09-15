@@ -1,5 +1,4 @@
 <script lang="ts">
-	import type { Snippet } from "svelte";
 	import MediaTypeFilter from "./MediaTypeFilter.svelte";
 	import {
 		hasPeopleSearch,
@@ -15,8 +14,6 @@
 		showGames?: boolean;
 		onTypesChange: (types: SelectableSearchType[]) => void;
 		onScopeChange: (global: boolean) => void;
-		onAll?: () => void;
-		accessory?: Snippet;
 	}
 
 	let {
@@ -27,8 +24,6 @@
 		showGames = false,
 		onTypesChange,
 		onScopeChange,
-		onAll,
-		accessory,
 	}: Props = $props();
 	let peopleSelected = $derived(hasPeopleSearch(activeTypes));
 </script>
@@ -39,15 +34,10 @@
 			active={activeTypes}
 			{disabled}
 			{showGames}
-			showAll={true}
-			onClear={() => (onAll ? onAll() : onTypesChange([]))}
 			onChange={(type) => {
 				onTypesChange(toggleSearchType(activeTypes, type));
 			}}
 		/>
-		{#if accessory}
-			<div class="accessory">{@render accessory()}</div>
-		{/if}
 	</div>
 	<div class="source-control">
 		<span class="control-label">Show results from:</span>
@@ -83,11 +73,6 @@
 		gap: 10px;
 		width: 100%;
 		min-width: 0;
-	}
-
-	.accessory {
-		display: flex;
-		margin-left: auto;
 	}
 
 	.source-control {
@@ -187,10 +172,6 @@
 		.type-row {
 			flex-flow: column;
 			align-items: stretch;
-		}
-
-		.accessory {
-			align-self: flex-end;
 		}
 	}
 </style>

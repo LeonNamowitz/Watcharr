@@ -155,7 +155,7 @@
 	 * on how big the main search bar is.
 	 */
 	function decideOnNavSplit() {
-		if (window.innerWidth <= 305) {
+		if (window.innerWidth <= 520) {
 			document.body.classList.add("split-nav");
 			return;
 		}

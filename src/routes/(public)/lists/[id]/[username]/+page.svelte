@@ -39,6 +39,7 @@
 	import { resolve } from "$app/paths";
 	import { parseTokenPayload } from "@/lib/util/helpers";
 	import SearchControls from "@/lib/search/SearchControls.svelte";
+	import SearchAllButton from "@/lib/search/SearchAllButton.svelte";
 	import {
 		hasPeopleSearch,
 		parseSearchTypes,
@@ -276,6 +277,14 @@
 	<title>{meta.username}'s Watched List</title>
 </svelte:head>
 
+{#snippet searchHeadingActions()}
+	<SearchAllButton
+		active={searchTypes.length === 0}
+		disabled={dataLoader.state.reqLoading}
+		onclick={selectAllSearchTypes}
+	/>
+{/snippet}
+
 <div class="content" class:logged-out={!isAuthenticated}>
 	<div class="inner">
 		<a
@@ -344,7 +353,7 @@
 
 {#if isSearching}
 	<div class="search-results">
-		<PageTitle title="Results">
+		<PageTitle title="Results" actions={searchHeadingActions}>
 			<SearchControls
 				activeTypes={searchTypes}
 				global={isGlobalSearch}
@@ -353,7 +362,6 @@
 				showGames={true}
 				onTypesChange={setActiveSearchTypes}
 				onScopeChange={setSearchScope}
-				onAll={selectAllSearchTypes}
 			/>
 		</PageTitle>
 	</div>
@@ -582,6 +590,31 @@
 			width: max-content;
 			padding: 7px 12px;
 			margin-top: 10px;
+		}
+	}
+
+	@media screen and (max-width: 500px) {
+		.content .inner {
+			flex-flow: column;
+			margin-right: 15px;
+			margin-left: 15px;
+			text-align: center;
+		}
+
+		.basic-ctr .name-row {
+			position: relative;
+			justify-content: center;
+
+			.follow {
+				position: absolute;
+				right: 0;
+				margin-left: 0;
+			}
+		}
+
+		.profile-return.name {
+			justify-content: center;
+			width: 100%;
 		}
 	}
 </style>
