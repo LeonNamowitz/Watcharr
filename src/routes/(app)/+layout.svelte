@@ -9,7 +9,6 @@
 	import DetailedMenu from "@/lib/nav/DetailedMenu.svelte";
 	import FaceMenu from "@/lib/nav/FaceMenu.svelte";
 	import FilterMenu from "@/lib/nav/FilterMenu.svelte";
-	import FollowingMenu from "@/lib/nav/FollowingMenu.svelte";
 	import NavShell from "@/lib/nav/NavShell.svelte";
 	import SortMenu from "@/lib/nav/SortMenu.svelte";
 	import {
@@ -47,7 +46,6 @@
 	let subMenuShown = $state(false);
 	let filterMenuShown = $state(false);
 	let sortMenuShown = $state(false);
-	let followingMenuShown = $state(false);
 	let detailedMenuShown = $state(false);
 	let tagMenuShown = $state(false);
 	let tagOrderEditMode = $state(false);
@@ -146,7 +144,6 @@
 		if (except !== "sub") subMenuShown = false;
 		if (except !== "filter") filterMenuShown = false;
 		if (except !== "sort") sortMenuShown = false;
-		if (except !== "following") followingMenuShown = false;
 		if (except !== "detailed") detailedMenuShown = false;
 		if (except !== "tag") {
 			tagMenuShown = false;
@@ -345,23 +342,6 @@
 	>
 		<Icon i="compass" wh={26} />
 	</button>
-	<button
-		class="plain other following"
-		onclick={() => {
-			closeAllSubMenus("following");
-			followingMenuShown = !followingMenuShown;
-		}}
-		use:tooltip={{
-			text: "Following",
-			pos: "bot",
-			condition: !followingMenuShown,
-		}}
-	>
-		<Icon i="people" wh={26} />
-	</button>
-	{#if followingMenuShown}
-		<FollowingMenu close={() => (followingMenuShown = false)} />
-	{/if}
 	<button class="plain face" onclick={handleProfileClick}>:)</button>
 	{#if subMenuShown}
 		<FaceMenu />

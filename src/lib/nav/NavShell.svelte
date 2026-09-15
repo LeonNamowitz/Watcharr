@@ -303,10 +303,6 @@
 				}
 			}
 
-			:global(.following) {
-				margin-right: 17px;
-			}
-
 			:global(.face) {
 				font-family:
 					"Shrikhand",
