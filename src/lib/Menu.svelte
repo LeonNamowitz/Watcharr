@@ -6,19 +6,22 @@
 
 	export interface MenuConfig {
 		width?: string;
+		left?: string;
 		top?: string;
 		right?: string;
 		arrowRight?: string;
 		arrowLeft?: string;
 		arrowColor?: string;
+		viewportPadding?: number;
 	}
 
 	interface Props {
 		children: import("svelte").Snippet;
 		conf?: MenuConfig;
+		anchor?: HTMLElement;
 	}
 
-	let { children, conf }: Props = $props();
+	let { children, conf, anchor }: Props = $props();
 	let menuEl: HTMLDivElement;
 
 	onMount(() => {
@@ -46,11 +49,15 @@
 	bind:this={menuEl}
 	class="menu"
 	style={`--w: ${conf?.width || "125px"}; --r: ${
-		conf?.right || "10px"
-	}; --t: ${conf?.top || "55px"}; --ar: ${
-		conf?.arrowRight || "unset"
-	}; --al: ${conf?.arrowLeft || "unset"}; --ac: ${conf?.arrowColor || "unset"};`}
-	use:stayInView={{ elToShiftSelector: "& > .arrow" }}
+		conf?.left !== undefined ? conf.right || "unset" : conf?.right || "10px"
+	}; --l: ${conf?.left || "unset"}; --t: ${conf?.top || "55px"}; --ar: ${
+		anchor ? "unset" : conf?.arrowRight || "unset"
+	}; --al: ${anchor ? "unset" : conf?.arrowLeft || "unset"}; --ac: ${conf?.arrowColor || "unset"};`}
+	use:stayInView={{
+		elToShiftSelector: ":scope > .arrow",
+		anchor,
+		viewportPadding: conf?.viewportPadding,
+	}}
 >
 	<i class="arrow"></i>
 	<div>
@@ -63,6 +70,7 @@
 		display: flex;
 		flex-flow: column;
 		position: absolute;
+		left: var(--l);
 		right: var(--r);
 		top: var(--t);
 		width: var(--w);

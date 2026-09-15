@@ -44,6 +44,9 @@
 
 	let navEl: HTMLElement | undefined = $state();
 	let mainSearchEl: HTMLInputElement | undefined = $state();
+	let detailedButtonEl: HTMLButtonElement | undefined = $state();
+	let sortButtonEl: HTMLButtonElement | undefined = $state();
+	let filterButtonEl: HTMLButtonElement | undefined = $state();
 	let searchTimeout: number;
 	let scroll = 0;
 	let isAuthenticated = $derived(Boolean(store.userInfo));
@@ -289,12 +292,19 @@
 		decideOnNavSplit();
 		closeMenus();
 	});
+
+	const publicMenuPosition = {
+		top: "38px",
+		left: "0",
+		viewportPadding: 40,
+	};
 </script>
 
 {#snippet navActions()}
 	{#if isListPage || isPersonPage}
 		<div class="control">
 			<button
+				bind:this={detailedButtonEl}
 				class="plain other detailedView"
 				onclick={() => {
 					closeMenus("detailed");
@@ -310,11 +320,10 @@
 			</button>
 			{#if detailedMenuShown}
 				<DetailedMenu
+					anchor={detailedButtonEl}
 					conf={{
 						width: "200px",
-						top: "49px",
-						right: "0",
-						arrowRight: "2px",
+						...publicMenuPosition,
 					}}
 				/>
 			{/if}
@@ -323,6 +332,7 @@
 	{#if isListPage && !isGlobalSearch}
 		<div class="control">
 			<button
+				bind:this={sortButtonEl}
 				class="plain other sort"
 				onclick={() => toggleListMenu("sort")}
 				use:tooltip={{
@@ -338,17 +348,17 @@
 			</button>
 			{#if sortMenuShown}
 				<SortMenu
+					anchor={sortButtonEl}
 					conf={{
 						width: "180px",
-						top: "49px",
-						right: "0",
-						arrowRight: "2px",
+						...publicMenuPosition,
 					}}
 				/>
 			{/if}
 		</div>
 		<div class="control">
 			<button
+				bind:this={filterButtonEl}
 				class="plain other filter"
 				onclick={() => toggleListMenu("filter")}
 				use:tooltip={{
@@ -364,6 +374,7 @@
 			</button>
 			{#if filterMenuShown}
 				<FilterMenu
+					anchor={filterButtonEl}
 					showGames={true}
 					showTypes={true}
 					searchTypes={isSearchActive ? searchTypes : undefined}
@@ -372,9 +383,7 @@
 						: undefined}
 					conf={{
 						width: "200px",
-						top: "49px",
-						right: "0",
-						arrowRight: "2px",
+						...publicMenuPosition,
 					}}
 				/>
 			{/if}

@@ -20,6 +20,7 @@
 	import Menu, { type MenuConfig } from "../Menu.svelte";
 
 	interface Props {
+		anchor?: HTMLElement;
 		titleText?: string | undefined;
 		onTagClick?: (tag: TagT, remove: boolean) => void | undefined;
 		selectedTags?: TagT[] | undefined;
@@ -40,6 +41,7 @@
 	};
 
 	let {
+		anchor = undefined,
 		titleText = undefined,
 		onTagClick = undefined!,
 		selectedTags = undefined,
@@ -131,7 +133,7 @@
 	}
 </script>
 
-<Menu conf={Object.assign(defaultMenuConfig, menuConfig)}>
+<Menu {anchor} conf={{ ...defaultMenuConfig, ...menuConfig }}>
 	<div class="title">
 		<h4 class="norm sm-caps">{titleText ? titleText : "my tags"}</h4>
 		{#if showManageBtn}

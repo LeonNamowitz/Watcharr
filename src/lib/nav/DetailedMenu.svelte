@@ -7,9 +7,10 @@
 
 	interface Props {
 		conf?: MenuConfig;
+		anchor?: HTMLElement;
 	}
 
-	let { conf }: Props = $props();
+	let { conf, anchor }: Props = $props();
 
 	let isPublicListSearch = $derived(
 		page.url.pathname.startsWith("/lists/") &&
@@ -35,6 +36,7 @@
 </script>
 
 <Menu
+	{anchor}
 	conf={conf ?? {
 		width: "200px",
 		right: "92px",

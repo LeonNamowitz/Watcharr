@@ -39,6 +39,10 @@
 
 	let navEl: HTMLElement | undefined = $state();
 	let mainSearchEl: HTMLInputElement | undefined = $state();
+	let detailedButtonEl: HTMLButtonElement | undefined = $state();
+	let sortButtonEl: HTMLButtonElement | undefined = $state();
+	let filterButtonEl: HTMLButtonElement | undefined = $state();
+	let tagButtonEl: HTMLButtonElement | undefined = $state();
 	let searchTimeout: number;
 	let subMenuShown = $state(false);
 	let filterMenuShown = $state(false);
@@ -243,6 +247,7 @@
 	<!-- Detailed posters supported on watched lists, tags, search and people. -->
 	{#if page.url?.pathname === "/" || page.url?.pathname.startsWith("/search") || page.url?.pathname.startsWith("/tag") || page.url?.pathname.startsWith("/person")}
 		<button
+			bind:this={detailedButtonEl}
 			class="plain other detailedView"
 			onclick={() => {
 				closeAllSubMenus("detailed");
@@ -260,12 +265,13 @@
 			{/if}
 		</button>
 		{#if detailedMenuShown}
-			<DetailedMenu />
+			<DetailedMenu anchor={detailedButtonEl} />
 		{/if}
 	{/if}
 	<!-- Show on the watched list and tag lists. -->
 	{#if page.url?.pathname === "/" || page.url?.pathname.includes("/tag/") || isLocalSearch}
 		<button
+			bind:this={sortButtonEl}
 			class="plain other sort"
 			onclick={() => {
 				closeAllSubMenus("sort");
@@ -280,6 +286,7 @@
 			{/if}
 		</button>
 		<button
+			bind:this={filterButtonEl}
 			class="plain other filter"
 			onclick={() => {
 				closeAllSubMenus("filter");
@@ -298,16 +305,18 @@
 		</button>
 		{#if filterMenuShown}
 			<FilterMenu
+				anchor={filterButtonEl}
 				showTypes={true}
 				searchTypes={isLocalSearch ? searchTypes : undefined}
 				onSearchTypesChange={isLocalSearch ? setActiveSearchTypes : undefined}
 			/>
 		{/if}
 		{#if sortMenuShown}
-			<SortMenu />
+			<SortMenu anchor={sortButtonEl} />
 		{/if}
 	{/if}
 	<button
+		bind:this={tagButtonEl}
 		class="plain other tag"
 		onclick={() => {
 			tagOrderEditMode = false;
@@ -320,6 +329,7 @@
 	</button>
 	{#if tagMenuShown}
 		<TagMenu
+			anchor={tagButtonEl}
 			onTagClick={(tag) => {
 				goto(resolve(`/tag/${tag.id}`));
 				tagMenuShown = false;

@@ -12,6 +12,7 @@
 
 	interface Props {
 		conf?: MenuConfig;
+		anchor?: HTMLElement;
 		showGames?: boolean;
 		showTypes?: boolean;
 		searchTypes?: SelectableSearchType[];
@@ -20,6 +21,7 @@
 
 	let {
 		conf,
+		anchor,
 		showGames = store.serverFeatures?.games,
 		showTypes = true,
 		searchTypes,
@@ -60,7 +62,10 @@
 	}
 </script>
 
-<Menu conf={conf ?? { width: "200px", right: "47px", arrowLeft: "38px" }}>
+<Menu
+	{anchor}
+	conf={conf ?? { width: "200px", right: "47px", arrowLeft: "38px" }}
+>
 	<div class="title">
 		{#if showTypes}
 			<h4 class="norm sm-caps">type</h4>
