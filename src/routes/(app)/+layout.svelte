@@ -51,6 +51,11 @@
 	let tagOrderEditMode = $state(false);
 	let scroll = window.scrollY;
 	let isSearchPage = $derived(page.route?.id === "/(app)/search");
+	let isDetailPage = $derived(
+		["/movie/", "/tv/", "/game/", "/person/"].some((prefix) =>
+			page.url.pathname.startsWith(prefix),
+		),
+	);
 	let searchTypes = $derived(
 		parseSearchTypes(page.url.searchParams.get("type")),
 	);
@@ -162,6 +167,13 @@
 	 * on how big the main search bar is.
 	 */
 	function decideOnNavSplit() {
+		// Detail and person pages have only a few actions, so keep their search
+		// in the main row. Main-list and search pages get a full-width row on
+		// mobile so their controls do not compete with the query input.
+		if (isDetailPage) {
+			document.body.classList.remove("split-nav");
+			return;
+		}
 		if (window.innerWidth <= 520) {
 			document.body.classList.add("split-nav");
 			return;
