@@ -12,6 +12,7 @@
 	import paginatedLoader from "@/lib/util/paginatedLoader.svelte";
 	import {
 		clearActiveFilters,
+		defaultSort,
 		setWatchedListPreset,
 		store,
 	} from "@/store.svelte";
@@ -63,6 +64,11 @@
 		dataLoader.runFn();
 	}
 
+	function showAllItems() {
+		clearActiveFilters();
+		store.activeSort = [...defaultSort];
+	}
+
 	// NOTE: This effect also handles initial load of data.
 	$effect(() => {
 		// When our sort/filter query params change,
@@ -107,6 +113,13 @@
 		onclick={() => setWatchedListPreset("recentlyWatched")}
 	>
 		<Icon i="film" wh={18} /> Recently Finished
+	</button>
+	<button
+		class="plain"
+		data-active={!store.hasActiveFilters}
+		onclick={showAllItems}
+	>
+		All Items
 	</button>
 	<button
 		class="plain"
