@@ -209,10 +209,16 @@
 			padding: 8px 0;
 			border-radius: 10px;
 
-			&:hover,
 			&.active {
 				color: $bg-color;
 				background-color: $accent-color-hover;
+			}
+
+			@media (hover: hover) {
+				&:hover {
+					color: $bg-color;
+					background-color: $accent-color-hover;
+				}
 			}
 		}
 	}

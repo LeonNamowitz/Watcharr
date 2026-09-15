@@ -93,11 +93,18 @@
 				color 150ms ease,
 				outline 150ms ease;
 
-			&:hover,
 			&[data-active="true"] {
 				color: $bg-color;
 				fill: $bg-color;
 				background-color: $accent-color-hover;
+			}
+
+			@media (hover: hover) {
+				&:hover {
+					color: $bg-color;
+					fill: $bg-color;
+					background-color: $accent-color-hover;
+				}
 			}
 
 			&[data-active="true"] {
