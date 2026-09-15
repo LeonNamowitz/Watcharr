@@ -2,6 +2,22 @@
 
 These changes are awaiting release:
 
+# [4.2.2] - 2026-09-12T21:00:01Z
+
+> [!NOTE]
+> Jellyfin 12 Support. Jellyfin servers should be v10.11+.
+>
+> Jellyfin auto/live sync is coming next! It's nearly ready.
+
+## Fixed
+
+- Jellyfin 12 Authentication (`X-Emby-Authorization` -> `Authorization`).
+  - **IMPORTANT** Jellyfin servers older than 10.11 may no longer work, but 10.11+ will function. For support, your Jellyfin server should be on 10.11+.
+
+## Etc
+
+- **Package**: [GitHub CR](https://github.com/orgs/sbondCo/packages/container/watcharr/1241649007?tag=v4.2.2) or [Docker Hub](https://hub.docker.com/layers/sbondco/watcharr/v4.2.2/images/sha256-ec4e21af085b9566e9c45d87d9ea4eb4d2aeb1fd9db20ae26a03f4f53a721cff).
+
 # [4.2.1] - 2026-08-04T00:40:00Z
 
 ## Fixed
@@ -1801,6 +1817,7 @@ Welcome to Watcharr :popcorn:, hope it is enjoyed and improves anyone's experien
 <!-- Version Changelog References (newest first) -->
 
 [Unreleased]: https://github.com/sbondCo/Watcharr/compare/v4.0.0...HEAD
+[4.2.2]: https://github.com/sbondCo/Watcharr/compare/v4.2.1...v4.2.2
 [4.2.1]: https://github.com/sbondCo/Watcharr/compare/v4.2.0...v4.2.1
 [4.2.0]: https://github.com/sbondCo/Watcharr/compare/v4.1.1...v4.2.0
 [4.1.1]: https://github.com/sbondCo/Watcharr/compare/v4.1.0...v4.1.1
