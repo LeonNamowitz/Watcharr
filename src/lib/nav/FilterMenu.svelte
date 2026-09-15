@@ -208,6 +208,12 @@
 			flex: 1 1 45%;
 			padding: 8px 0;
 			border-radius: 10px;
+
+			&:hover,
+			&.active {
+				color: $bg-color;
+				background-color: $accent-color-hover;
+			}
 		}
 	}
 </style>
