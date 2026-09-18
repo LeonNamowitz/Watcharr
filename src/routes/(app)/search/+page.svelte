@@ -53,6 +53,7 @@
 	];
 	let searchReady = $state(false);
 	let stateQuery = $state("");
+	let allowEmptyLocalResults = $state(false);
 	let searchQuery = $derived(data?.query ? decodeURIComponent(data.query) : "");
 	let searchTypes = $derived(
 		parseSearchTypes(page.url.searchParams.get("type")),
@@ -119,10 +120,20 @@
 
 	async function load(signal: AbortSignal) {
 		if (nextLoadParams.page === dataLoader.state.page || !searchQuery) return;
+		const searchedPage = nextLoadParams.page;
+		const searchedScope = requestParams.scope;
 		const response = await req.get<
 			PaginationResponse<Media, SearchResponseMeta>
 		>("/search", { params: nextLoadParams, signal });
 		scroll.dataLoaded();
+		if (
+			searchedScope === "list" &&
+			searchedPage === 1 &&
+			!allowEmptyLocalResults &&
+			(response.results?.length ?? 0) === 0
+		) {
+			setSearchScope(true, true);
+		}
 		return response;
 	}
 
@@ -146,15 +157,19 @@
 		setActiveSearchTypes([]);
 	}
 
-	function setSearchScope(global: boolean) {
+	function setSearchScope(global: boolean, replaceState = false) {
 		const location = new URL(page.url);
 		if (global) {
+			allowEmptyLocalResults = false;
 			location.searchParams.set("scope", "all");
 		} else if (!isPersonSearch) {
+			allowEmptyLocalResults = true;
 			location.searchParams.delete("scope");
 		}
 		window.scrollTo({ top: 0 });
-		goto(resolve(`/search?${location.searchParams.toString()}`));
+		goto(resolve(`/search?${location.searchParams.toString()}`), {
+			replaceState,
+		});
 	}
 
 	$effect(() => {
@@ -176,6 +191,7 @@
 		if (!searchReady || !event.from?.route?.id?.includes("/search")) return;
 		store.searchQuery = searchQuery;
 		if (stateQuery !== searchQuery) {
+			allowEmptyLocalResults = false;
 			applyWatchedListState(defaultSearchState());
 			stateQuery = searchQuery;
 		}
