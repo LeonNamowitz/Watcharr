@@ -56,8 +56,8 @@
 	);
 	let sortOptions: DropDownItem[] = $derived([
 		{ id: "voteCount", value: "Popularity" },
-		{ id: "newest", value: "Release date (newest)" },
-		{ id: "oldest", value: "Release date (oldest)" },
+		{ id: "newest", value: "Date - Newest" },
+		{ id: "oldest", value: "Date - Oldest" },
 		{ id: "ownerRating", value: ratingSortLabel },
 	]);
 	let ratingSettings = $derived({
@@ -201,7 +201,8 @@
 		return (
 			credit.watched?.status === "FINISHED" ||
 			credit.watched?.status === "WATCHING" ||
-			credit.watched?.status === "HOLD"
+			credit.watched?.status === "HOLD" ||
+			credit.watched?.lastSeen != null
 		);
 	}
 

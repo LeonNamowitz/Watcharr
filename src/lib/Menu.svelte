@@ -19,12 +19,21 @@
 		children: import("svelte").Snippet;
 		conf?: MenuConfig;
 		anchor?: HTMLElement;
+		onContentElementChange?: (element: HTMLDivElement | undefined) => void;
 	}
 
-	let { children, conf, anchor }: Props = $props();
+	let {
+		children,
+		conf,
+		anchor,
+		onContentElementChange = undefined,
+	}: Props = $props();
 	let menuEl: HTMLDivElement;
+	let contentEl: HTMLDivElement;
 
 	onMount(() => {
+		onContentElementChange?.(contentEl);
+
 		const updateMaxHeight = () => {
 			const { top } = menuEl.getBoundingClientRect();
 			const availableHeight = Math.max(
@@ -39,6 +48,7 @@
 		window.addEventListener("scroll", updateMaxHeight, { passive: true });
 
 		return () => {
+			onContentElementChange?.(undefined);
 			window.removeEventListener("resize", updateMaxHeight);
 			window.removeEventListener("scroll", updateMaxHeight);
 		};
@@ -60,7 +70,7 @@
 	}}
 >
 	<i class="arrow"></i>
-	<div>
+	<div bind:this={contentEl}>
 		{@render children?.()}
 	</div>
 </div>

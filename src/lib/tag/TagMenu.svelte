@@ -13,10 +13,8 @@
 		PointerSensor,
 	} from "@dnd-kit-svelte/svelte";
 	import { PointerActivationConstraints } from "@dnd-kit/dom";
-	import type {
-		DragEndEvent as DragEndHandler,
-		DragOverEvent as DragOverHandler,
-	} from "@dnd-kit/dom";
+	import { isSortable } from "@dnd-kit/dom/sortable";
+	import type { DragEndEvent as DragEndHandler } from "@dnd-kit/dom";
 	import Menu, { type MenuConfig } from "../Menu.svelte";
 
 	interface Props {
@@ -52,6 +50,7 @@
 
 	let allTags = $derived(store.tags);
 	let editableTags = $state<TagT[]>([]);
+	let menuContentEl = $state<HTMLDivElement>();
 
 	let tagModalOpen = $state(false);
 	let inManageMode = $state(false);
@@ -87,16 +86,9 @@
 		onOrderEditModeChange?.(false);
 	}
 
-	let lastDragTargetId: string | number | null = null;
-
-	function moveEditableTag(
-		sourceId: string | number,
-		targetId: string | number,
-	) {
-		if (sourceId === targetId) return;
+	function moveEditableTagToIndex(sourceId: string | number, to: number) {
 		const from = editableTags.findIndex((tag) => tag.id === sourceId);
-		const to = editableTags.findIndex((tag) => tag.id === targetId);
-		if (from < 0 || to < 0) return;
+		if (from < 0 || to < 0 || to >= editableTags.length || from === to) return;
 
 		const next = [...editableTags];
 		const [moved] = next.splice(from, 1);
@@ -104,36 +96,21 @@
 		editableTags = next;
 	}
 
-	function handleDragStart() {
-		lastDragTargetId = null;
-	}
-
-	function handleDragOver(event: Parameters<DragOverHandler>[0]) {
-		const sourceId = event.operation.source?.id;
-		const targetId = event.operation.target?.id;
-		if (sourceId == null || targetId == null || targetId === lastDragTargetId)
-			return;
-		lastDragTargetId = targetId;
-		moveEditableTag(sourceId, targetId);
-	}
-
 	function handleDragEnd(event: Parameters<DragEndHandler>[0]) {
-		if (!event.canceled) {
-			const sourceId = event.operation.source?.id;
-			const targetId = event.operation.target?.id;
-			if (
-				sourceId != null &&
-				targetId != null &&
-				targetId !== lastDragTargetId
-			) {
-				moveEditableTag(sourceId, targetId);
-			}
-		}
-		lastDragTargetId = null;
+		if (event.canceled) return;
+
+		const source = event.operation.source;
+		if (!source || !isSortable(source)) return;
+
+		moveEditableTagToIndex(source.id, source.sortable.index);
 	}
 </script>
 
-<Menu {anchor} conf={{ ...defaultMenuConfig, ...menuConfig }}>
+<Menu
+	{anchor}
+	conf={{ ...defaultMenuConfig, ...menuConfig }}
+	onContentElementChange={(element) => (menuContentEl = element)}
+>
 	<div class="title">
 		<h4 class="norm sm-caps">{titleText ? titleText : "my tags"}</h4>
 		{#if showManageBtn}
@@ -169,16 +146,11 @@
 				>Click a tag to delete it.</strong
 			>
 		{/if}
-		<DragDropProvider
-			{sensors}
-			onDragStart={handleDragStart}
-			onDragOver={handleDragOver}
-			onDragEnd={handleDragEnd}
-		>
+		<DragDropProvider {sensors} onDragEnd={handleDragEnd}>
 			<div class="list">
 				{#each inOrderEditMode ? editableTags : allTags as t, i (t.id)}
 					{#if inOrderEditMode}
-						<SortableTag tag={t} index={i} />
+						<SortableTag tag={t} index={i} boundary={menuContentEl} />
 					{:else}
 						{@const isSelected = selectedTags
 							? selectedTags.find((tag) => tag.id === t.id)
