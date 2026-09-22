@@ -145,6 +145,9 @@ func TestSuggestionsUseExactMetadataAndPreservePartialResults(t *testing.T) {
 	if !options.Incomplete || options.SkippedCount != 1 {
 		t.Fatalf("partial metadata = (%v, %d), want (true, 1)", options.Incomplete, options.SkippedCount)
 	}
+	if len(options.SkippedItems) != 1 || options.SkippedItems[0].Media.Name != "Unavailable" || options.SkippedItems[0].Media.IDs.TMDB != 30 {
+		t.Fatalf("skipped items = %#v", options.SkippedItems)
+	}
 	if len(options.Genres) != 3 || options.Genres[0].Name != "Animation" || options.Genres[1].Name != "Documentary" || options.Genres[2].Name != "Music" {
 		t.Fatalf("genres = %#v", options.Genres)
 	}
@@ -182,6 +185,9 @@ func TestSuggestionsUseExactMetadataAndPreservePartialResults(t *testing.T) {
 	}
 	if !genre.Meta.Incomplete || genre.Meta.SkippedCount != 1 {
 		t.Fatalf("genre partial metadata = %#v", genre.Meta)
+	}
+	if len(genre.Meta.SkippedItems) != 1 || genre.Meta.SkippedItems[0].Media.Name != "Unavailable" {
+		t.Fatalf("genre skipped items = %#v", genre.Meta.SkippedItems)
 	}
 
 	keyword, err := service.GetCandidates(user.ID, tag.ID, suggestionKindKeyword, 4344, "", "", "", util.PaginationParams{Page: 1, Limit: 10})
@@ -269,6 +275,26 @@ func TestPaginateCandidatesHandlesOverflowingPageOffset(t *testing.T) {
 	)
 	if len(response.Results) != 0 || response.Page != maxInt {
 		t.Fatalf("overflow page response = %#v", response)
+	}
+}
+
+func TestSuggestionOptionsExposeAllSkippedItems(t *testing.T) {
+	db := testutil.SetupDB(t)
+	user := entity.User{Username: "owner", Password: "password"}
+	mustSave(t, db.Create(&user).Error)
+	tag := entity.Tag{UserID: user.ID, Name: "Broken metadata"}
+	mustSave(t, db.Create(&tag).Error)
+	content := entity.Content{TmdbID: 70, Title: "Unavailable movie", Type: entity.MOVIE}
+	mustSave(t, db.Create(&content).Error)
+	mustSave(t, db.Create(&entity.Watched{UserID: user.ID, ContentID: &content.ID, Status: entity.PLANNED}).Error)
+
+	service := NewService(db, nil, &suggestionTMDB{failMovie: map[string]bool{"70": true}})
+	options, err := service.GetSuggestionOptions(user.ID, tag.ID)
+	if err != nil {
+		t.Fatalf("all-skipped suggestions failed: %v", err)
+	}
+	if !options.Incomplete || options.SkippedCount != 1 || len(options.SkippedItems) != 1 || options.SkippedItems[0].Media.Name != "Unavailable movie" {
+		t.Fatalf("all-skipped suggestions = %#v", options)
 	}
 }
 

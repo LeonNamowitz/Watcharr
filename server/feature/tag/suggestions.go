@@ -106,7 +106,7 @@ func watchedName(w *entity.Watched) string {
 	return ""
 }
 
-func (s *Service) scanContentMetadata(watched []entity.Watched) ([]contentMetadata, int, error) {
+func (s *Service) scanContentMetadata(watched []entity.Watched) ([]contentMetadata, []domain.TagCandidate, error) {
 	eligible := make([]entity.Watched, 0, len(watched))
 	for _, item := range watched {
 		if item.Content != nil {
@@ -114,13 +114,14 @@ func (s *Service) scanContentMetadata(watched []entity.Watched) ([]contentMetada
 		}
 	}
 	if len(eligible) == 0 {
-		return []contentMetadata{}, 0, nil
+		return []contentMetadata{}, []domain.TagCandidate{}, nil
 	}
 	if s.tmdb == nil {
-		return nil, len(eligible), errors.New("metadata provider is unavailable")
+		return nil, skippedTagCandidates(eligible), errors.New("metadata provider is unavailable")
 	}
 
 	type scanResult struct {
+		item     entity.Watched
 		metadata contentMetadata
 		err      error
 	}
@@ -134,7 +135,7 @@ func (s *Service) scanContentMetadata(watched []entity.Watched) ([]contentMetada
 			defer workers.Done()
 			for item := range jobs {
 				metadata, err := s.fetchContentMetadata(item)
-				results <- scanResult{metadata: metadata, err: err}
+				results <- scanResult{item: item, metadata: metadata, err: err}
 			}
 		}()
 	}
@@ -148,10 +149,10 @@ func (s *Service) scanContentMetadata(watched []entity.Watched) ([]contentMetada
 	}()
 
 	metadata := make([]contentMetadata, 0, len(eligible))
-	skipped := 0
+	skipped := make([]domain.TagCandidate, 0)
 	for result := range results {
 		if result.err != nil {
-			skipped++
+			skipped = append(skipped, tagCandidateFromWatched(&result.item))
 			continue
 		}
 		metadata = append(metadata, result.metadata)
@@ -163,6 +164,23 @@ func (s *Service) scanContentMetadata(watched []entity.Watched) ([]contentMetada
 		return strings.ToLower(metadata[i].media.Name) < strings.ToLower(metadata[j].media.Name)
 	})
 	return metadata, skipped, nil
+}
+
+func tagCandidateFromWatched(item *entity.Watched) domain.TagCandidate {
+	return domain.TagCandidate{
+		Media: domain.NewMediaFromWatched(item, ptr(domain.NewWatchedDtoForLists(item))),
+	}
+}
+
+func skippedTagCandidates(watched []entity.Watched) []domain.TagCandidate {
+	items := make([]domain.TagCandidate, 0, len(watched))
+	for i := range watched {
+		items = append(items, tagCandidateFromWatched(&watched[i]))
+	}
+	sort.SliceStable(items, func(i, j int) bool {
+		return strings.ToLower(items[i].Media.Name) < strings.ToLower(items[j].Media.Name)
+	})
+	return items
 }
 
 func (s *Service) fetchContentMetadata(item entity.Watched) (contentMetadata, error) {
@@ -272,7 +290,7 @@ func (s *Service) GetSuggestionOptions(userID uint, tagID uint) (domain.TagSugge
 	if err != nil {
 		return domain.TagSuggestionOptionsResponse{}, err
 	}
-	metadata, skipped, metadataErr := s.scanContentMetadata(watched)
+	metadata, skippedItems, metadataErr := s.scanContentMetadata(watched)
 	response := domain.TagSuggestionOptionsResponse{
 		Genres:         []domain.TagSuggestionOption{},
 		Keywords:       []domain.TagSuggestionOption{},
@@ -282,8 +300,9 @@ func (s *Service) GetSuggestionOptions(userID uint, tagID uint) (domain.TagSugge
 		GameGenres:     []domain.TagValueSuggestionOption{},
 		GameModes:      []domain.TagValueSuggestionOption{},
 		GameCategories: []domain.TagValueSuggestionOption{},
-		Incomplete:     skipped > 0,
-		SkippedCount:   skipped,
+		Incomplete:     len(skippedItems) > 0,
+		SkippedCount:   len(skippedItems),
+		SkippedItems:   skippedItems,
 	}
 	response.FutureReleaseCount = len(s.futureCandidates(watched, false))
 	response.GameFutureReleaseCount = len(s.futureCandidates(watched, true))
@@ -353,7 +372,7 @@ func (s *Service) GetSuggestionOptions(userID uint, tagID uint) (domain.TagSugge
 	response.GameGenres = gameSuggestionOptionValues(gameGenreCounts)
 	response.GameModes = gameSuggestionOptionValues(gameModeCounts)
 	response.GameCategories = gameSuggestionOptionValues(gameCategoryCounts)
-	if metadataErr != nil && response.FutureReleaseCount == 0 && len(response.GameGenres) == 0 && len(response.GameModes) == 0 && len(response.GameCategories) == 0 {
+	if metadataErr != nil && len(skippedItems) == 0 && response.FutureReleaseCount == 0 && len(response.GameGenres) == 0 && len(response.GameModes) == 0 && len(response.GameCategories) == 0 {
 		return response, metadataErr
 	}
 	sortSuggestionOptions(response.Genres)
@@ -516,12 +535,13 @@ func (s *Service) GetCandidates(
 			}
 		}
 	case suggestionKindGenre, suggestionKindKeyword, suggestionKindComposer, suggestionKindLanguage, suggestionKindCollection:
-		metadata, skipped, err := s.scanContentMetadata(watched)
-		if err != nil {
+		metadata, skippedItems, err := s.scanContentMetadata(watched)
+		if err != nil && len(skippedItems) == 0 {
 			return domain.TagCandidatesResponse{}, err
 		}
-		meta.Incomplete = skipped > 0
-		meta.SkippedCount = skipped
+		meta.Incomplete = len(skippedItems) > 0
+		meta.SkippedCount = len(skippedItems)
+		meta.SkippedItems = skippedItems
 		for _, item := range metadata {
 			if query != "" && !strings.Contains(strings.ToLower(item.media.Name), query) {
 				continue
