@@ -45,14 +45,16 @@ type (
 		GameFutureReleaseCount int                           `json:"gameFutureReleaseCount"`
 		Incomplete             bool                          `json:"incomplete"`
 		SkippedCount           int                           `json:"skippedCount"`
+		SkippedItems           []TagCandidate                `json:"skippedItems,omitempty"`
 	}
 	TagCandidate struct {
 		Media  Media  `json:"media"`
 		Reason string `json:"reason,omitempty"`
 	}
 	TagCandidateMeta struct {
-		Incomplete   bool `json:"incomplete"`
-		SkippedCount int  `json:"skippedCount"`
+		Incomplete   bool           `json:"incomplete"`
+		SkippedCount int            `json:"skippedCount"`
+		SkippedItems []TagCandidate `json:"skippedItems,omitempty"`
 	}
 	TagCandidatesResponse = util.PaginationResponse[TagCandidate, TagCandidateMeta]
 )

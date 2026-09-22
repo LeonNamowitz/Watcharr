@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { resolve } from "$app/paths";
 	import { onMount } from "svelte";
 	import { SvelteSet } from "svelte/reactivity";
 	import Modal from "../Modal.svelte";
@@ -47,6 +48,7 @@
 	let loadingCandidates = $state(false);
 	let saving = $state(false);
 	let error = $state("");
+	let showSkippedItems = $state(false);
 	let requestVersion = 0;
 
 	const featuredNames = {
@@ -172,6 +174,45 @@
 
 	function watchedId(candidate: TagCandidate) {
 		return candidate.media.watched?.id ?? 0;
+	}
+
+	let skippedItems: TagCandidate[] = $derived(
+		options?.skippedItems?.length
+			? options.skippedItems
+			: (candidateMeta?.skippedItems ?? []),
+	);
+
+	function mediaHref(candidate: TagCandidate) {
+		const media = candidate.media;
+		switch (media.type) {
+			case MediaTypeE.tmdbMovie:
+				return media.ids.tmdb
+					? resolve("/(app)/movie/[id]", { id: String(media.ids.tmdb) })
+					: undefined;
+			case MediaTypeE.tmdbShow:
+				return media.ids.tmdb
+					? resolve("/(app)/tv/[id]", { id: String(media.ids.tmdb) })
+					: undefined;
+			case MediaTypeE.igdbGame:
+				return media.ids.igdb
+					? resolve("/(app)/game/[id]", { id: String(media.ids.igdb) })
+					: undefined;
+		}
+	}
+
+	function mediaIdentifier(candidate: TagCandidate) {
+		const media = candidate.media;
+		if (media.type === MediaTypeE.igdbGame && media.ids.igdb) {
+			return `IGDB #${media.ids.igdb}`;
+		}
+		if (
+			(media.type === MediaTypeE.tmdbMovie ||
+				media.type === MediaTypeE.tmdbShow) &&
+			media.ids.tmdb
+		) {
+			return `TMDB #${media.ids.tmdb}`;
+		}
+		return "External ID unavailable";
 	}
 
 	async function loadOptions() {
@@ -504,9 +545,63 @@
 				<div class="inline-loading"><Spinner /></div>
 			{:else if options?.incomplete}
 				<p class="warning">
-					Some suggestion data could not be loaded ({options.skippedCount}
-					{options.skippedCount === 1 ? "item" : "items"} skipped).
+					Some suggestion data could not be loaded (&nbsp;
+					<button
+						type="button"
+						class="skipped-toggle"
+						aria-expanded={showSkippedItems}
+						onclick={() => (showSkippedItems = !showSkippedItems)}
+					>
+						{options.skippedCount}
+						{options.skippedCount === 1 ? "item" : "items"}
+						skipped
+					</button>).
 				</p>
+			{/if}
+			{#if showSkippedItems && skippedItems.length > 0}
+				<div class="skipped-items" aria-live="polite">
+					<strong>Skipped items</strong>
+					{#each skippedItems as candidate (watchedId(candidate))}
+						{@const href = mediaHref(candidate)}
+						{#if href}
+							<a class="skipped-item" {href}>
+								{#if posterSource(candidate)}
+									<img src={posterSource(candidate)} alt="" />
+								{:else}
+									<span class="poster-placeholder"
+										><Icon i="ticket" wh={26} /></span
+									>
+								{/if}
+								<span class="candidate-info">
+									<strong>{candidate.media.name ?? "Unnamed item"}</strong>
+									<small
+										>{mediaTypeLabel(candidate)} · {mediaIdentifier(
+											candidate,
+										)}</small
+									>
+									<span class="reason"
+										>Metadata could not be loaded · Open item to inspect it</span
+									>
+								</span>
+							</a>
+						{:else}
+							<div class="skipped-item">
+								<span class="poster-placeholder"
+									><Icon i="ticket" wh={26} /></span
+								>
+								<span class="candidate-info">
+									<strong>{candidate.media.name ?? "Unnamed item"}</strong>
+									<small
+										>{mediaTypeLabel(candidate)} · {mediaIdentifier(
+											candidate,
+										)}</small
+									>
+									<span class="reason">Metadata could not be loaded</span>
+								</span>
+							</div>
+						{/if}
+					{/each}
+				</div>
 			{/if}
 		{/if}
 
@@ -538,8 +633,16 @@
 
 		{#if candidateMeta?.incomplete}
 			<p class="warning">
-				Results are incomplete because metadata for {candidateMeta.skippedCount}
-				{candidateMeta.skippedCount === 1 ? "item" : "items"} could not be loaded.
+				Results are incomplete because metadata for&nbsp;
+				<button
+					type="button"
+					class="skipped-toggle"
+					aria-expanded={showSkippedItems}
+					onclick={() => (showSkippedItems = !showSkippedItems)}
+				>
+					{candidateMeta.skippedCount}
+					{candidateMeta.skippedCount === 1 ? "item" : "items"} could not be loaded
+				</button>.
 			</p>
 		{/if}
 
@@ -779,6 +882,57 @@
 		border-radius: 5px;
 		background: color-mix(in srgb, #e9a23b 24%, transparent);
 		font-size: 13px;
+	}
+
+	.skipped-toggle {
+		padding: 0;
+		border: 0;
+		background: none;
+		color: inherit;
+		font: inherit;
+		text-decoration: underline;
+	}
+
+	.skipped-items {
+		display: flex;
+		flex-flow: column;
+		gap: 7px;
+		padding: 9px;
+		border: 1px solid color-mix(in srgb, #e9a23b 55%, transparent);
+		border-radius: 7px;
+
+		> strong {
+			font-size: 13px;
+		}
+	}
+
+	.skipped-item {
+		display: grid;
+		grid-template-columns: 42px minmax(0, 1fr);
+		align-items: center;
+		gap: 9px;
+		padding: 7px;
+		border: 1px solid color-mix(in srgb, $text-color 30%, transparent);
+		border-radius: 7px;
+		color: $text-color;
+		text-decoration: none;
+
+		&:hover {
+			border-color: $text-color;
+			background: color-mix(in srgb, $text-color 8%, transparent);
+		}
+
+		img,
+		.poster-placeholder {
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			width: 42px;
+			height: 58px;
+			object-fit: cover;
+			border-radius: 4px;
+			background: color-mix(in srgb, $text-color 10%, transparent);
+		}
 	}
 
 	.candidate-list {

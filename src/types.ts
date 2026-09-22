@@ -933,6 +933,7 @@ export interface TagSuggestionOptionsResponse {
 	gameFutureReleaseCount: number;
 	incomplete: boolean;
 	skippedCount: number;
+	skippedItems?: TagCandidate[];
 }
 
 export interface TagCandidate {
@@ -943,6 +944,7 @@ export interface TagCandidate {
 export interface TagCandidateMeta {
 	incomplete: boolean;
 	skippedCount: number;
+	skippedItems?: TagCandidate[];
 }
 
 export interface TagBulkAddResponse {
