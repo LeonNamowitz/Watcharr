@@ -7,9 +7,7 @@
 	import {
 		applyWatchedListState,
 		clearActiveFilters,
-		defaultSort,
 		defaultWLDetailedView,
-		setWatchedListPreset,
 		store,
 		type WatchedListStateSnapshot,
 	} from "@/store.svelte.js";
@@ -34,6 +32,7 @@
 	import { page } from "$app/state";
 	import PosterList from "@/lib/poster/PosterList.svelte";
 	import Poster from "@/lib/poster/Poster.svelte";
+	import WatchedListShortcuts from "@/lib/watched/WatchedListShortcuts.svelte";
 	import Error from "@/lib/Error.svelte";
 	import { goto } from "$app/navigation";
 	import { resolve } from "$app/paths";
@@ -260,11 +259,6 @@
 		gotoListLocation(location);
 	}
 
-	function showAllItems() {
-		clearActiveFilters();
-		store.activeSort = [...defaultSort];
-	}
-
 	onDestroy(() => {
 		console.debug("PAGE DESTROYED");
 		store.searchQuery = "";
@@ -326,29 +320,7 @@
 </div>
 
 {#if !isSearching}
-	<div class="type-toggle">
-		<button
-			class="plain"
-			data-active={store.activeWatchedListPreset === "recentlyWatched"}
-			onclick={() => setWatchedListPreset("recentlyWatched")}
-		>
-			<Icon i="film" wh={18} /> Recently Finished
-		</button>
-		<button
-			class="plain"
-			data-active={!store.hasActiveFilters}
-			onclick={showAllItems}
-		>
-			All Items
-		</button>
-		<button
-			class="plain"
-			data-active={store.activeWatchedListPreset === "watchlist"}
-			onclick={() => setWatchedListPreset("watchlist")}
-		>
-			<Icon i="calendar" wh={18} /> Watchlist
-		</button>
-	</div>
+	<WatchedListShortcuts showGames={true} />
 {/if}
 
 {#if isSearching}
@@ -489,43 +461,6 @@
 
 		&.name {
 			min-width: 0;
-		}
-	}
-
-	.type-toggle {
-		display: flex;
-		flex-flow: row;
-		flex-wrap: wrap;
-		gap: 10px;
-		justify-content: center;
-		margin: 0 auto 15px auto;
-
-		button {
-			display: flex;
-			flex-flow: row;
-			align-items: center;
-			gap: 8px;
-			padding: 8px 14px;
-			border: 2px solid $text-color;
-			border-radius: 8px;
-			font-size: 14px;
-			color: $text-color;
-			fill: $text-color;
-			transition:
-				background-color 150ms ease,
-				color 150ms ease,
-				outline 150ms ease;
-
-			&:hover,
-			&[data-active="true"] {
-				color: $bg-color;
-				fill: $bg-color;
-				background-color: $accent-color-hover;
-			}
-
-			&[data-active="true"] {
-				outline: 3px solid $accent-color;
-			}
 		}
 	}
 

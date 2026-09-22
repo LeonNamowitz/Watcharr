@@ -6,16 +6,12 @@
 	import Poster from "@/lib/poster/Poster.svelte";
 	import PosterList from "@/lib/poster/PosterList.svelte";
 	import Spinner from "@/lib/Spinner.svelte";
+	import WatchedListShortcuts from "@/lib/watched/WatchedListShortcuts.svelte";
 	import { req } from "@/lib/util/api";
 	import infScroll from "@/lib/util/infScroll";
 	import { createListSnapshot } from "@/lib/util/listNavigation.svelte";
 	import paginatedLoader from "@/lib/util/paginatedLoader.svelte";
-	import {
-		clearActiveFilters,
-		defaultSort,
-		setWatchedListPreset,
-		store,
-	} from "@/store.svelte";
+	import { clearActiveFilters, store } from "@/store.svelte";
 	import { type Media, type PaginationResponse } from "@/types";
 	import { onDestroy, untrack } from "svelte";
 
@@ -64,11 +60,6 @@
 		dataLoader.runFn();
 	}
 
-	function showAllItems() {
-		clearActiveFilters();
-		store.activeSort = [...defaultSort];
-	}
-
 	// NOTE: This effect also handles initial load of data.
 	$effect(() => {
 		// When our sort/filter query params change,
@@ -106,29 +97,7 @@
 	{JSON.stringify(store.sortAndFiltersForQueryParams)}</span
 > -->
 
-<div class="type-toggle">
-	<button
-		class="plain"
-		data-active={store.activeWatchedListPreset === "recentlyWatched"}
-		onclick={() => setWatchedListPreset("recentlyWatched")}
-	>
-		<Icon i="film" wh={18} /> Recently Finished
-	</button>
-	<button
-		class="plain"
-		data-active={!store.hasActiveFilters}
-		onclick={showAllItems}
-	>
-		All Items
-	</button>
-	<button
-		class="plain"
-		data-active={store.activeWatchedListPreset === "watchlist"}
-		onclick={() => setWatchedListPreset("watchlist")}
-	>
-		<Icon i="calendar" wh={18} /> Watchlist
-	</button>
-</div>
+<WatchedListShortcuts showGames={Boolean(store.serverFeatures?.games)} />
 
 <PosterList>
 	{#if dataLoader.state.data?.length > 0}
@@ -184,43 +153,6 @@
 {/if} -->
 
 <style lang="scss">
-	.type-toggle {
-		display: flex;
-		flex-flow: row;
-		flex-wrap: wrap;
-		gap: 10px;
-		justify-content: center;
-		margin: 0 auto 15px auto;
-
-		button {
-			display: flex;
-			flex-flow: row;
-			align-items: center;
-			gap: 8px;
-			padding: 8px 14px;
-			border: 2px solid $text-color;
-			border-radius: 8px;
-			font-size: 14px;
-			color: $text-color;
-			fill: $text-color;
-			transition:
-				background-color 150ms ease,
-				color 150ms ease,
-				outline 150ms ease;
-
-			&:hover,
-			&[data-active="true"] {
-				color: $bg-color;
-				fill: $bg-color;
-				background-color: $accent-color-hover;
-			}
-
-			&[data-active="true"] {
-				outline: 3px solid $accent-color;
-			}
-		}
-	}
-
 	.empty-list {
 		display: flex;
 		flex-flow: column;

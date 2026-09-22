@@ -20,6 +20,7 @@ export const defaultWLDetailedView: WLDetailedViewOption[] = [
 ];
 
 export type WatchedListPresetId = "watchlist" | "recentlyWatched";
+export type WatchedListMediaGroup = "moviesTv" | "games";
 
 type WatchedListPreset = {
 	filters: Filters;
@@ -324,6 +325,21 @@ export const clearActiveFilters = () => {
 	store.activeFilters = { type: [], status: [] };
 };
 
+export const setWatchedListMediaGroup = (mediaGroup: WatchedListMediaGroup) => {
+	const activePreset = store.activeWatchedListPreset;
+	store.activeFilters = {
+		...store.activeFilters,
+		type: mediaGroup === "games" ? ["game"] : ["tv", "movie"],
+		status: [...store.activeFilters.status],
+	};
+	if (activePreset) {
+		_store.activeWatchedListPreset = activePreset;
+		if (!temporaryWatchedListState) {
+			localStorage.setItem("activeWatchedListPreset", activePreset);
+		}
+	}
+};
+
 const clearActiveWatchedListPreset = () => {
 	_store.activeWatchedListPreset = undefined;
 	if (!temporaryWatchedListState) {
@@ -331,9 +347,19 @@ const clearActiveWatchedListPreset = () => {
 	}
 };
 
-export const setWatchedListPreset = (presetId: WatchedListPresetId) => {
+export const setWatchedListPreset = (
+	presetId: WatchedListPresetId,
+	preserveType = true,
+) => {
 	const preset = defaultWatchedListPresets[presetId];
-	store.activeFilters = cloneFilters(preset.filters);
+	const currentTypes = [...store.activeFilters.type];
+	store.activeFilters = {
+		...cloneFilters(preset.filters),
+		type:
+			preserveType && currentTypes.length > 0
+				? currentTypes
+				: [...preset.filters.type],
+	};
 	store.activeSort = [...preset.sort];
 	_store.activeWatchedListPreset = presetId;
 	if (!temporaryWatchedListState) {

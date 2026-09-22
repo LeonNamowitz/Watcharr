@@ -18,6 +18,7 @@
 	import { ReqerError } from "@/lib/util/fetch";
 	import { isTouch } from "@/lib/util/helpers";
 	import { publicListHistoryState } from "@/lib/util/listNavigation.svelte";
+	import WatchedListMediaToggle from "@/lib/watched/WatchedListMediaToggle.svelte";
 	import {
 		applyWatchedListState,
 		beginTemporaryWatchedListState,
@@ -262,7 +263,7 @@
 	}
 
 	onMount(() => {
-		setWatchedListPreset("recentlyWatched");
+		setWatchedListPreset("recentlyWatched", false);
 		mainListState = captureWatchedListState();
 		activeListState = "main";
 		if (isListPage && isSearchActive) {
@@ -306,6 +307,9 @@
 </script>
 
 {#snippet navActions()}
+	{#if isListPage && !isSearchActive}
+		<WatchedListMediaToggle showGames={true} placement="nav" />
+	{/if}
 	{#if isListPage || isPersonPage}
 		<div class="control">
 			<button

@@ -18,6 +18,7 @@
 		type SelectableSearchType,
 	} from "@/lib/search/searchTypes";
 	import TagMenu from "@/lib/tag/TagMenu.svelte";
+	import WatchedListMediaToggle from "@/lib/watched/WatchedListMediaToggle.svelte";
 	import { req } from "@/lib/util/api";
 	import { isTouch } from "@/lib/util/helpers";
 	import { store, defaultSort } from "@/store.svelte";
@@ -259,6 +260,12 @@
 </script>
 
 {#snippet navActions()}
+	{#if page.url?.pathname === "/"}
+		<WatchedListMediaToggle
+			showGames={Boolean(store.serverFeatures?.games)}
+			placement="nav"
+		/>
+	{/if}
 	<!-- Detailed posters supported on watched lists, tags, search and people. -->
 	{#if page.url?.pathname === "/" || page.url?.pathname.startsWith("/search") || page.url?.pathname.startsWith("/tag") || page.url?.pathname.startsWith("/person")}
 		<button
