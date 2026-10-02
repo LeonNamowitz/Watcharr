@@ -184,7 +184,7 @@
 					target.autofocus = false;
 				});
 			},
-			isTouch() ? (target.value.trim() ? 800 : 1600) : 400,
+			isTouch() ? (target.value.trim() ? 800 : 1600) : 500,
 		);
 	}
 
