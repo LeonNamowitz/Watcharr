@@ -42,6 +42,7 @@ import (
 	"github.com/sbondCo/Watcharr/feature/search"
 	"github.com/sbondCo/Watcharr/feature/server"
 	"github.com/sbondCo/Watcharr/feature/setup"
+	"github.com/sbondCo/Watcharr/feature/stats"
 	"github.com/sbondCo/Watcharr/feature/tag"
 	"github.com/sbondCo/Watcharr/feature/task"
 	"github.com/sbondCo/Watcharr/feature/user"
@@ -237,6 +238,7 @@ func main() {
 		activityService)
 	featureService := feature.NewService(cfg)
 	profileService := profile.NewService(db)
+	statsService := stats.NewService(db, tmdbService)
 	followService := follow.NewService(db)
 	tagService := tag.NewService(db, watchedService, tmdbService)
 	searchService := search.NewService(db, br.Cfg, tmdbService, watchedService)
@@ -259,6 +261,7 @@ func main() {
 	episode.NewRouter(br, watchedEpisodeService).AddRoutes()
 	activity.NewRouter(br, activityService).AddRoutes()
 	profile.NewRouter(br, profileService).AddRoutes()
+	stats.NewRouter(br, statsService, watchedService).AddRoutes()
 	jellyfin.NewRouter(br, jellyfinService, jellyfinSyncService).AddRoutes()
 	plex.NewRouter(br, plexSyncService).AddRoutes()
 	user.NewRouter(br, userService, userManageService).AddRoutes()

@@ -75,6 +75,9 @@
 		<h5 title={user.username}>Hi {user.username}!</h5>
 	{/if}
 	<button class="plain" onclick={() => profile()}>Profile</button>
+	<button class="plain" onclick={() => goto(resolve("/profile/stats"))}
+		>Stats</button
+	>
 	{#if !store.userSettings?.private}
 		<button class="plain" onclick={() => shareWatchedList()}>Share List</button>
 	{/if}

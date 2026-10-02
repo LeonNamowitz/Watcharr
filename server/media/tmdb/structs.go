@@ -502,6 +502,7 @@ type ShowDetails struct {
 	Type string `json:"type"`
 
 	// Extra items because we use `append_to_response` on the request
+	Credits          ContentCredits          `json:"credits"`
 	AggregateCredits AggregateContentCredits `json:"aggregate_credits"`
 	ExternalIds      ExternalIdsShow         `json:"external_ids"`
 	Keywords         Keywords                `json:"keywords"`
@@ -864,14 +865,21 @@ type ContentCreditsCrew struct {
 }
 
 type AggregateContentCredits struct {
+	Cast []struct {
+		ID          int    `json:"id"`
+		Name        string `json:"name"`
+		ProfilePath string `json:"profile_path"`
+	} `json:"cast"`
 	ID   int                    `json:"id"`
 	Crew []AggregateCreditsCrew `json:"crew"`
 }
 
 type AggregateCreditsCrew struct {
-	ID   int                   `json:"id"`
-	Name string                `json:"name"`
-	Jobs []AggregateCreditsJob `json:"jobs"`
+	Department  string                `json:"department"`
+	ProfilePath string                `json:"profile_path"`
+	ID          int                   `json:"id"`
+	Name        string                `json:"name"`
+	Jobs        []AggregateCreditsJob `json:"jobs"`
 }
 
 type AggregateCreditsJob struct {

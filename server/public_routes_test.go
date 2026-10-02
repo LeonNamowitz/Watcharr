@@ -8,6 +8,7 @@ import (
 	"github.com/sbondCo/Watcharr/feature/content"
 	"github.com/sbondCo/Watcharr/feature/game"
 	"github.com/sbondCo/Watcharr/feature/search"
+	"github.com/sbondCo/Watcharr/feature/stats"
 	"github.com/sbondCo/Watcharr/feature/user"
 	"github.com/sbondCo/Watcharr/feature/watched"
 	appRouter "github.com/sbondCo/Watcharr/router"
@@ -31,4 +32,5 @@ func TestPublicRouteRegistration(t *testing.T) {
 	user.NewRouter(br, nil, nil).AddRoutes()
 	content.NewRouter(br, nil, nil, nil).AddRoutes()
 	game.NewRouter(br, nil, nil).AddRoutes()
+	stats.NewRouter(br, nil, nil).AddRoutes()
 }

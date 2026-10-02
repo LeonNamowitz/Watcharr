@@ -301,6 +301,13 @@
 						{meta.username}
 					</h2>
 				</a>
+				<a
+					class="stats-link"
+					href={resolve("/(public)/lists/[id]/[username]/stats", {
+						id: meta.id,
+						username: meta.username,
+					})}>Stats</a
+				>
 				{#if canFollow}
 					<button
 						class="plain follow"
@@ -420,6 +427,14 @@
 {/if}
 
 <style lang="scss">
+	.stats-link {
+		font-size: 13px;
+		color: inherit;
+		padding: 6px 10px;
+		background: rgba(100, 149, 237, 0.12);
+		border-radius: 6px;
+		text-decoration: none;
+	}
 	.content {
 		display: flex;
 		width: 100%;
