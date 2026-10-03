@@ -44,30 +44,32 @@ func NewService(db *gorm.DB, provider TMDBProvider) *Service {
 }
 
 type StatsResponse struct {
-	Scope             string            `json:"scope"`
-	Media             string            `json:"media"`
-	Owner             entity.PublicUser `json:"owner"`
-	ReviewsVisible    bool              `json:"reviewsVisible"`
-	Languages         []BarStat         `json:"languages"`
-	Studios           []PersonStat      `json:"studios"`
-	Year              int               `json:"year,omitempty"`
-	AvailableYears    []int             `json:"availableYears"`
-	Summary           Summary           `json:"summary"`
-	History           []HistoryPoint    `json:"history"`
-	Decades           []DecadeStat      `json:"decades"`
-	HighestRated      HighestRated      `json:"highestRated"`
-	Activity          ActivityStats     `json:"activity"`
-	Milestones        Milestones        `json:"milestones"`
-	Genres            []BarStat         `json:"genres"`
-	Countries         []BarStat         `json:"countries"`
-	Breakdown         Breakdown         `json:"breakdown"`
-	People            PeopleStats       `json:"people"`
-	Crew              []CrewDepartment  `json:"crew"`
-	HighsLows         HighsLows         `json:"highsLows"`
-	RatingDifferences RatingDifferences `json:"ratingDifferences"`
-	Posters           []MediaCard       `json:"posters"`
-	Watchlist         []MediaCard       `json:"watchlist"`
-	Metadata          MetadataStatus    `json:"metadata"`
+	Scope                string            `json:"scope"`
+	Media                string            `json:"media"`
+	Owner                entity.PublicUser `json:"owner"`
+	ReviewsVisible       bool              `json:"reviewsVisible"`
+	Languages            []BarStat         `json:"languages"`
+	Studios              []PersonStat      `json:"studios"`
+	Year                 int               `json:"year,omitempty"`
+	AvailableYears       []int             `json:"availableYears"`
+	Summary              Summary           `json:"summary"`
+	History              []HistoryPoint    `json:"history"`
+	Decades              []DecadeStat      `json:"decades"`
+	Episodes             []MediaCard       `json:"episodes"`
+	HighestRatedEpisodes HighestRated      `json:"highestRatedEpisodes"`
+	HighestRated         HighestRated      `json:"highestRated"`
+	Activity             ActivityStats     `json:"activity"`
+	Milestones           Milestones        `json:"milestones"`
+	Genres               []BarStat         `json:"genres"`
+	Countries            []BarStat         `json:"countries"`
+	Breakdown            Breakdown         `json:"breakdown"`
+	People               PeopleStats       `json:"people"`
+	Crew                 []CrewDepartment  `json:"crew"`
+	HighsLows            HighsLows         `json:"highsLows"`
+	RatingDifferences    RatingDifferences `json:"ratingDifferences"`
+	Posters              []MediaCard       `json:"posters"`
+	Watchlist            []MediaCard       `json:"watchlist"`
+	Metadata             MetadataStatus    `json:"metadata"`
 }
 
 type Summary struct {
@@ -95,17 +97,19 @@ type DecadeStat struct {
 }
 
 type MediaCard struct {
-	ID          int     `json:"id"`
-	Type        string  `json:"type"`
-	Title       string  `json:"title"`
-	PosterPath  string  `json:"posterPath,omitempty"`
-	ReleaseYear int     `json:"releaseYear,omitempty"`
-	Rating      float64 `json:"rating,omitempty"`
-	TMDBRating  float64 `json:"tmdbRating,omitempty"`
-	VoteCount   uint32  `json:"voteCount,omitempty"`
-	Plays       int     `json:"plays,omitempty"`
-	Runtime     int     `json:"runtime,omitempty"`
-	Date        string  `json:"date,omitempty"`
+	SeasonNumber  int     `json:"seasonNumber,omitempty"`
+	EpisodeNumber int     `json:"episodeNumber,omitempty"`
+	ID            int     `json:"id"`
+	Type          string  `json:"type"`
+	Title         string  `json:"title"`
+	PosterPath    string  `json:"posterPath,omitempty"`
+	ReleaseYear   int     `json:"releaseYear,omitempty"`
+	Rating        float64 `json:"rating,omitempty"`
+	TMDBRating    float64 `json:"tmdbRating,omitempty"`
+	VoteCount     uint32  `json:"voteCount,omitempty"`
+	Plays         int     `json:"plays,omitempty"`
+	Runtime       int     `json:"runtime,omitempty"`
+	Date          string  `json:"date,omitempty"`
 }
 
 type HighestRated struct {
@@ -114,20 +118,23 @@ type HighestRated struct {
 }
 
 type WeekStat struct {
-	Titles        []string `json:"titles"`
-	Start         string   `json:"start"`
-	Plays         int      `json:"plays"`
-	UniqueTitles  int      `json:"uniqueTitles"`
-	AverageRating float64  `json:"averageRating"`
+	Items         []MediaCard `json:"items"`
+	Titles        []string    `json:"titles"`
+	Start         string      `json:"start"`
+	Plays         int         `json:"plays"`
+	UniqueTitles  int         `json:"uniqueTitles"`
+	AverageRating float64     `json:"averageRating"`
 }
 
 type MonthStat struct {
-	Month         string  `json:"month"`
-	Plays         int     `json:"plays"`
-	AverageRating float64 `json:"averageRating"`
+	Items         []MediaCard `json:"items"`
+	Month         string      `json:"month"`
+	Plays         int         `json:"plays"`
+	AverageRating float64     `json:"averageRating"`
 }
 
 type ActivityStats struct {
+	Total           int         `json:"total"`
 	AveragePerWeek  float64     `json:"averagePerWeek"`
 	AveragePerMonth float64     `json:"averagePerMonth"`
 	Weeks           []WeekStat  `json:"weeks"`
@@ -148,8 +155,9 @@ type BarStat struct {
 }
 
 type PieStat struct {
-	Label string `json:"label"`
-	Count int    `json:"count"`
+	TitleKeys []string `json:"titleKeys"`
+	Label     string   `json:"label"`
+	Count     int      `json:"count"`
 }
 
 type RatingBucket struct {
@@ -220,6 +228,8 @@ type watchedRecord struct {
 	plays     []time.Time
 	firstPlay *time.Time
 	addDates  []time.Time
+	episode   *entity.WatchedEpisode
+	parent    *watchedRecord
 }
 
 type playEvent struct {
@@ -312,7 +322,20 @@ func (s *Service) GetStats(userID uint, q Query) (StatsResponse, error) {
 
 	watchlist := filterWatchlist(records)
 	watchlistAdditions := recordsWithWatchlistAdditions(records, q)
+	episodeRecords, err := s.loadEpisodes(records, q, availableYears)
+	if err != nil {
+		return StatsResponse{}, err
+	}
+	for year := range availableYears {
+		if !containsYear(years, year) {
+			years = append(years, year)
+		}
+	}
+	sort.Sort(sort.Reverse(sort.IntSlice(years)))
 	enrichmentRecords := append([]*watchedRecord{}, scopeRecords...)
+	for _, ep := range episodeRecords {
+		enrichmentRecords = append(enrichmentRecords, ep.parent)
+	}
 	enrichmentRecords = append(enrichmentRecords, watchlist...)
 	enrichmentRecords = append(enrichmentRecords, watchlistAdditions...)
 	metadata, failures := s.enrich(enrichmentRecords)
@@ -347,9 +370,17 @@ func (s *Service) GetStats(userID uint, q Query) (StatsResponse, error) {
 	}
 	response.Summary = buildSummary(scopeRecords)
 	response.HighestRated = buildHighestRated(scopeRecords, q.Year, metadata)
-	response.Activity = buildActivity(scopeRecords)
+	activityRecords := scopeRecords
+	if q.Media == "tv" {
+		activityRecords = episodeRecords
+		s.enrichEpisodes(episodeRecords, metadata, &response.Metadata)
+		response.HighestRatedEpisodes = buildHighestRated(episodeRecords, q.Year, metadata)
+		response.Episodes = uniqueCards(episodeRecords, metadata)
+		response.People.Cast = buildEpisodeCast(scopeRecords, episodeRecords, metadata)
+	}
+	response.Activity = buildActivity(activityRecords)
 	if q.Scope == ScopeYear {
-		response.Activity = fillActivity(response.Activity, scopeRecords, q.Year, time.Now().UTC())
+		response.Activity = fillActivity(response.Activity, activityRecords, q.Year, time.Now().UTC())
 	}
 	response.Milestones = buildMilestones(scopeRecords, metadata)
 	response.Breakdown = buildBreakdown(scopeRecords, records, q, metadata)
@@ -778,6 +809,7 @@ func buildActivity(records []*watchedRecord) ActivityStats {
 		titles map[uint]bool
 		rating float64
 		rated  int
+		items  []MediaCard
 	}
 	weeks := make(map[string]*aggregate)
 	months := make(map[string]*aggregate)
@@ -798,6 +830,10 @@ func buildActivity(records []*watchedRecord) ActivityStats {
 					target[bucket] = a
 				}
 				a.plays++
+				resultCard := mediaCard(record, nil)
+				if !a.titles[record.watched.ID] {
+					a.items = append(a.items, resultCard)
+				}
 				if !a.titles[record.watched.ID] && record.watched.Rating > 0 {
 					a.rating += record.watched.Rating
 					a.rated++
@@ -819,11 +855,14 @@ func buildActivity(records []*watchedRecord) ActivityStats {
 	result := ActivityStats{Weeks: make([]WeekStat, 0, len(weekKeys)), Months: make([]MonthStat, 0, len(monthKeys))}
 	for _, key := range weekKeys {
 		a := weeks[key]
-		result.Weeks = append(result.Weeks, WeekStat{Start: key, Plays: a.plays, UniqueTitles: len(a.titles), AverageRating: average(a.rating, a.rated)})
+		result.Weeks = append(result.Weeks, WeekStat{Items: a.items, Start: key, Plays: a.plays, UniqueTitles: len(a.titles), AverageRating: average(a.rating, a.rated)})
 	}
 	for _, key := range monthKeys {
 		a := months[key]
-		result.Months = append(result.Months, MonthStat{Month: key, Plays: a.plays, AverageRating: average(a.rating, a.rated)})
+		result.Months = append(result.Months, MonthStat{Items: a.items, Month: key, Plays: a.plays, AverageRating: average(a.rating, a.rated)})
+	}
+	for _, w := range result.Weeks {
+		result.Total += w.Plays
 	}
 	return result
 }
@@ -927,6 +966,7 @@ func buildBars(records []*watchedRecord, metadata map[string]contentMetadata, ge
 }
 
 func buildBreakdown(records, allRecords []*watchedRecord, q Query, metadata map[string]contentMetadata) Breakdown {
+	members := map[string][]string{}
 	current, older := 0, 0
 	reviews, notReviewed := 0, 0
 	ratingCounts := make([]int, 101)
@@ -934,13 +974,17 @@ func buildBreakdown(records, allRecords []*watchedRecord, q Query, metadata map[
 	for _, record := range records {
 		if releaseYear(record.content) > 0 && releaseYear(record.content) == q.Year {
 			current++
-		} else if releaseYear(record.content) > 0 {
+			members["Selected year"] = append(members["Selected year"], contentKey(record.content))
+		} else if releaseYear(record.content) > 0 && releaseYear(record.content) < q.Year {
 			older++
+			members["Older"] = append(members["Older"], contentKey(record.content))
 		}
 		if strings.TrimSpace(record.watched.Thoughts) == "" {
 			notReviewed++
+			members["Not reviewed"] = append(members["Not reviewed"], contentKey(record.content))
 		} else {
 			reviews++
+			members["Reviewed"] = append(members["Reviewed"], contentKey(record.content))
 		}
 		bucket := int(record.watched.Rating*10 + 0.5)
 		if bucket < 0 || bucket > 100 {
@@ -953,6 +997,11 @@ func buildBreakdown(records, allRecords []*watchedRecord, q Query, metadata map[
 	for _, record := range records {
 		if record.firstPlay != nil && (q.Scope == ScopeLifetime || record.firstPlay.Year() == q.Year) {
 			titles++
+			members["First watches"] = append(members["First watches"], contentKey(record.content))
+		}
+		firstInScope := record.firstPlay != nil && (q.Scope == ScopeLifetime || record.firstPlay.Year() == q.Year)
+		if len(record.plays) > 1 || (!firstInScope && len(record.plays) > 0) {
+			members["Rewatches"] = append(members["Rewatches"], contentKey(record.content))
 		}
 	}
 	rewatches := plays - titles
@@ -965,9 +1014,9 @@ func buildBreakdown(records, allRecords []*watchedRecord, q Query, metadata map[
 	}
 	watchlistTitles := uniqueCards(recordsWithWatchlistAdditions(allRecords, q), metadata)
 	return Breakdown{
-		Release:            []PieStat{{Label: "Selected year", Count: current}, {Label: "Older", Count: older}},
-		Plays:              []PieStat{{Label: "First watches", Count: titles}, {Label: "Rewatches", Count: rewatches}},
-		Reviews:            []PieStat{{Label: "Reviewed", Count: reviews}, {Label: "Not reviewed", Count: notReviewed}},
+		Release:            []PieStat{{Label: "Selected year", TitleKeys: members["Selected year"], Count: current}, {Label: "Older", TitleKeys: members["Older"], Count: older}},
+		Plays:              []PieStat{{Label: "First watches", TitleKeys: members["First watches"], Count: titles}, {Label: "Rewatches", TitleKeys: members["Rewatches"], Count: rewatches}},
+		Reviews:            []PieStat{{Label: "Reviewed", TitleKeys: members["Reviewed"], Count: reviews}, {Label: "Not reviewed", TitleKeys: members["Not reviewed"], Count: notReviewed}},
 		RatingDistribution: distribution,
 		WatchlistAdditions: len(watchlistTitles),
 		WatchlistTitles:    watchlistTitles,
@@ -1025,7 +1074,7 @@ func addPerson(values map[int]*personAggregate, credit personCredit, record *wat
 		value = &personAggregate{keys: map[string]bool{}, stat: PersonStat{ID: credit.id, Name: credit.name, ProfilePath: credit.profilePath, TitleKeys: []string{}}}
 		values[credit.id] = value
 	}
-	key := contentKey(record.content)
+	key := recordKey(record)
 	if value.keys[key] {
 		return
 	}
@@ -1296,6 +1345,10 @@ func mediaCard(record *watchedRecord, metadata map[string]contentMetadata) Media
 	}
 	if record.content.ReleaseDate != nil {
 		card.Date = record.content.ReleaseDate.UTC().Format("2006-01-02")
+	}
+	if record.episode != nil {
+		card.SeasonNumber = record.episode.SeasonNumber
+		card.EpisodeNumber = record.episode.EpisodeNumber
 	}
 	return card
 }

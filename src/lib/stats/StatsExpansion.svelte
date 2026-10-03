@@ -10,15 +10,13 @@
 	} = $props();
 </script>
 
-{#if count < total}
+{#if count < total || (total > 5 && count > 5)}
 	<button
 		class="plain more"
-		onclick={() => onChange(Math.min(total, count + 5))}
+		onclick={() => onChange(count < total ? Math.min(total, count + 5) : 5)}
 	>
-		Show more ({total - count} remaining)
+		{#if count < total}Show more ({total - count} remaining){:else}Show less{/if}
 	</button>
-{:else if total > 5 && count > 5}
-	<button class="plain more" onclick={() => onChange(5)}>Show less</button>
 {/if}
 
 <style>

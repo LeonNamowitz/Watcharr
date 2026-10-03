@@ -82,3 +82,17 @@ func (t *TMDB) SeasonDetails(
 	ContentStore.Set(cacheKey, resp, time.Hour*24)
 	return *resp, nil
 }
+
+// EpisodeCredits includes regular cast and guest stars for a specific episode.
+func (t *TMDB) EpisodeCredits(showID, seasonNumber, episodeNumber string) (ContentCredits, error) {
+	key := cache.CreateCacheKey("EpisodeCredits", showID, seasonNumber, episodeNumber)
+	resp := new(ContentCredits)
+	if cache.GetCache(ContentStore, key, &resp) {
+		return *resp, nil
+	}
+	if err := t.req("/tv/"+showID+"/season/"+seasonNumber+"/episode/"+episodeNumber+"/credits", map[string]string{}, &resp); err != nil {
+		return ContentCredits{}, errors.New("episode credits request failed")
+	}
+	ContentStore.Set(key, resp, time.Hour*24)
+	return *resp, nil
+}

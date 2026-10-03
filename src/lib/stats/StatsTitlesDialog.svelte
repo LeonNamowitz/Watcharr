@@ -27,9 +27,34 @@
 	let dialog: HTMLDialogElement;
 	let count = $state(5);
 	onMount(() => {
+		const { body, documentElement: root } = document;
+		const { scrollX, scrollY } = window;
+		const previousStyles = {
+			position: body.style.position,
+			top: body.style.top,
+			left: body.style.left,
+			width: body.style.width,
+			overflow: body.style.overflow,
+			paddingRight: body.style.paddingRight,
+		};
+		const rootOverflow = root.style.overflow;
+		const scrollbarWidth = window.innerWidth - root.clientWidth;
+		const paddingRight = parseFloat(getComputedStyle(body).paddingRight) || 0;
+		Object.assign(body.style, {
+			position: "fixed",
+			top: `${-scrollY}px`,
+			left: `${-scrollX}px`,
+			width: "100%",
+			overflow: "hidden",
+			paddingRight: `${paddingRight + scrollbarWidth}px`,
+		});
+		root.style.overflow = "hidden";
 		dialog.showModal();
 		return () => {
 			if (dialog.open) dialog.close();
+			Object.assign(body.style, previousStyles);
+			root.style.overflow = rootOverflow;
+			window.scrollTo({ left: scrollX, top: scrollY, behavior: "instant" });
 		};
 	});
 	function backdrop(event: MouseEvent) {
@@ -55,7 +80,11 @@
 		<div>
 			<p>
 				{period} · {items.length.toLocaleString()}
-				{items.length === 1 ? "title" : "titles"}
+				{items.some((item) => item.episodeNumber !== undefined)
+					? "items"
+					: items.length === 1
+						? "title"
+						: "titles"}
 				{description}
 			</p>
 			<h2 class="norm" id="stats-dialog-title">{label}</h2>
@@ -100,6 +129,7 @@
 		color: var(--stats-text);
 		background: var(--stats-surface);
 		overflow: auto;
+		overscroll-behavior: contain;
 		box-shadow: 0 16px 70px #0005;
 	}
 	dialog::backdrop {

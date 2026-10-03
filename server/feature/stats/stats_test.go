@@ -47,6 +47,22 @@ func TestActivityAveragesDistinctTitlesAndMilestonesIncludeAllRepeats(t *testing
 	}
 }
 
+func TestReleaseBreakdownExcludesLaterAndUnknownReleaseYears(t *testing.T) {
+	records := make([]*watchedRecord, 0, 4)
+	for _, year := range []int{2024, 2025, 2026, 0} {
+		content := &entity.Content{Type: entity.MOVIE}
+		if year != 0 {
+			release := time.Date(year, 1, 1, 0, 0, 0, 0, time.UTC)
+			content.ReleaseDate = &release
+		}
+		records = append(records, &watchedRecord{content: content})
+	}
+	breakdown := buildBreakdown(records, records, Query{Scope: ScopeYear, Year: 2025}, nil)
+	if breakdown.Release[0].Count != 1 || breakdown.Release[1].Count != 1 {
+		t.Fatalf("only selected-year and earlier releases belong in the pie: %#v", breakdown.Release)
+	}
+}
+
 func TestGetStatsUsesEffectiveDatesAndSeparatesRewatches(t *testing.T) {
 	db := testutil.SetupDB(t)
 	private := false

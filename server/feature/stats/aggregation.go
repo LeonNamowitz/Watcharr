@@ -96,10 +96,7 @@ func fillActivity(data ActivityStats, records []*watchedRecord, year int, now ti
 	if monthCount < 1.0/31 {
 		monthCount = 1.0 / 31
 	}
-	total := 0
-	for _, r := range records {
-		total += len(r.plays)
-	}
+	total := data.Total
 	data.AveragePerWeek = float64(total) / (elapsed / 7)
 	data.AveragePerMonth = float64(total) / monthCount
 	return data

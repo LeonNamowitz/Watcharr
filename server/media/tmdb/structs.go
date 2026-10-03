@@ -832,6 +832,11 @@ func (t *PersonCombinedCreditsCrewResult) AsMedia() domain.Media {
 //
 
 type ContentCredits struct {
+	GuestStars []struct {
+		ID          int    `json:"id"`
+		Name        string `json:"name"`
+		ProfilePath string `json:"profile_path"`
+	} `json:"guest_stars"`
 	ID   int `json:"id"`
 	Cast []struct {
 		Adult              bool    `json:"adult"`

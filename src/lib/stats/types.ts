@@ -2,6 +2,8 @@ import type { PublicUser } from "@/types";
 
 export interface StatsMediaCard {
 	id: number;
+	seasonNumber?: number;
+	episodeNumber?: number;
 	type: "movie" | "tv";
 	title: string;
 	posterPath?: string;
@@ -28,6 +30,7 @@ export interface StatsBar {
 	averageRating: number;
 }
 export interface StatsPie {
+	titleKeys?: string[] | null;
 	label: string;
 	count: number;
 }
@@ -59,16 +62,25 @@ export interface StatsResponse {
 		averageRating: number;
 		items: StatsMediaCard[];
 	}[];
+	episodes: StatsMediaCard[];
+	highestRatedEpisodes: { current: StatsMediaCard[]; older: StatsMediaCard[] };
 	highestRated: { current: StatsMediaCard[]; older: StatsMediaCard[] };
 	activity: {
+		total: number;
 		weeks: {
+			items: StatsMediaCard[] | null;
 			start: string;
 			plays: number;
 			uniqueTitles: number;
 			averageRating: number;
 			titles: string[];
 		}[];
-		months: { month: string; plays: number; averageRating: number }[];
+		months: {
+			items: StatsMediaCard[] | null;
+			month: string;
+			plays: number;
+			averageRating: number;
+		}[];
 		averagePerWeek: number;
 		averagePerMonth: number;
 	};
@@ -114,8 +126,12 @@ export interface StatsResponse {
 	metadata: { partial: boolean; failedTitles: string[] };
 }
 export interface ChartPoint {
+	titleKeys?: string[];
+	items?: StatsMediaCard[];
 	tooltipLabel?: string;
 	label: string;
 	value: number | null;
+	titleCount: number;
+	averageRating: number;
 	detail?: string;
 }

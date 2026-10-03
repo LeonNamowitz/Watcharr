@@ -2,8 +2,9 @@
 	import StatsTooltip from "./StatsTooltip.svelte";
 	import { Bar, BarChart, LineChart, PieChart } from "layerchart/svg";
 	import { Tooltip } from "layerchart/svg";
-	import { decimal } from "./format";
+	import { averageRating, decimal } from "./format";
 	import { type ComponentProps } from "svelte";
+	import type { RatingSettings } from "@/lib/rating/helpers";
 	import type { ChartPoint } from "./types";
 	let {
 		title,
@@ -13,6 +14,8 @@
 		height = 180,
 		showData = false,
 		dataLabel = "Explore chart data",
+		settings,
+		onSelect,
 	}: {
 		title: string;
 		points: ChartPoint[];
@@ -21,6 +24,8 @@
 		height?: number;
 		showData?: boolean;
 		dataLabel?: string;
+		settings?: RatingSettings;
+		onSelect?: (point: ChartPoint) => void;
 	} = $props();
 	type ChartContext = NonNullable<ComponentProps<typeof BarChart>["context"]>;
 	const colors = ["#29acf4", "#f5b85a", "#f47983", "#51ad79", "#b19bea"];
@@ -50,7 +55,10 @@
 	]);
 	const common = $derived({
 		height,
-		motion: "none" as const,
+		onTooltipClick: (_event: MouseEvent, detail: { data: ChartPoint }) =>
+			onSelect?.(detail.data),
+		// LayerChart's domain-motion state requires at least two categories.
+		motion: points.length > 1 ? ("none" as const) : undefined,
 		rule: false,
 		legend: false,
 		grid: false,
@@ -71,6 +79,16 @@
 {#snippet barMarks({ context }: { context: ChartContext })}
 	{#each points as p (p.label)}<Bar
 			data={p}
+			onclick={() => onSelect?.(p)}
+			role={onSelect ? "button" : undefined}
+			tabindex={onSelect ? 0 : undefined}
+			aria-label={onSelect ? `Explore ${p.tooltipLabel ?? p.label}` : undefined}
+			onkeydown={(e) => {
+				if (e.key === "Enter" || e.key === " ") {
+					e.preventDefault();
+					onSelect?.(p);
+				}
+			}}
 			seriesKey="value"
 			radius={3}
 			stroke="transparent"
@@ -92,7 +110,8 @@
 			{@const p = context.tooltip.data}
 			<StatsTooltip
 				label={p.tooltipLabel ?? p.label}
-				value={valueLabel(p)}
+				titleCount={p.titleCount}
+				averageRating={averageRating(p.averageRating, settings)}
 				detail={p.detail}
 			/>
 		{/if}
@@ -106,7 +125,21 @@
 				data={points.map((p, i) => ({
 					...p,
 					color: colors[i % colors.length],
+					props: onSelect
+						? {
+								role: "button",
+								tabindex: p.value ? 0 : -1,
+								"aria-label": `Explore ${p.label}`,
+								onkeydown: (event: KeyboardEvent) => {
+									if (event.key === "Enter" || event.key === " ") {
+										event.preventDefault();
+										onSelect(p);
+									}
+								},
+							}
+						: {},
 				}))}
+				onArcClick={(_event, detail) => onSelect?.(detail.data)}
 				key="label"
 				label="label"
 				value="value"
@@ -161,12 +194,17 @@
 	{#if showData}<details>
 			<summary>{dataLabel}</summary>
 			<div class="data-list">
-				{#each points as p (p.label)}<div class="data-row">
+				{#each points as p (p.label)}<button
+						type="button"
+						class="plain data-row"
+						disabled={!onSelect || !p.value}
+						onclick={() => onSelect?.(p)}
+					>
 						<span class="data-label"
 							>{p.tooltipLabel ?? p.label}{#if p.detail}<small>{p.detail}</small
 								>{/if}</span
 						><strong>{valueLabel(p)}</strong>
-					</div>{/each}
+					</button>{/each}
 			</div>
 		</details>{/if}
 </div>
@@ -206,6 +244,15 @@
 		padding: 5px 0;
 		text-align: left;
 		font-size: 14px;
+	}
+	.data-row {
+		color: inherit;
+	}
+	.data-row:not(:disabled) {
+		cursor: pointer;
+	}
+	.data-row:not(:disabled):hover {
+		color: var(--stats-accent);
 	}
 	.data-label {
 		display: grid;

@@ -38,7 +38,7 @@
 </script>
 
 <div class="posters" class:tiny class:wall class:five-per-row={fivePerRow}>
-	{#each items as c (`${c.type}:${c.id}`)}
+	{#each items as c (`${c.type}:${c.id}:${c.seasonNumber ?? ""}:${c.episodeNumber ?? ""}`)}
 		<a
 			href={href(c)}
 			title={`${c.title}${c.releaseYear ? ` (${c.releaseYear})` : ""}${tiny ? ` · ${toRatingLabel(c.rating, settings)}` : ""}`}

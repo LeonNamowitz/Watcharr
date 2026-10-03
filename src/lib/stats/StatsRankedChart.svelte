@@ -165,8 +165,8 @@
 {#if hovered}
 	<StatsTooltip
 		label={hovered.label}
-		value={`${hovered.count.toLocaleString()} titles`}
-		detail={`Average personal rating: ${averageRating(hovered.averageRating, settings)}`}
+		titleCount={hovered.count}
+		averageRating={averageRating(hovered.averageRating, settings)}
 		id={`stats-${title}-tooltip`}
 		position={{ left: tooltipLeft, top: tooltipTop }}
 	/>

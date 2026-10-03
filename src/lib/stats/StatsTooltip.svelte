@@ -1,13 +1,15 @@
 <script lang="ts">
 	let {
 		label,
-		value,
+		titleCount,
+		averageRating,
 		detail,
 		id,
 		position,
 	}: {
 		label: string;
-		value: string;
+		titleCount: number;
+		averageRating: string;
 		detail?: string;
 		id?: string;
 		position?: { left: number; top: number };
@@ -21,7 +23,10 @@
 	{id}
 	style={position ? `left:${position.left}px;top:${position.top}px` : undefined}
 >
-	<strong>{label}</strong><span>{value}</span>
+	<strong>{label}</strong><span
+		>{titleCount.toLocaleString()} {titleCount === 1 ? "title" : "titles"}</span
+	>
+	<p>Average rating: {averageRating}</p>
 	{#if detail}<p>{detail}</p>{/if}
 </div>
 

@@ -2,6 +2,7 @@
 	import { resolve } from "$app/paths";
 	import { goto } from "$app/navigation";
 	import { page } from "$app/state";
+	import { tick } from "svelte";
 	import { req, noAuthReq } from "@/lib/util/api";
 	import Spinner from "@/lib/Spinner.svelte";
 	import Error from "@/lib/Error.svelte";
@@ -12,6 +13,7 @@
 	let data = $state<StatsResponse>();
 	let error = $state<unknown>();
 	let loading = $state(true);
+	let focusAfterLoad: string | undefined;
 	const year = $derived(
 		page.url.searchParams.get("year") ?? String(new Date().getUTCFullYear()),
 	);
@@ -35,14 +37,29 @@
 			.catch((err) => {
 				if (active) error = err;
 			})
-			.finally(() => {
-				if (active) loading = false;
+			.finally(async () => {
+				if (!active) return;
+				loading = false;
+				const control = focusAfterLoad;
+				focusAfterLoad = undefined;
+				await tick();
+				if (active && control && document.activeElement === document.body) {
+					document
+						.querySelector<HTMLElement>(
+							`.stats-page [data-stats-control="${control}"]`,
+						)
+						?.focus({ preventScroll: true });
+				}
 			});
 		return () => {
 			active = false;
 		};
 	});
 	function changeSelection(nextYear: string, nextMedia: "movie" | "tv") {
+		focusAfterLoad =
+			document.activeElement instanceof HTMLElement
+				? document.activeElement.dataset.statsControl
+				: undefined;
 		const url = new URL(page.url);
 		url.searchParams.set("year", nextYear);
 		url.searchParams.set("media", nextMedia);

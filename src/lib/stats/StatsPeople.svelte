@@ -10,6 +10,7 @@
 		onSelect,
 		settings,
 		studios = false,
+		unit = "titles",
 	}: {
 		title: string;
 		people: StatsPerson[];
@@ -17,6 +18,7 @@
 		onSelect: (person: StatsPerson) => void;
 		settings?: RatingSettings;
 		studios?: boolean;
+		unit?: string;
 	} = $props();
 	let count = $state(5);
 	const sorted = $derived(
@@ -50,15 +52,15 @@
 				<button
 					class="plain person-button"
 					onclick={() => onSelect(p)}
-					aria-label={`Explore ${p.name}: ${p.titles} watched titles`}
+					aria-label={`Explore ${p.name}: ${p.titles} watched ${unit}`}
 					>{@render portrait()}</button
 				>
 				<span
-					>{p.titles} titles · {averageRating(p.averageRating, settings)}</span
+					>{p.titles} {unit} · {averageRating(p.averageRating, settings)}</span
 				>
 			</div>
 		{:else}<p class="empty">
-				No contributors with two watched titles yet.
+				No contributors with two watched {unit} yet.
 			</p>{/each}
 	</div>
 	<StatsExpansion

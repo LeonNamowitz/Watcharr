@@ -23,6 +23,8 @@
 		publicOwner?: { id: string; username: string };
 		onSelectionChange: (year: string, media: "movie" | "tv") => void;
 	} = $props();
+	let episodeCount = $state(5);
+	let episodeTab = $state<"current" | "older">("current");
 	let highestTab = $state<"current" | "older">("current");
 	let yearlyFavoriteCount = $state(5);
 	let peopleMode = $state<"most" | "rating">("most");
@@ -45,10 +47,22 @@
 		selection = {
 			label,
 			personId,
-			items: data.posters
-				.filter((c) => membership.has(`${c.type}:${c.id}`))
+			items: [...data.posters, ...(data.episodes ?? [])]
+				.filter((c) =>
+					membership.has(
+						`${c.type}:${c.id}${c.episodeNumber !== undefined ? `:${c.seasonNumber ?? 0}:${c.episodeNumber}` : ""}`,
+					),
+				)
 				.sort((a, b) => a.title.localeCompare(b.title)),
 		};
+	}
+	function explorePoint(point: ChartPoint) {
+		if (point.items)
+			selection = {
+				label: point.tooltipLabel ?? point.label,
+				items: point.items,
+			};
+		else explore(point.label, point.titleKeys ?? []);
 	}
 	function weekRange(start: string) {
 		const first = new Date(`${start}T00:00:00Z`);
@@ -104,6 +118,8 @@
 	});
 	$effect(() => {
 		if (statsView) {
+			episodeCount = 5;
+			episodeTab = "current";
 			yearlyFavoriteCount = 5;
 			favoriteCount = 5;
 			highestTab = "current";
@@ -120,28 +136,51 @@
 			: rated.some((b) => b.rating % 1 !== 0)
 				? 0.5
 				: 1;
-		const points = [
+		const points: ChartPoint[] = [
 			{
 				label: "Unrated",
 				value: distribution.find((b) => b.rating === 0)?.count ?? 0,
+				titleCount: distribution.find((b) => b.rating === 0)?.count ?? 0,
+				averageRating: 0,
 			},
 		];
 		for (let i = 1; i <= Math.round(10 / step); i++) {
 			const rating = Number((i * step).toFixed(1));
+			const titleCount =
+				distribution.find((b) => Math.abs(b.rating - rating) < 0.001)?.count ??
+				0;
 			points.push({
 				label: String(rating),
-				value:
-					distribution.find((b) => Math.abs(b.rating - rating) < 0.001)
-						?.count ?? 0,
+				value: titleCount,
+				titleCount,
+				averageRating: rating,
 			});
 		}
 		return points;
 	});
+	const ratingsByTitle = $derived(
+		new Map<string, number>(
+			data.posters.map(
+				(card) => [`${card.type}:${card.id}`, card.rating ?? 0] as const,
+			),
+		),
+	);
+	function averageForTitles(titleKeys: string[]) {
+		const ratings = [...new Set(titleKeys)]
+			.map((key) => ratingsByTitle.get(key) ?? 0)
+			.filter((rating) => rating > 0);
+		return ratings.length
+			? ratings.reduce((total, rating) => total + rating, 0) / ratings.length
+			: 0;
+	}
 	function pies(items: StatsPie[]): ChartPoint[] {
 		const total = items.reduce((a, b) => a + b.count, 0);
 		return items.map((p) => ({
 			label: p.label,
+			titleKeys: p.titleKeys ?? [],
 			value: p.count,
+			titleCount: new Set(p.titleKeys ?? []).size,
+			averageRating: averageForTitles(p.titleKeys ?? []),
 			detail: total ? `${((p.count / total) * 100).toFixed(1)}%` : "No watches",
 		}));
 	}
@@ -191,6 +230,46 @@
 	]);
 </script>
 
+{#snippet episodeSection()}
+	{#if data.media === "tv"}
+		{@const episodes = data.highestRatedEpisodes?.[episodeTab] ?? []}
+		<section>
+			<div class="section-heading">
+				<h2 class="norm">Highest rated episodes</h2>
+				{#if lifetime}<span>Your favorites rated above 8/10</span>
+				{:else}<div class="segmented">
+						<button
+							class:active={episodeTab === "current"}
+							aria-pressed={episodeTab === "current"}
+							onclick={() => {
+								episodeTab = "current";
+								episodeCount = 5;
+							}}>{data.year} releases</button
+						>
+						<button
+							class:active={episodeTab === "older"}
+							aria-pressed={episodeTab === "older"}
+							onclick={() => {
+								episodeTab = "older";
+								episodeCount = 5;
+							}}>Older</button
+						>
+					</div>{/if}
+			</div>
+			<StatsPosters
+				items={episodes.slice(0, episodeCount)}
+				owner={publicOwner}
+				{settings}
+			/>
+			<StatsExpansion
+				count={episodeCount}
+				total={episodes.length}
+				onChange={(value) => (episodeCount = value)}
+			/>
+		</section>
+	{/if}
+{/snippet}
+
 <svelte:head
 	><title>{data.owner.username} · {period} stats · Watcharr</title></svelte:head
 >
@@ -220,6 +299,7 @@
 		<div class="controls">
 			<label
 				>Period<select
+					data-stats-control="period"
 					value={yearValue}
 					onchange={(e) => onSelectionChange(e.currentTarget.value, data.media)}
 					><option value="all">Lifetime</option>{#each years as y (y)}<option
@@ -229,10 +309,12 @@
 			>
 			<div class="segmented" aria-label="Media">
 				<button
+					data-stats-control="movie"
 					class:active={data.media === "movie"}
 					aria-pressed={data.media === "movie"}
 					onclick={() => onSelectionChange(yearValue, "movie")}>Movies</button
 				><button
+					data-stats-control="tv"
 					class:active={data.media === "tv"}
 					aria-pressed={data.media === "tv"}
 					onclick={() => onSelectionChange(yearValue, "tv")}>TV</button
@@ -254,10 +336,10 @@
 					</li>{/each}
 			</ul>
 		</details>{/if}
-	{#if !data.summary.titles}<div class="empty-year">
+	{#if !data.summary.titles && !data.activity.total}<div class="empty-year">
 			<h2 class="norm">A fresh page in your journal</h2>
 			<p>
-				No recorded {data.media === "movie" ? "movie" : "whole-show"} watches for
+				No recorded {data.media === "movie" ? "movie" : "episode"} watches for
 				{lifetime ? "this lifetime view" : data.year}. Choose another year or
 				explore your watchlist below.
 			</p>
@@ -283,15 +365,18 @@
 									metric.key === "averageRating" && !p.averageRating
 										? null
 										: Number(p[metric.key as keyof typeof p] ?? 0),
-								detail:
+								titleCount:
 									metric.key === "averageRating"
-										? "Personal average on a 10-point scale; unrated titles excluded"
-										: "Distinct titles watched this year",
+										? p.titles
+										: Number(p[metric.key as keyof typeof p] ?? 0),
+								averageRating: p.averageRating,
 							}))}
+							{settings}
 						/>
 					</div>{/each}
 			</div>
 		</section>
+		{@render episodeSection()}
 		<section>
 			<div class="section-heading">
 				<h2 class="norm">Highest-rated decades</h2>
@@ -366,6 +451,8 @@
 			/>{/if}
 	</section>
 
+	{#if !lifetime}{@render episodeSection()}{/if}
+
 	{#if !lifetime}<section>
 			<div class="section-heading activity-heading">
 				<h2 class="norm">Activity</h2>
@@ -384,8 +471,13 @@
 			</div>
 			<div class="averages activity-averages">
 				<span
-					><strong>{data.summary.titles.toLocaleString()}</strong>
-					{data.media === "movie" ? "films" : "shows"} watched</span
+					><strong
+						>{(data.media === "tv"
+							? data.activity.total
+							: data.summary.titles
+						).toLocaleString()}</strong
+					>
+					{data.media === "movie" ? "films" : "episodes"} watched</span
 				>
 				<span
 					><strong>{decimal(data.activity.averagePerWeek)}</strong> / week</span
@@ -395,17 +487,18 @@
 			</div>
 			{#key activityMode}<StatsChart
 					title={activityMode === "week"
-						? "Watches by week"
-						: "Watches by month"}
+						? `${data.media === "tv" ? "Episodes" : "Watches"} by week`
+						: `${data.media === "tv" ? "Episodes" : "Watches"} by month`}
 					points={activityMode === "week"
 						? data.activity.weeks.map((w) => ({
 								label: w.start.slice(5),
 								tooltipLabel: weekRange(w.start),
 								value: w.plays,
+								titleCount: w.uniqueTitles,
+								averageRating: w.averageRating,
+								items: w.items ?? [],
 								detail: [
-									w.averageRating
-										? `${averageRating(w.averageRating, settings)} average`
-										: "",
+									`${w.plays} ${data.media === "tv" ? "episodes" : "watches"}`,
 									...w.titles,
 								]
 									.filter(Boolean)
@@ -418,12 +511,17 @@
 								),
 								tooltipLabel: m.month,
 								value: m.plays,
-								detail: m.averageRating
-									? `${averageRating(m.averageRating, settings)} average`
-									: undefined,
+								titleCount: m.items?.length ?? 0,
+								averageRating: m.averageRating,
+								items: m.items ?? [],
+								detail: `${m.plays} ${data.media === "tv" ? "episodes" : "films"}`,
 							}))}
+					{settings}
 					showData={activityMode === "week"}
-					dataLabel="Browse weekly titles"
+					dataLabel={data.media === "tv"
+						? "Browse weekly episodes"
+						: "Browse weekly titles"}
+					onSelect={explorePoint}
 				/>{/key}
 		</section>{/if}
 
@@ -543,11 +641,15 @@
 						kind="pie"
 						height={150}
 						points={pies(group.items)}
+						{settings}
+						onSelect={explorePoint}
 					/>
 					<div class="pie-legend">
-						{#each pies(group.items) as item, i (item.label)}<span
+						{#each pies(group.items) as item, i (item.label)}<button
+								class="plain"
+								onclick={() => explorePoint(item)}
 								><i style={`background:${i === 0 ? "#29acf4" : "#f5b85a"}`}
-								></i>{item.label}<b>{item.value}</b></span
+								></i>{item.label}<b>{item.value}</b></button
 							>{/each}
 					</div>
 				</div>{/each}
@@ -555,7 +657,15 @@
 		<div class="rating-heading"><h3 class="norm">Rating distribution</h3></div>
 		<StatsChart
 			title="Rating distribution"
-			points={ratingPoints}
+			points={ratingPoints.map((p) => ({
+				...p,
+				items: data.posters.filter(
+					(c) =>
+						(c.rating ?? 0) === (p.label === "Unrated" ? 0 : Number(p.label)),
+				),
+			}))}
+			{settings}
+			onSelect={explorePoint}
 			color="#f5b85a"
 		/>
 		<p class="fine-print">
@@ -583,6 +693,7 @@
 			<StatsPeople
 				title="Cast"
 				people={data.people.cast}
+				unit={data.media === "tv" ? "titles & episodes" : "titles"}
 				mode={peopleMode}
 				onSelect={(p) => explore(p.name, p.titleKeys, p.id)}
 				{settings}
@@ -951,7 +1062,9 @@
 		max-width: 220px;
 		margin: 12px auto 0;
 	}
-	.pie-legend span {
+	.pie-legend button {
+		color: inherit;
+		text-align: left;
 		display: flex;
 		align-items: center;
 		gap: 7px;
