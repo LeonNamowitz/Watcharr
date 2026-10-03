@@ -238,7 +238,7 @@ func main() {
 		activityService)
 	featureService := feature.NewService(cfg)
 	profileService := profile.NewService(db)
-	statsService := stats.NewService(db, tmdbService)
+	statsService := stats.NewService(db, tmdbService, &br.Cfg.TWITCH)
 	followService := follow.NewService(db)
 	tagService := tag.NewService(db, watchedService, tmdbService)
 	searchService := search.NewService(db, br.Cfg, tmdbService, watchedService)

@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	gocache "github.com/robfig/go-cache"
@@ -43,10 +44,32 @@ type IGDB struct {
 	onTokenRefreshed   *func()
 }
 
+// Share pacing between stats, search and detail requests. IGDB permits four
+// requests per second and at most eight in flight.
+var requestPacingMu sync.Mutex
+var nextRequest time.Time
+var requestSlots = make(chan struct{}, 8)
+
+func waitForRequestSlot() func() {
+	requestSlots <- struct{}{}
+	requestPacingMu.Lock()
+	if delay := time.Until(nextRequest); delay > 0 {
+		time.Sleep(delay)
+	}
+	nextRequest = time.Now().Add(250 * time.Millisecond)
+	requestPacingMu.Unlock()
+	return func() { <-requestSlots }
+}
+
 func (i *IGDB) req(host string, ep string, p map[string]string, b string, resp interface{}) error {
 	// if using igdb host and we have no access token, error before running req
 	if host == igdbHost && (i.ClientID == nil || i.AccessToken == "") {
 		return errors.New("using igdbHost without a clientID or accessToken")
+	}
+
+	if host == igdbHost {
+		release := waitForRequestSlot()
+		defer release()
 	}
 
 	slog.Debug("IGDB->req: Creating a request.", "ep", ep, "body", b)

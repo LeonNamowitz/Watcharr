@@ -15,6 +15,7 @@
 		showData,
 		dataLabel = "Browse chart titles",
 		valueUnit = "titles",
+		titleUnit = "titles",
 		settings,
 		onSelect,
 	}: {
@@ -25,7 +26,15 @@
 		height?: number;
 		showData?: boolean;
 		dataLabel?: string;
-		valueUnit?: "titles" | "watches" | "episodes";
+		titleUnit?: "titles" | "games";
+		valueUnit?:
+			| "titles"
+			| "watches"
+			| "episodes"
+			| "games"
+			| "progress events"
+			| "completions"
+			| "hours";
 		settings?: RatingSettings;
 		onSelect?: (point: ChartPoint) => void;
 	} = $props();
@@ -127,6 +136,7 @@
 			<StatsTooltip
 				label={p.tooltipLabel ?? p.label}
 				titleCount={p.titleCount}
+				{titleUnit}
 				averageRating={averageRating(p.averageRating, settings)}
 				detail={p.detail}
 			/>

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/sbondCo/Watcharr/database/entity"
+	"github.com/sbondCo/Watcharr/media/igdb"
 	"github.com/sbondCo/Watcharr/media/tmdb"
 	"gorm.io/gorm"
 )
@@ -36,16 +37,26 @@ type TMDBProvider interface {
 	ShowDetails(tmdb.ShowDetailsOptions) (tmdb.ShowDetails, error)
 }
 
+type IGDBProvider interface {
+	GameStatsDetails([]int) (map[int]igdb.GameStatsDetails, error)
+}
+
 type Service struct {
 	db   *gorm.DB
 	tmdb TMDBProvider
+	igdb IGDBProvider
 }
 
-func NewService(db *gorm.DB, provider TMDBProvider) *Service {
-	return &Service{db: db, tmdb: provider}
+func NewService(db *gorm.DB, provider TMDBProvider, games ...IGDBProvider) *Service {
+	s := &Service{db: db, tmdb: provider}
+	if len(games) > 0 {
+		s.igdb = games[0]
+	}
+	return s
 }
 
 type StatsResponse struct {
+	Games                *GameStats        `json:"games,omitempty"`
 	Scope                string            `json:"scope"`
 	Media                string            `json:"media"`
 	Owner                entity.PublicUser `json:"owner"`
@@ -75,6 +86,8 @@ type StatsResponse struct {
 }
 
 type Summary struct {
+	Games         int     `json:"games,omitempty"`
+	Completed     int     `json:"completed,omitempty"`
 	Titles        int     `json:"titles"`
 	Movies        int     `json:"movies"`
 	Shows         int     `json:"shows"`
@@ -83,14 +96,17 @@ type Summary struct {
 }
 
 type HistoryPoint struct {
-	Items             []MediaCard `json:"items"`
-	ReviewedTitleKeys []string    `json:"reviewedTitleKeys,omitempty"`
-	Year              int         `json:"year"`
-	Movies            int         `json:"movies"`
-	Shows             int         `json:"shows"`
-	Reviewed          *int        `json:"reviewed,omitempty"`
-	Titles            int         `json:"titles"`
-	AverageRating     float64     `json:"averageRating"`
+	Games              int         `json:"games,omitempty"`
+	Completed          int         `json:"completed,omitempty"`
+	CompletedTitleKeys []string    `json:"completedTitleKeys,omitempty"`
+	Items              []MediaCard `json:"items"`
+	ReviewedTitleKeys  []string    `json:"reviewedTitleKeys,omitempty"`
+	Year               int         `json:"year"`
+	Movies             int         `json:"movies"`
+	Shows              int         `json:"shows"`
+	Reviewed           *int        `json:"reviewed,omitempty"`
+	Titles             int         `json:"titles"`
+	AverageRating      float64     `json:"averageRating"`
 }
 
 type DecadeStat struct {
@@ -101,21 +117,24 @@ type DecadeStat struct {
 }
 
 type MediaCard struct {
-	EpisodeName   string  `json:"episodeName,omitempty"`
-	StillPath     string  `json:"stillPath,omitempty"`
-	SeasonNumber  int     `json:"seasonNumber,omitempty"`
-	EpisodeNumber int     `json:"episodeNumber,omitempty"`
-	ID            int     `json:"id"`
-	Type          string  `json:"type"`
-	Title         string  `json:"title"`
-	PosterPath    string  `json:"posterPath,omitempty"`
-	ReleaseYear   int     `json:"releaseYear,omitempty"`
-	Rating        float64 `json:"rating,omitempty"`
-	TMDBRating    float64 `json:"tmdbRating,omitempty"`
-	VoteCount     uint32  `json:"voteCount,omitempty"`
-	Plays         int     `json:"plays,omitempty"`
-	Runtime       int     `json:"runtime,omitempty"`
-	Date          string  `json:"date,omitempty"`
+	CommunityRating float64 `json:"communityRating,omitempty"`
+	CoverID         string  `json:"coverId,omitempty"`
+	PlaytimeHours   *uint   `json:"playtimeHours,omitempty"`
+	EpisodeName     string  `json:"episodeName,omitempty"`
+	StillPath       string  `json:"stillPath,omitempty"`
+	SeasonNumber    int     `json:"seasonNumber,omitempty"`
+	EpisodeNumber   int     `json:"episodeNumber,omitempty"`
+	ID              int     `json:"id"`
+	Type            string  `json:"type"`
+	Title           string  `json:"title"`
+	PosterPath      string  `json:"posterPath,omitempty"`
+	ReleaseYear     int     `json:"releaseYear,omitempty"`
+	Rating          float64 `json:"rating,omitempty"`
+	TMDBRating      float64 `json:"tmdbRating,omitempty"`
+	VoteCount       uint32  `json:"voteCount,omitempty"`
+	Plays           int     `json:"plays,omitempty"`
+	Runtime         int     `json:"runtime,omitempty"`
+	Date            string  `json:"date,omitempty"`
 }
 
 type HighestRated struct {
@@ -205,14 +224,17 @@ type CrewDepartment struct {
 }
 
 type HighsLows struct {
-	HighestTMDBRated *MediaCard `json:"highestTMDBRated,omitempty"`
-	LowestRated      *MediaCard `json:"lowestRated,omitempty"`
-	MostVoted        *MediaCard `json:"mostVoted,omitempty"`
-	LeastVoted       *MediaCard `json:"leastVoted,omitempty"`
-	Newest           *MediaCard `json:"newest,omitempty"`
-	Oldest           *MediaCard `json:"oldest,omitempty"`
-	Longest          *MediaCard `json:"longest,omitempty"`
-	Shortest         *MediaCard `json:"shortest,omitempty"`
+	HighestCommunityRated *MediaCard `json:"highestCommunityRated,omitempty"`
+	MostPlaytime          *MediaCard `json:"mostPlaytime,omitempty"`
+	LeastPlaytime         *MediaCard `json:"leastPlaytime,omitempty"`
+	HighestTMDBRated      *MediaCard `json:"highestTMDBRated,omitempty"`
+	LowestRated           *MediaCard `json:"lowestRated,omitempty"`
+	MostVoted             *MediaCard `json:"mostVoted,omitempty"`
+	LeastVoted            *MediaCard `json:"leastVoted,omitempty"`
+	Newest                *MediaCard `json:"newest,omitempty"`
+	Oldest                *MediaCard `json:"oldest,omitempty"`
+	Longest               *MediaCard `json:"longest,omitempty"`
+	Shortest              *MediaCard `json:"shortest,omitempty"`
 }
 
 type RatingDifferences struct {
@@ -269,6 +291,10 @@ func (s *Service) GetStats(userID uint, q Query) (StatsResponse, error) {
 	}
 	if q.Scope == ScopeYear && q.Year == 0 {
 		q.Year = time.Now().UTC().Year()
+	}
+
+	if q.Media == "game" {
+		return s.getGameStats(userID, q)
 	}
 
 	var watched []entity.Watched

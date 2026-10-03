@@ -70,7 +70,7 @@ func queryFromContext(c *gin.Context) (Query, error) {
 		}
 		q.Year = y
 	}
-	if q.Media != "movie" && q.Media != "tv" {
+	if q.Media != "movie" && q.Media != "tv" && q.Media != "game" {
 		return Query{}, &queryError{"invalid stats media"}
 	}
 	return q, nil

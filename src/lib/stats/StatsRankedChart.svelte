@@ -10,6 +10,7 @@
 	let {
 		title,
 		items,
+		unit = "watched titles",
 		color = "#29acf4",
 		sortBy = "count",
 		settings,
@@ -17,6 +18,7 @@
 		count = $bindable(5),
 	}: {
 		title: string;
+		unit?: string;
 		items: StatsBar[];
 		color?: string;
 		sortBy?: "count" | "rating";
@@ -117,7 +119,7 @@
 				aria-describedby={hovered === item
 					? `stats-${title}-tooltip`
 					: undefined}
-				aria-label={`${item.label}: ${item.count} watched titles, ${averageRating(item.averageRating, settings)} average. Bar shows ${sortBy === "rating" ? "rating" : "title count"}. Explore titles.`}
+				aria-label={`${item.label}: ${item.count} ${unit}, ${averageRating(item.averageRating, settings)} average. Bar shows ${sortBy === "rating" ? "rating" : "title count"}. Explore titles.`}
 			>
 				<span class="label"
 					><span>{item.label}</span><span class="values"
@@ -171,6 +173,7 @@
 	<StatsTooltip
 		label={hovered.label}
 		titleCount={hovered.count}
+		titleUnit={unit === "played games" ? "games" : "titles"}
 		averageRating={averageRating(hovered.averageRating, settings)}
 		id={`stats-${title}-tooltip`}
 		position={{ left: tooltipLeft, top: tooltipTop }}

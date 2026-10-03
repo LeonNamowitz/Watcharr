@@ -1,12 +1,17 @@
 import type { PublicUser } from "@/types";
 
+export type StatsMedia = "movie" | "tv" | "game";
+
 export interface StatsMediaCard {
+	communityRating?: number;
+	coverId?: string;
+	playtimeHours?: number;
 	id: number;
 	episodeName?: string;
 	stillPath?: string;
 	seasonNumber?: number;
 	episodeNumber?: number;
-	type: "movie" | "tv";
+	type: StatsMedia;
 	title: string;
 	posterPath?: string;
 	releaseYear?: number;
@@ -37,14 +42,17 @@ export interface StatsPie {
 	count: number;
 }
 export interface StatsResponse {
+	games?: StatsGames;
 	scope: "year" | "lifetime";
 	year?: number;
-	media: "movie" | "tv";
+	media: StatsMedia;
 	owner: PublicUser;
 	reviewsVisible: boolean;
 	availableYears: number[];
 	summary: {
 		titles: number;
+		games?: number;
+		completed?: number;
 		movies: number;
 		shows: number;
 		plays: number;
@@ -53,7 +61,10 @@ export interface StatsResponse {
 	history: {
 		items: StatsMediaCard[];
 		reviewedTitleKeys?: string[];
+		completedTitleKeys?: string[];
 		year: number;
+		games?: number;
+		completed?: number;
 		movies: number;
 		shows: number;
 		titles: number;
@@ -112,6 +123,9 @@ export interface StatsResponse {
 	}[];
 	highsLows: {
 		highestTMDBRated?: StatsMediaCard;
+		highestCommunityRated?: StatsMediaCard;
+		mostPlaytime?: StatsMediaCard;
+		leastPlaytime?: StatsMediaCard;
 		lowestRated?: StatsMediaCard;
 		mostVoted?: StatsMediaCard;
 		leastVoted?: StatsMediaCard;
@@ -138,4 +152,26 @@ export interface ChartPoint {
 	titleCount: number;
 	averageRating: number;
 	detail?: string;
+}
+
+export interface StatsGames {
+	platforms: StatsBar[];
+	modes: StatsBar[];
+	themes: StatsBar[];
+	perspectives: StatsBar[];
+	developers: StatsBar[];
+	publishers: StatsBar[];
+	statuses: StatsPie[];
+	completion: StatsPie[];
+	completionPercentage: number;
+	completions: StatsResponse["activity"];
+	playtime?: {
+		totalHours: number;
+		averageHours: number;
+		medianHours: number;
+		recordedGames: number;
+		mostPlayed: StatsMediaCard[];
+		distribution: StatsPie[];
+		byRating: { rating: number; hours: number; items: StatsMediaCard[] }[];
+	};
 }

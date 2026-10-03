@@ -9,9 +9,11 @@
 	import { averageRating, decimal } from "./format";
 	import StatsPosters from "./StatsPosters.svelte";
 	import StatsPeople from "./StatsPeople.svelte";
+	import StatsGameSections from "./StatsGameSections.svelte";
 	import { type RatingSettings } from "@/lib/rating/helpers";
 	import type {
 		StatsResponse,
+		StatsMedia,
 		StatsMediaCard,
 		StatsPie,
 		ChartPoint,
@@ -28,10 +30,10 @@
 		loading?: boolean;
 		error?: unknown;
 		requestedYear?: string;
-		requestedMedia?: "movie" | "tv";
+		requestedMedia?: StatsMedia;
 		data: StatsResponse;
 		publicOwner?: { id: string; username: string };
-		onSelectionChange: (year: string, media: "movie" | "tv") => void;
+		onSelectionChange: (year: string, media: StatsMedia) => void;
 	} = $props();
 	let episodeCount = $state(5);
 	let episodeTab = $state<"current" | "older">("current");
@@ -49,6 +51,17 @@
 	let favoriteCount = $state(5);
 	let decadeCounts = $state<Record<number, number>>({});
 	let crewCounts = $state<Record<string, number>>({});
+	let gameCounts = $state<Record<string, number>>({
+		genres: 5,
+		platforms: 5,
+		modes: 5,
+		themes: 5,
+		perspectives: 5,
+		developers: 5,
+		publishers: 5,
+		playtime: 5,
+	});
+	let gameActivityKind = $state<"progress" | "completions">("progress");
 	let activityMode = $state<"week" | "month">("week");
 	let backgroundPreview = $state<"panels" | "tonal-wash" | "edge-grid">(
 		"panels",
@@ -80,6 +93,8 @@
 			decadeCounts,
 			crewCounts,
 			activityMode,
+			gameCounts,
+			gameActivityKind,
 			backgroundPreview,
 			peopleCounts,
 			categoryCounts,
@@ -109,11 +124,13 @@
 		decadeCounts = saved.decadeCounts;
 		crewCounts = saved.crewCounts;
 		activityMode = saved.activityMode;
+		gameActivityKind = saved.gameActivityKind;
 		backgroundPreview = saved.backgroundPreview;
 		peopleCounts = saved.peopleCounts;
 		await tick();
 		// Ranked charts reset their expansion when sorting changes.
 		categoryCounts = saved.categoryCounts;
+		gameCounts = saved.gameCounts;
 		await tick();
 		root.querySelectorAll("details").forEach((el, index) => {
 			el.open = saved.openDetails[index] ?? false;
@@ -133,6 +150,7 @@
 		selection = {
 			label,
 			personId,
+			description: isGame ? "played" : "watched",
 			items: [...data.posters, ...(data.episodes ?? [])]
 				.filter((c) =>
 					membership.has(
@@ -148,6 +166,7 @@
 			selection = {
 				label: point.tooltipLabel ?? point.label,
 				items: point.items,
+				description: isGame ? "played" : "watched",
 			};
 		else explore(point.label, point.titleKeys ?? []);
 	}
@@ -159,6 +178,11 @@
 		return (point.items ?? []).filter((item) => {
 			if (metric === "movies") return item.type === "movie";
 			if (metric === "shows") return item.type === "tv";
+			if (metric === "games") return item.type === "game";
+			if (metric === "completed")
+				return (point.completedTitleKeys ?? []).includes(
+					`${item.type}:${item.id}`,
+				);
 			if (metric === "averageRating") return (item.rating ?? 0) > 0;
 			return reviewed.has(`${item.type}:${item.id}`);
 		});
@@ -181,7 +205,11 @@
 	const lifetime = $derived(data.scope === "lifetime");
 	const statsView = $derived(`${data.scope}:${data.year}:${data.media}`);
 	const period = $derived(lifetime ? "Lifetime" : String(data.year));
-	const mediaLabel = $derived(data.media === "movie" ? "Films" : "Shows");
+	const isGame = $derived(data.media === "game");
+	const source = $derived(isGame ? "IGDB" : "TMDB");
+	const mediaLabel = $derived(
+		isGame ? "Games" : data.media === "movie" ? "Films" : "Shows",
+	);
 	const yearValue = $derived(lifetime ? "all" : String(data.year));
 	const selectedYear = $derived(requestedYear ?? yearValue);
 	const selectedMedia = $derived(requestedMedia ?? data.media);
@@ -310,19 +338,27 @@
 			value: p.count,
 			titleCount: new Set(p.titleKeys ?? []).size,
 			averageRating: averageForTitles(p.titleKeys ?? []),
-			detail: total ? `${((p.count / total) * 100).toFixed(1)}%` : "No watches",
+			detail: total
+				? `${((p.count / total) * 100).toFixed(1)}%`
+				: isGame
+					? "No games"
+					: "No watches",
 		}));
 	}
 	const highCards = $derived([
 		{
-			label: "Highest TMDB rating",
-			card: data.highsLows.highestTMDBRated,
-			detail: (c: StatsMediaCard) => `${c.tmdbRating?.toFixed(1)}/10 on TMDB`,
+			label: `Highest ${source} rating`,
+			card: isGame
+				? data.highsLows.highestCommunityRated
+				: data.highsLows.highestTMDBRated,
+			detail: (c: StatsMediaCard) =>
+				`${(c.communityRating ?? c.tmdbRating)?.toFixed(1)}/10 on ${source}`,
 		},
 		{
-			label: "Lowest TMDB rating",
+			label: `Lowest ${source} rating`,
 			card: data.highsLows.lowestRated,
-			detail: (c: StatsMediaCard) => `${c.tmdbRating?.toFixed(1)}/10 on TMDB`,
+			detail: (c: StatsMediaCard) =>
+				`${(c.communityRating ?? c.tmdbRating)?.toFixed(1)}/10 on ${source}`,
 		},
 		{
 			label: "Most popular",
@@ -344,20 +380,56 @@
 			card: data.highsLows.oldest,
 			detail: (c: StatsMediaCard) => c.date ?? "",
 		},
-		{
-			label: "Longest",
-			card: data.highsLows.longest,
-			detail: (c: StatsMediaCard) =>
-				`${c.runtime} min${data.media === "tv" ? " per episode" : ""}`,
-		},
-		{
-			label: "Shortest",
-			card: data.highsLows.shortest,
-			detail: (c: StatsMediaCard) =>
-				`${c.runtime} min${data.media === "tv" ? " per episode" : ""}`,
-		},
+		...(isGame
+			? lifetime
+				? [
+						{
+							label: "Most recorded playtime",
+							card: data.highsLows.mostPlaytime,
+							detail: (c: StatsMediaCard) =>
+								`${c.playtimeHours?.toLocaleString()} hours`,
+						},
+						{
+							label: "Least recorded playtime",
+							card: data.highsLows.leastPlaytime,
+							detail: (c: StatsMediaCard) =>
+								`${c.playtimeHours?.toLocaleString()} hours`,
+						},
+					]
+				: []
+			: [
+					{
+						label: "Longest",
+						card: data.highsLows.longest,
+						detail: (c: StatsMediaCard) =>
+							`${c.runtime} min${data.media === "tv" ? " per episode" : ""}`,
+					},
+					{
+						label: "Shortest",
+						card: data.highsLows.shortest,
+						detail: (c: StatsMediaCard) =>
+							`${c.runtime} min${data.media === "tv" ? " per episode" : ""}`,
+					},
+				]),
 	]);
 </script>
+
+{#snippet gameSection(
+	section: "activity" | "categories" | "companies" | "playtime",
+)}
+	<StatsGameSections
+		{data}
+		{section}
+		owner={publicOwner}
+		{settings}
+		onSelect={explorePoint}
+		onExplore={explore}
+		bind:counts={gameCounts}
+		bind:sortBy={categorySort}
+		bind:interval={activityMode}
+		bind:activityKind={gameActivityKind}
+	/>
+{/snippet}
 
 {#snippet episodeSection()}
 	{#if data.media === "tv"}
@@ -424,40 +496,65 @@
 						? "all-time stats"
 						: selectedMedia === "tv"
 							? "year in television"
-							: "year in film")}
+							: selectedMedia === "game"
+								? "year in games"
+								: "year in film")}
 			</p>
 			<h1 class="norm">
 				{selectedYear === "all"
-					? "A Life in " + (selectedMedia === "tv" ? "Shows" : "Film")
+					? "A Life in " +
+						(selectedMedia === "game"
+							? "Games"
+							: selectedMedia === "tv"
+								? "Shows"
+								: "Film")
 					: selectedYear}
 			</h1>
 			<p class="intro">
 				{selectedYear === "all"
 					? "Across your recorded history"
-					: `Your ${selectedMedia === "tv" ? "television" : "film"} viewing journal`}
+					: selectedMedia === "game"
+						? "Your gaming journal"
+						: `Your ${selectedMedia === "tv" ? "television" : "film"} viewing journal`}
 			</p>
-			<dl
-				class="header-summary"
-				aria-label="Viewing summary"
-				aria-busy={loading}
-			>
+			<dl class="header-summary" aria-label="Media summary" aria-busy={loading}>
 				<div>
-					<dt>Distinct {selectedMedia === "tv" ? "shows" : "films"}</dt>
+					<dt>
+						Distinct {selectedMedia === "game"
+							? "games"
+							: selectedMedia === "tv"
+								? "shows"
+								: "films"}
+					</dt>
 					<dd>{loading || error ? "—" : distinctTitles.toLocaleString()}</dd>
 				</div>
 				<div>
-					<dt>{selectedMedia === "tv" ? "Episodes watched" : "Watches"}</dt>
+					<dt>
+						{selectedMedia === "game"
+							? "Games completed"
+							: selectedMedia === "tv"
+								? "Episodes watched"
+								: "Watches"}
+					</dt>
 					<dd>
 						{loading || error
 							? "—"
-							: (data.media === "tv"
-									? data.activity.total
-									: data.summary.plays
+							: (isGame
+									? (data.summary.completed ?? 0)
+									: data.media === "tv"
+										? data.activity.total
+										: data.summary.plays
 								).toLocaleString()}
 					</dd>
 				</div>
 				<div>
-					<dt>Average {selectedMedia === "tv" ? "show" : "film"} rating</dt>
+					<dt>
+						Average {selectedMedia === "game"
+							? "game"
+							: selectedMedia === "tv"
+								? "show"
+								: "film"} rating
+					</dt>
 					<dd class="summary-rating">
 						{loading || error
 							? "—"
@@ -490,6 +587,11 @@
 					class:active={selectedMedia === "tv"}
 					aria-pressed={selectedMedia === "tv"}
 					onclick={() => onSelectionChange(selectedYear, "tv")}>TV</button
+				><button
+					data-stats-control="game"
+					class:active={selectedMedia === "game"}
+					aria-pressed={selectedMedia === "game"}
+					onclick={() => onSelectionChange(selectedYear, "game")}>Games</button
 				>
 			</div>
 			<label class="preview-control">
@@ -503,7 +605,7 @@
 		</div>
 	</header>
 	{#if loading}<div class="load-status" role="status">
-			<span>Updating viewing stats…</span>
+			<span>Updating stats…</span>
 		</div>
 	{:else if error}<div class="load-status">
 			<Error {error} pretty="Unable to load these stats." />
@@ -521,8 +623,8 @@
 							.length} titles</summary
 					>
 					<p>
-						Your recorded watches and ratings are included. Metadata charts may
-						be incomplete.
+						Your recorded {isGame ? "progress" : "watches"} and ratings are included.
+						Metadata charts may be incomplete.
 					</p>
 					<ul>
 						{#each data.metadata.failedTitles as title (title)}<li>
@@ -533,9 +635,13 @@
 			{#if !data.summary.titles && !data.activity.total}<div class="empty-year">
 					<h2 class="norm">A fresh page in your journal</h2>
 					<p>
-						No recorded {data.media === "movie" ? "movie" : "episode"} watches for
+						No recorded {isGame
+							? "game progress"
+							: data.media === "movie"
+								? "movie watches"
+								: "episode watches"} for
 						{lifetime ? "this lifetime view" : data.year}. Choose another year
-						or explore your watchlist below.
+						or explore your {isGame ? "backlog" : "watchlist"} below.
 					</p>
 				</div>{/if}
 
@@ -543,13 +649,16 @@
 				<section>
 					<div class="section-heading">
 						<h2 class="norm">Through the years</h2>
-						<span>Movies & TV · unique titles each year</span>
+						<span
+							>{isGame ? "Games" : "Movies & TV"} · unique titles each year</span
+						>
 					</div>
 					<div class="timeline-grid">
-						{#each [{ key: "movies", label: "Films watched", color: "#29acf4" }, { key: "shows", label: "Shows watched", color: "#51ad79" }, { key: "averageRating", label: "Average rating", color: "#f5b85a" }, ...(data.reviewsVisible ? [{ key: "reviewed", label: "Reviewed", color: "#f47983" }] : [])] as metric (metric.key)}<div
+						{#each [...(isGame ? [{ key: "games", label: "Games played", color: "#29acf4" }, { key: "completed", label: "Games completed", color: "#51ad79" }] : [{ key: "movies", label: "Films watched", color: "#29acf4" }, { key: "shows", label: "Shows watched", color: "#51ad79" }]), { key: "averageRating", label: "Average rating", color: "#f5b85a" }, ...(data.reviewsVisible ? [{ key: "reviewed", label: "Reviewed", color: "#f47983" }] : [])] as metric (metric.key)}<div
 							>
 								<h3 class="norm">{metric.label}</h3>
 								<StatsChart
+									titleUnit={isGame ? "games" : "titles"}
 									title={metric.label}
 									dataLabel={`Browse ${metric.label.toLowerCase()} by year`}
 									kind={metric.key === "averageRating" ? "line" : "bar"}
@@ -585,7 +694,7 @@
 									{decade.decade}s
 									<span>{averageRating(decade.averageRating, settings)}</span>
 								</h3>
-								<p>{decade.titles} titles watched</p>
+								<p>{decade.titles} titles {isGame ? "played" : "watched"}</p>
 								<StatsPosters
 									items={decade.items.slice(
 										0,
@@ -653,8 +762,11 @@
 			</section>
 
 			{@render episodeSection()}
+			{#if isGame}{@render gameSection("playtime")}{@render gameSection(
+					"activity",
+				)}{/if}
 
-			{#if !lifetime}<section>
+			{#if !lifetime && !isGame}<section>
 					<div class="section-heading activity-heading">
 						<h2 class="norm">Activity</h2>
 						<div class="segmented" aria-label="Activity interval">
@@ -687,6 +799,7 @@
 						>
 					</div>
 					{#key activityMode}<StatsChart
+							titleUnit={isGame ? "games" : "titles"}
 							title={activityMode === "week"
 								? `${data.media === "tv" ? "Episodes" : "Watches"} by week`
 								: `${data.media === "tv" ? "Episodes" : "Watches"} by month`}
@@ -747,7 +860,7 @@
 					>
 				</div>
 				<div class="milestones">
-					{#each [{ label: "First watch", card: data.milestones.first }, { label: "Last watch", card: data.milestones.last }] as milestone (milestone.label)}<div
+					{#each [{ label: isGame ? "First recorded progress" : "First watch", card: data.milestones.first }, { label: isGame ? "Last recorded progress" : "Last watch", card: data.milestones.last }] as milestone (milestone.label)}<div
 						>
 							<h3 class="norm">{milestone.label}</h3>
 							<StatsPosters
@@ -759,13 +872,13 @@
 						</div>{/each}
 				</div>
 				{#if data.milestones.mostWatched.length}<h3 class="subheading norm">
-						Most watched
+						{isGame ? "Most replayed" : "Most watched"}
 					</h3>
 					<StatsPosters
 						items={data.milestones.mostWatched.slice(0, mostWatchedCount)}
 						owner={publicOwner}
 						{settings}
-						detail={(c) => `${c.plays} watches`}
+						detail={(c) => `${c.plays} ${isGame ? "completions" : "watches"}`}
 					/>
 					<StatsExpansion
 						count={mostWatchedCount}
@@ -775,73 +888,82 @@
 				{/if}
 			</section>
 
-			<section>
-				<div class="section-heading">
-					<h2 class="norm">Genres, countries & languages</h2>
-					<div class="category-controls">
-						<div class="segmented" role="group" aria-label="Sort categories by">
-							<button
-								class:active={categorySort === "count"}
-								aria-pressed={categorySort === "count"}
-								onclick={() => (categorySort = "count")}>Most watched</button
-							><button
-								class:active={categorySort === "rating"}
-								aria-pressed={categorySort === "rating"}
-								onclick={() => (categorySort = "rating")}>Highest rated</button
+			{#if isGame}{@render gameSection("categories")}{:else}
+				<section>
+					<div class="section-heading">
+						<h2 class="norm">Genres, countries & languages</h2>
+						<div class="category-controls">
+							<div
+								class="segmented"
+								role="group"
+								aria-label="Sort categories by"
 							>
+								<button
+									class:active={categorySort === "count"}
+									aria-pressed={categorySort === "count"}
+									onclick={() => (categorySort = "count")}>Most watched</button
+								><button
+									class:active={categorySort === "rating"}
+									aria-pressed={categorySort === "rating"}
+									onclick={() => (categorySort = "rating")}
+									>Highest rated</button
+								>
+							</div>
 						</div>
 					</div>
-				</div>
-				<div class="categories">
-					<StatsRankedChart
-						title="Genres"
-						bind:count={categoryCounts.genres}
-						items={data.genres}
-						{settings}
-						sortBy={categorySort}
-						onSelect={(item) => explore(item.label, item.titleKeys)}
-					/>
-					<StatsRankedChart
-						title="Countries"
-						bind:count={categoryCounts.countries}
-						items={data.countries}
-						color="#51ad79"
-						{settings}
-						sortBy={categorySort}
-						onSelect={(item) => explore(item.label, item.titleKeys)}
-					/>
-					<StatsRankedChart
-						title="Languages"
-						bind:count={categoryCounts.languages}
-						items={data.languages}
-						color="#d9aa64"
-						{settings}
-						sortBy={categorySort}
-						onSelect={(item) => explore(item.label, item.titleKeys)}
-					/>
-				</div>
-			</section>
+					<div class="categories">
+						<StatsRankedChart
+							title="Genres"
+							bind:count={categoryCounts.genres}
+							items={data.genres}
+							{settings}
+							sortBy={categorySort}
+							onSelect={(item) => explore(item.label, item.titleKeys)}
+						/>
+						<StatsRankedChart
+							title="Countries"
+							bind:count={categoryCounts.countries}
+							items={data.countries}
+							color="#51ad79"
+							{settings}
+							sortBy={categorySort}
+							onSelect={(item) => explore(item.label, item.titleKeys)}
+						/>
+						<StatsRankedChart
+							title="Languages"
+							bind:count={categoryCounts.languages}
+							items={data.languages}
+							color="#d9aa64"
+							{settings}
+							sortBy={categorySort}
+							onSelect={(item) => explore(item.label, item.titleKeys)}
+						/>
+					</div>
+				</section>
+			{/if}
 
 			<section>
 				<div class="section-heading">
 					<h2 class="norm">Breakdown</h2>
-					<span>Patterns in your viewing</span>
+					<span>Patterns in your {isGame ? "gaming" : "viewing"}</span>
 				</div>
 				<button
 					class="plain watchlist-summary"
 					disabled={!watchlistTitles.length}
 					aria-haspopup="dialog"
-					aria-label={`Show ${data.breakdown.watchlistAdditions} titles added to your watchlist`}
+					aria-label={`Show ${data.breakdown.watchlistAdditions} titles added to your ${isGame ? "backlog" : "watchlist"}`}
 					onclick={() =>
 						(selection = {
-							label: "Added to watchlist",
+							label: isGame ? "Added to backlog" : "Added to watchlist",
 							items: watchlistTitles,
-							description: "added to watchlist",
+							description: isGame ? "added to backlog" : "added to watchlist",
 						})}
 				>
 					<strong>{data.breakdown.watchlistAdditions.toLocaleString()}</strong>
 					<span class="watchlist-copy">
-						<span class="watchlist-title">Added to watchlist</span>
+						<span class="watchlist-title"
+							>Added to {isGame ? "backlog" : "watchlist"}</span
+						>
 						<span class="watchlist-period">
 							{lifetime ? "Across your recorded history" : `In ${data.year}`} · distinct
 							titles
@@ -849,11 +971,12 @@
 					</span>
 				</button>
 				<div class="pies">
-					{#each [...(!lifetime ? [{ title: "Release years", items: data.breakdown.release }] : []), { title: "Watches & rewatches", items: data.breakdown.plays }, ...(data.reviewsVisible ? [{ title: "Reviews", items: data.breakdown.reviews ?? [] }] : [])] as group (group.title)}<div
+					{#each [...(!lifetime ? [{ title: "Release years", items: data.breakdown.release }] : []), { title: isGame ? "Completions & replays" : "Watches & rewatches", items: data.breakdown.plays }, ...(data.games ? [{ title: "Current statuses", items: data.games.statuses }, { title: "Completion", items: data.games.completion }] : []), ...(data.reviewsVisible ? [{ title: "Reviews", items: data.breakdown.reviews ?? [] }] : [])] as group (group.title)}<div
 							class="pie"
 						>
 							<h3 class="norm">{group.title}</h3>
 							<StatsChart
+								titleUnit={isGame ? "games" : "titles"}
 								title={group.title}
 								kind="pie"
 								height={150}
@@ -865,16 +988,23 @@
 								{#each pies(group.items) as item, i (item.label)}<button
 										class="plain"
 										onclick={() => explorePoint(item)}
-										><i style={`background:${i === 0 ? "#29acf4" : "#f5b85a"}`}
+										><i
+											style={`background:${["#29acf4", "#f5b85a", "#f47983", "#51ad79", "#b19bea"][i % 5]}`}
 										></i>{item.label}<b>{item.value}</b></button
 									>{/each}
 							</div>
 						</div>{/each}
 				</div>
+				{#if data.games}<p class="fine-print">
+						{decimal(data.games.completionPercentage)}% of played games
+						completed {lifetime ? "across your history" : `in ${data.year}`}.
+						Statuses show current saved values.
+					</p>{/if}
 				<div class="rating-heading">
 					<h3 class="norm">Rating distribution</h3>
 				</div>
 				<StatsChart
+					titleUnit={isGame ? "games" : "titles"}
 					title="Rating distribution"
 					dataLabel="Browse titles by rating"
 					points={ratingPoints.map((p) => ({
@@ -897,107 +1027,111 @@
 				</p>
 			</section>
 
-			<section>
-				<div class="section-heading">
-					<h2 class="norm">
-						{data.media === "tv"
-							? "People behind the shows"
-							: "People behind the films"}
-					</h2>
-					<div class="segmented">
-						<button
-							class:active={peopleMode === "most"}
-							aria-pressed={peopleMode === "most"}
-							onclick={() => (peopleMode = "most")}>Most watched</button
-						><button
-							class:active={peopleMode === "rating"}
-							aria-pressed={peopleMode === "rating"}
-							onclick={() => (peopleMode = "rating")}>Highest rated</button
-						>
+			{#if isGame}{@render gameSection("companies")}{:else}
+				<section>
+					<div class="section-heading">
+						<h2 class="norm">
+							{data.media === "tv"
+								? "People behind the shows"
+								: "People behind the films"}
+						</h2>
+						<div class="segmented">
+							<button
+								class:active={peopleMode === "most"}
+								aria-pressed={peopleMode === "most"}
+								onclick={() => (peopleMode = "most")}>Most watched</button
+							><button
+								class:active={peopleMode === "rating"}
+								aria-pressed={peopleMode === "rating"}
+								onclick={() => (peopleMode = "rating")}>Highest rated</button
+							>
+						</div>
 					</div>
-				</div>
-				<div class="people-sections">
-					<StatsPeople
-						title="Cast"
-						bind:count={peopleCounts.cast}
-						people={data.people.cast}
-						expansionRows={peopleExpansionRows}
-						unit={data.media === "tv" ? "episodes" : "titles"}
-						mode={peopleMode}
-						onSelect={(p) => explore(p.name, p.titleKeys, p.id)}
-						{settings}
-					/><StatsPeople
-						title="Directors & creators"
-						bind:count={peopleCounts.directors}
-						people={data.people.directors}
-						expansionRows={peopleExpansionRows}
-						mode={peopleMode}
-						onSelect={(p) => explore(p.name, p.titleKeys, p.id)}
-						{settings}
-					/><StatsPeople
-						title="Studios"
-						bind:count={peopleCounts.studios}
-						people={data.studios}
-						mode={peopleMode}
-						onSelect={(p) => explore(p.name, p.titleKeys)}
-						{settings}
-						studios
-					/>
-				</div>
-				<h3 class="subheading norm">Crew by department</h3>
-				<div class="crew">
-					{#each data.crew as department (department.department)}<details>
-							<summary
-								>{department.department}<span
-									>{department.jobs.length} roles</span
-								></summary
-							>{#each department.jobs as job (job.job)}{@const remaining =
-									job.people.filter(
-										(p) => peopleMode !== "rating" || p.averageRating > 0,
-									).length -
-									(crewCounts[`${department.department}:${job.job}`] ?? 5)}
-								<details class="job">
-									<summary>{job.job}</summary>
-									<ul>
-										{#each [...job.people]
-											.filter((p) => peopleMode !== "rating" || p.averageRating > 0)
-											.sort( (a, b) => (peopleMode === "rating" ? b.averageRating - a.averageRating : b.titles - a.titles) )
-											.slice(0, crewCounts[`${department.department}:${job.job}`] ?? 5) as person (person.id)}<li
-											>
-												<button
-													class="plain crew-person"
-													onclick={() =>
-														explore(person.name, person.titleKeys, person.id)}
-													>{person.name}</button
-												><span
-													>{person.titles} titles · {averageRating(
-														person.averageRating,
-														settings,
-													)}</span
+					<div class="people-sections">
+						<StatsPeople
+							title="Cast"
+							bind:count={peopleCounts.cast}
+							people={data.people.cast}
+							expansionRows={peopleExpansionRows}
+							unit={data.media === "tv" ? "episodes" : "titles"}
+							mode={peopleMode}
+							onSelect={(p) => explore(p.name, p.titleKeys, p.id)}
+							{settings}
+						/><StatsPeople
+							title="Directors & creators"
+							bind:count={peopleCounts.directors}
+							people={data.people.directors}
+							expansionRows={peopleExpansionRows}
+							mode={peopleMode}
+							onSelect={(p) => explore(p.name, p.titleKeys, p.id)}
+							{settings}
+						/><StatsPeople
+							title="Studios"
+							bind:count={peopleCounts.studios}
+							people={data.studios}
+							mode={peopleMode}
+							onSelect={(p) => explore(p.name, p.titleKeys)}
+							{settings}
+							studios
+						/>
+					</div>
+					<h3 class="subheading norm">Crew by department</h3>
+					<div class="crew">
+						{#each data.crew as department (department.department)}<details>
+								<summary
+									>{department.department}<span
+										>{department.jobs.length} roles</span
+									></summary
+								>{#each department.jobs as job (job.job)}{@const remaining =
+										job.people.filter(
+											(p) => peopleMode !== "rating" || p.averageRating > 0,
+										).length -
+										(crewCounts[`${department.department}:${job.job}`] ?? 5)}
+									<details class="job">
+										<summary>{job.job}</summary>
+										<ul>
+											{#each [...job.people]
+												.filter((p) => peopleMode !== "rating" || p.averageRating > 0)
+												.sort( (a, b) => (peopleMode === "rating" ? b.averageRating - a.averageRating : b.titles - a.titles) )
+												.slice(0, crewCounts[`${department.department}:${job.job}`] ?? 5) as person (person.id)}<li
 												>
-											</li>{/each}
-									</ul>
+													<button
+														class="plain crew-person"
+														onclick={() =>
+															explore(person.name, person.titleKeys, person.id)}
+														>{person.name}</button
+													><span
+														>{person.titles} titles · {averageRating(
+															person.averageRating,
+															settings,
+														)}</span
+													>
+												</li>{/each}
+										</ul>
 
-									<StatsExpansion
-										count={crewCounts[`${department.department}:${job.job}`] ??
-											5}
-										total={remaining +
-											(crewCounts[`${department.department}:${job.job}`] ?? 5)}
-										onChange={(value) =>
-											(crewCounts[`${department.department}:${job.job}`] =
-												value)}
-									/>
-								</details>{/each}
-						</details>{:else}<p class="muted">
-							No recurring crew credits yet.
-						</p>{/each}
-				</div>
-			</section>
+										<StatsExpansion
+											count={crewCounts[
+												`${department.department}:${job.job}`
+											] ?? 5}
+											total={remaining +
+												(crewCounts[`${department.department}:${job.job}`] ??
+													5)}
+											onChange={(value) =>
+												(crewCounts[`${department.department}:${job.job}`] =
+													value)}
+										/>
+									</details>{/each}
+							</details>{:else}<p class="muted">
+								No recurring crew credits yet.
+							</p>{/each}
+					</div>
+				</section>
+			{/if}
 
 			<section>
 				<div class="section-heading">
 					<h2 class="norm">Highs and lows</h2>
-					<span>By TMDB ratings, votes & release details</span>
+					<span>By {source} ratings, votes & release details</span>
 				</div>
 				<div class="highs-lows">
 					{#each highCards as item (item.label)}<div>
@@ -1014,7 +1148,7 @@
 			<section>
 				<div class="section-heading">
 					<h2 class="norm">Rated higher than average</h2>
-					<span>You vs TMDB · /10 · At least +1 point</span>
+					<span>You vs {source} · /10 · At least +1 point</span>
 				</div>
 				<StatsPosters
 					items={higher.slice(0, higherCount)}
@@ -1030,7 +1164,7 @@
 			<section>
 				<div class="section-heading">
 					<h2 class="norm">Rated lower than average</h2>
-					<span>You vs TMDB · /10 · At least −1 point</span>
+					<span>You vs {source} · /10 · At least −1 point</span>
 				</div>
 				<StatsPosters
 					items={lower.slice(0, lowerCount)}
@@ -1046,7 +1180,9 @@
 			<section>
 				<div class="section-heading">
 					<h2 class="norm">
-						{mediaLabel} watched {lifetime ? "so far" : `in ${data.year}`}
+						{mediaLabel}
+						{isGame ? "played" : "watched"}
+						{lifetime ? "so far" : `in ${data.year}`}
 					</h2>
 					<span>{data.posters.length} distinct titles</span>
 				</div>
@@ -1060,16 +1196,20 @@
 			</section>
 			<section>
 				<div class="section-heading">
-					<h2 class="norm">Highly rated, yet to see</h2>
+					<h2 class="norm">
+						Highly rated, {isGame ? "yet to play" : "yet to see"}
+					</h2>
 					<span
-						>From {publicOwner ? `${data.owner.username}'s` : "your"} watchlist</span
+						>From {publicOwner ? `${data.owner.username}'s` : "your"}
+						{isGame ? "backlog" : "watchlist"}</span
 					>
 				</div>
 				<StatsPosters
 					items={data.watchlist}
 					owner={publicOwner}
 					{settings}
-					detail={(c) => `${c.tmdbRating?.toFixed(1) ?? "—"}/10 on TMDB`}
+					detail={(c) =>
+						`${(c.communityRating ?? c.tmdbRating)?.toFixed(1) ?? "—"}/10 on ${source}`}
 				/>
 			</section>
 			{#if selection}{#key selection}<StatsTitlesDialog
@@ -1086,9 +1226,12 @@
 						}}
 					/>{/key}{/if}
 			<footer>
-				Based on recorded whole-title watches. Past years use current saved
-				ratings{data.reviewsVisible ? " and reviews" : ""}. Dates use UTC. Movie
-				and TV metadata from TMDB.
+				{isGame
+					? "Based on recorded starts, non-planned status changes and completions. Legacy games without progress history use their saved creation date."
+					: "Based on recorded whole-title watches."} Past years use current saved
+				ratings{data.reviewsVisible ? " and reviews" : ""}. Dates use UTC. {isGame
+					? "Game metadata from IGDB. Playtime shows current saved totals in Lifetime only."
+					: "Movie and TV metadata from TMDB."}
 			</footer>
 		</div>{/key}
 </div>
@@ -1148,13 +1291,17 @@
 			100% 100%;
 		background-repeat: repeat, no-repeat;
 	}
-	.stats-page[data-background-style="panels"] .stats-content > section {
-		padding: 22px 24px;
+	.stats-page[data-background-style="panels"]
+		.stats-content
+		> :global(section) {
+		padding: 22px 32px 30px;
+		margin-inline: -32px;
 		margin-top: 14px;
-		border: 1px solid
-			color-mix(in srgb, var(--stats-accent) 7%, var(--bg-color));
+		border-top: 0;
 		border-radius: 10px;
-		background: color-mix(in srgb, var(--stats-accent) 2%, var(--bg-color));
+		background: color-mix(in srgb, var(--text-color) 2%, var(--bg-color));
+		box-shadow: inset 0 0 0 1px
+			color-mix(in srgb, var(--text-color) 8%, var(--bg-color));
 	}
 	header {
 		display: flex;
@@ -1314,7 +1461,8 @@
 		background: #29acf425;
 		color: var(--stats-accent, #29acf4);
 	}
-	section {
+	section,
+	:global(section.stats-game-section) {
 		padding: 26px 0 30px;
 		border-top: 1px solid #8883;
 	}
@@ -1615,6 +1763,12 @@
 		color: var(--stats-accent);
 	}
 	@media (max-width: 700px) {
+		.stats-page[data-background-style="panels"]
+			.stats-content
+			> :global(section) {
+			margin-inline: -24px;
+			padding-inline: 24px;
+		}
 		header {
 			flex-direction: column;
 			align-items: stretch;
@@ -1674,8 +1828,11 @@
 		select {
 			min-width: 0;
 		}
-		.stats-page[data-background-style="panels"] .stats-content > section {
-			padding: 18px 16px;
+		.stats-page[data-background-style="panels"]
+			.stats-content
+			> :global(section) {
+			margin-inline: -12px;
+			padding-inline: 12px;
 		}
 		.timeline-grid,
 		.crew {

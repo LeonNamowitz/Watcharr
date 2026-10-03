@@ -458,7 +458,7 @@ func TestPublicPrivacyValidationBeforeMetadata(t *testing.T) {
 	if provider.calls != 1 {
 		t.Fatalf("public owner data must be enriched once: %d", provider.calls)
 	}
-	for _, query := range []string{"year=oops", "media=game", "year=0"} {
+	for _, query := range []string{"year=oops", "media=invalid", "year=0"} {
 		r := request(t, engine, strings.Split(path, "?")[0]+"?"+query)
 		if r.Code != 400 {
 			t.Fatalf("invalid query accepted: %s", query)

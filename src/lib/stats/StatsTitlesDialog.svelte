@@ -110,9 +110,13 @@
 				{period} · {items.length.toLocaleString()}
 				{items.some((item) => item.episodeNumber !== undefined)
 					? "items"
-					: items.length === 1
-						? "title"
-						: "titles"}
+					: items.length > 0 && items.every((item) => item.type === "game")
+						? items.length === 1
+							? "game"
+							: "games"
+						: items.length === 1
+							? "title"
+							: "titles"}
 				{description}
 			</p>
 			<h2 class="norm" id="stats-dialog-title">{label}</h2>

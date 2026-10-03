@@ -31,9 +31,11 @@
 					type: c.type,
 					mediaId: String(c.id),
 				})
-			: c.type === "movie"
-				? resolve("/(app)/movie/[id]", { id: String(c.id) })
-				: resolve("/(app)/tv/[id]", { id: String(c.id) });
+			: c.type === "game"
+				? resolve("/(app)/game/[id]", { id: String(c.id) })
+				: c.type === "movie"
+					? resolve("/(app)/movie/[id]", { id: String(c.id) })
+					: resolve("/(app)/tv/[id]", { id: String(c.id) });
 	}
 </script>
 
@@ -48,7 +50,7 @@
 >
 	{#each items as c (`${c.type}:${c.id}:${c.seasonNumber ?? ""}:${c.episodeNumber ?? ""}`)}
 		{@const imagePath =
-			c.episodeNumber !== undefined ? c.stillPath : c.posterPath}
+			c.episodeNumber !== undefined ? c.stillPath : c.posterPath || c.coverId}
 		<a
 			class:episode={c.episodeNumber !== undefined}
 			href={href(c)}
@@ -59,7 +61,11 @@
 						fluid
 						src={c.episodeNumber !== undefined
 							? `https://www.themoviedb.org/t/p/w227_and_h127_bestv2${imagePath}`
-							: `${baseURL}/img${imagePath}`}
+							: c.type === "game"
+								? c.posterPath
+									? `${baseURL}/${c.posterPath}`
+									: `https://images.igdb.com/igdb/image/upload/t_cover_big/${c.coverId}.png`
+								: `${baseURL}/img${imagePath}`}
 						alt={tiny ? c.title : ""}
 						loading="lazy"
 					/>{:else}<span>{c.title}</span>{/if}
@@ -67,7 +73,7 @@
 			{#if !tiny}<strong>{c.title}</strong>{#if comparison}<span
 						class="comparison"
 						><b>{decimal(c.rating ?? 0)}</b><span>vs</span><b
-							>{decimal(c.tmdbRating ?? 0)}</b
+							>{decimal(c.communityRating ?? c.tmdbRating ?? 0)}</b
 						></span
 					>{:else}<span class="meta"
 						>{detail ? detail(c) : toRatingLabel(c.rating, settings)}</span

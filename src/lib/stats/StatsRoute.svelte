@@ -14,7 +14,7 @@
 	import Spinner from "@/lib/Spinner.svelte";
 	import Error from "@/lib/Error.svelte";
 	import StatsPage from "./StatsPage.svelte";
-	import type { StatsResponse } from "./types";
+	import type { StatsResponse, StatsMedia } from "./types";
 	let { publicOwner }: { publicOwner?: { id: string; username: string } } =
 		$props();
 	let data = $state<StatsResponse>();
@@ -33,7 +33,11 @@
 		page.url.searchParams.get("year") ?? String(new Date().getUTCFullYear()),
 	);
 	const media = $derived(
-		page.url.searchParams.get("media") === "tv" ? "tv" : "movie",
+		page.url.searchParams.get("media") === "game"
+			? "game"
+			: page.url.searchParams.get("media") === "tv"
+				? "tv"
+				: "movie",
 	);
 	const requestKey = $derived(
 		`${publicOwner?.id ?? "private"}:${publicOwner?.username ?? ""}:${year}:${media}`,
@@ -124,7 +128,7 @@
 			active = false;
 		};
 	});
-	function changeSelection(nextYear: string, nextMedia: "movie" | "tv") {
+	function changeSelection(nextYear: string, nextMedia: StatsMedia) {
 		focusAfterLoad =
 			document.activeElement instanceof HTMLElement
 				? document.activeElement.dataset.statsControl
@@ -155,7 +159,7 @@
 	/>
 {:else if loading}<div class="loading" role="status">
 		<Spinner />
-		<p>Gathering your viewing journal…</p>
+		<p>Gathering your stats…</p>
 	</div>{:else if error}<div class="error">
 		<Error {error} pretty="Unable to load these stats." />
 	</div>{/if}

@@ -2,6 +2,7 @@
 	let {
 		label,
 		titleCount,
+		titleUnit = "titles",
 		averageRating,
 		detail,
 		id,
@@ -9,6 +10,7 @@
 	}: {
 		label: string;
 		titleCount: number;
+		titleUnit?: "titles" | "games";
 		averageRating: string;
 		detail?: string;
 		id?: string;
@@ -24,7 +26,8 @@
 	style={position ? `left:${position.left}px;top:${position.top}px` : undefined}
 >
 	<strong>{label}</strong><span
-		>{titleCount.toLocaleString()} {titleCount === 1 ? "title" : "titles"}</span
+		>{titleCount.toLocaleString()}
+		{titleCount === 1 ? titleUnit.slice(0, -1) : titleUnit}</span
 	>
 	<p>Average rating: {averageRating}</p>
 	{#if detail}<p>{detail}</p>{/if}
