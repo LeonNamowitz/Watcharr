@@ -137,6 +137,8 @@ func (s *Service) enrichEpisodes(records []*watchedRecord, metadata map[string]c
 						if ep.EpisodeNumber != r.episode.EpisodeNumber {
 							continue
 						}
+						r.episodeName = ep.Name
+						r.stillPath = ep.StillPath
 						if ep.Name != "" {
 							r.content.Title += " · " + ep.Name
 						}

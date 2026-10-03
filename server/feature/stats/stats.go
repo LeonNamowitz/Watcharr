@@ -20,6 +20,8 @@ const (
 	ScopeYear       = "year"
 	ScopeLifetime   = "lifetime"
 	metadataWorkers = 6
+	// Personal ratings use a 10-point scale: 9 is 90/100.
+	highestRatedEpisodeMinimum = 9
 )
 
 type Query struct {
@@ -81,12 +83,14 @@ type Summary struct {
 }
 
 type HistoryPoint struct {
-	Year          int     `json:"year"`
-	Movies        int     `json:"movies"`
-	Shows         int     `json:"shows"`
-	Reviewed      *int    `json:"reviewed,omitempty"`
-	Titles        int     `json:"titles"`
-	AverageRating float64 `json:"averageRating"`
+	Items             []MediaCard `json:"items"`
+	ReviewedTitleKeys []string    `json:"reviewedTitleKeys,omitempty"`
+	Year              int         `json:"year"`
+	Movies            int         `json:"movies"`
+	Shows             int         `json:"shows"`
+	Reviewed          *int        `json:"reviewed,omitempty"`
+	Titles            int         `json:"titles"`
+	AverageRating     float64     `json:"averageRating"`
 }
 
 type DecadeStat struct {
@@ -97,6 +101,8 @@ type DecadeStat struct {
 }
 
 type MediaCard struct {
+	EpisodeName   string  `json:"episodeName,omitempty"`
+	StillPath     string  `json:"stillPath,omitempty"`
 	SeasonNumber  int     `json:"seasonNumber,omitempty"`
 	EpisodeNumber int     `json:"episodeNumber,omitempty"`
 	ID            int     `json:"id"`
@@ -223,13 +229,15 @@ type MetadataStatus struct {
 }
 
 type watchedRecord struct {
-	watched   entity.Watched
-	content   *entity.Content
-	plays     []time.Time
-	firstPlay *time.Time
-	addDates  []time.Time
-	episode   *entity.WatchedEpisode
-	parent    *watchedRecord
+	watched     entity.Watched
+	content     *entity.Content
+	plays       []time.Time
+	firstPlay   *time.Time
+	addDates    []time.Time
+	episode     *entity.WatchedEpisode
+	parent      *watchedRecord
+	episodeName string
+	stillPath   string
 }
 
 type playEvent struct {
@@ -681,11 +689,12 @@ func buildHistory(records []*watchedRecord, hideReviews bool) []HistoryPoint {
 	}
 	for y := years[0]; y <= years[len(years)-1]; y++ {
 		summary := buildSummary(byYear[y])
-		p := HistoryPoint{Year: y, Titles: summary.Titles, Movies: summary.Movies, Shows: summary.Shows, AverageRating: summary.AverageRating}
+		p := HistoryPoint{Items: uniqueCards(byYear[y], nil), Year: y, Titles: summary.Titles, Movies: summary.Movies, Shows: summary.Shows, AverageRating: summary.AverageRating}
 		if !hideReviews {
 			n := 0
 			for _, r := range byYear[y] {
 				if strings.TrimSpace(r.watched.Thoughts) != "" {
+					p.ReviewedTitleKeys = append(p.ReviewedTitleKeys, contentKey(r.content))
 					n++
 				}
 			}
@@ -764,6 +773,9 @@ func buildHighestRated(records []*watchedRecord, year int, metadata map[string]c
 	current := make([]*watchedRecord, 0)
 	older := make([]*watchedRecord, 0)
 	for _, record := range records {
+		if record.episode != nil && record.watched.Rating < highestRatedEpisodeMinimum {
+			continue
+		}
 		if record.watched.Rating <= 0 || (year == 0 && record.watched.Rating <= 8) {
 			continue
 		}
@@ -800,7 +812,13 @@ func buildHighestRated(records []*watchedRecord, year int, metadata map[string]c
 			limit = len(current)
 		}
 	}
-	return HighestRated{Current: cards(current, metadata, limit), Older: cards(older, metadata, 5)}
+	olderLimit := 5
+	// Episode sections paginate in the UI; retain every rated episode in each tab.
+	if len(records) > 0 && records[0].episode != nil {
+		limit = len(current)
+		olderLimit = len(older)
+	}
+	return HighestRated{Current: cards(current, metadata, limit), Older: cards(older, metadata, olderLimit)}
 }
 
 func buildActivity(records []*watchedRecord) ActivityStats {
@@ -1347,6 +1365,8 @@ func mediaCard(record *watchedRecord, metadata map[string]contentMetadata) Media
 		card.Date = record.content.ReleaseDate.UTC().Format("2006-01-02")
 	}
 	if record.episode != nil {
+		card.EpisodeName = record.episodeName
+		card.StillPath = record.stillPath
 		card.SeasonNumber = record.episode.SeasonNumber
 		card.EpisodeNumber = record.episode.EpisodeNumber
 	}

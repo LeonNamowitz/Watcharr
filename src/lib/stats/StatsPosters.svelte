@@ -37,16 +37,29 @@
 	}
 </script>
 
-<div class="posters" class:tiny class:wall class:five-per-row={fivePerRow}>
+<div
+	class="posters"
+	class:tiny
+	class:wall
+	class:five-per-row={fivePerRow}
+	class:episodes={items.some((item) => item.episodeNumber !== undefined)}
+	class:mixed={items.some((item) => item.episodeNumber !== undefined) &&
+		items.some((item) => item.episodeNumber === undefined)}
+>
 	{#each items as c (`${c.type}:${c.id}:${c.seasonNumber ?? ""}:${c.episodeNumber ?? ""}`)}
+		{@const imagePath =
+			c.episodeNumber !== undefined ? c.stillPath : c.posterPath}
 		<a
+			class:episode={c.episodeNumber !== undefined}
 			href={href(c)}
 			title={`${c.title}${c.releaseYear ? ` (${c.releaseYear})` : ""}${tiny ? ` · ${toRatingLabel(c.rating, settings)}` : ""}`}
 		>
-			<div class="image">
-				{#if c.posterPath}<PosterImage
+			<div class="image" class:episode={c.episodeNumber !== undefined}>
+				{#if imagePath}<PosterImage
 						fluid
-						src={`${baseURL}/img${c.posterPath}`}
+						src={c.episodeNumber !== undefined
+							? `https://www.themoviedb.org/t/p/w227_and_h127_bestv2${imagePath}`
+							: `${baseURL}/img${imagePath}`}
 						alt={tiny ? c.title : ""}
 						loading="lazy"
 					/>{:else}<span>{c.title}</span>{/if}
@@ -69,6 +82,19 @@
 		grid-template-columns: repeat(5, minmax(0, 1fr));
 		gap: 16px 12px;
 		min-width: 0;
+	}
+	.posters.episodes {
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+	}
+	.posters.mixed {
+		grid-auto-flow: row dense;
+		align-items: start;
+	}
+	.posters.mixed a:not(.episode) {
+		grid-row: span 2;
+	}
+	.image.episode {
+		aspect-ratio: 16 / 9;
 	}
 	.posters a {
 		display: flex;
@@ -167,11 +193,20 @@
 		.posters:not(.tiny) {
 			grid-template-columns: repeat(3, minmax(0, 1fr));
 		}
+		.posters.episodes {
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+		}
 	}
 	@media (max-width: 520px) {
 		.posters:not(.tiny) {
 			grid-template-columns: repeat(2, minmax(0, 1fr));
 			gap: 12px 8px;
+		}
+		.posters.episodes {
+			grid-template-columns: minmax(0, 1fr);
+		}
+		.posters.mixed a:not(.episode) {
+			grid-row: auto;
 		}
 	}
 	@media (prefers-reduced-motion: reduce) {

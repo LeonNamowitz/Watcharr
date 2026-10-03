@@ -2,6 +2,8 @@ import type { PublicUser } from "@/types";
 
 export interface StatsMediaCard {
 	id: number;
+	episodeName?: string;
+	stillPath?: string;
 	seasonNumber?: number;
 	episodeNumber?: number;
 	type: "movie" | "tv";
@@ -49,6 +51,8 @@ export interface StatsResponse {
 		averageRating: number;
 	};
 	history: {
+		items: StatsMediaCard[];
+		reviewedTitleKeys?: string[];
 		year: number;
 		movies: number;
 		shows: number;

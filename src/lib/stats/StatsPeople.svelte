@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onMount } from "svelte";
 	import StatsExpansion from "./StatsExpansion.svelte";
 	import type { StatsPerson } from "./types";
 	import { type RatingSettings } from "@/lib/rating/helpers";
@@ -11,6 +12,7 @@
 		settings,
 		studios = false,
 		unit = "titles",
+		expansionRows = 0,
 	}: {
 		title: string;
 		people: StatsPerson[];
@@ -19,8 +21,21 @@
 		settings?: RatingSettings;
 		studios?: boolean;
 		unit?: string;
+		expansionRows?: number;
 	} = $props();
 	let count = $state(5);
+	let peopleGrid: HTMLDivElement;
+	let columns = $state(5);
+	onMount(() => {
+		const updateColumns = () => {
+			columns =
+				getComputedStyle(peopleGrid).gridTemplateColumns.split(" ").length;
+		};
+		updateColumns();
+		const observer = new ResizeObserver(updateColumns);
+		observer.observe(peopleGrid);
+		return () => observer.disconnect();
+	});
 	const sorted = $derived(
 		[...people]
 			.filter(
@@ -38,7 +53,7 @@
 
 <div class="people-block">
 	<h3 class="norm">{title}</h3>
-	<div class="people">
+	<div class="people" bind:this={peopleGrid}>
 		{#each sorted.slice(0, count) as p (p.id)}
 			<div class="person">
 				{#snippet portrait()}<div class="portrait" class:studio={studios}>
@@ -65,6 +80,8 @@
 	</div>
 	<StatsExpansion
 		{count}
+		step={expansionRows ? expansionRows * columns : 5}
+		separateCollapse={expansionRows > 0}
 		total={sorted.length}
 		onChange={(value) => (count = value)}
 	/>

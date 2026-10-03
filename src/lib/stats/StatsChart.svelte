@@ -167,6 +167,12 @@
 			/>
 		{:else if kind === "line"}
 			<LineChart
+				onPointClick={(_event, detail) => {
+					const label =
+						"label" in detail.data ? detail.data.label : detail.data.x;
+					const point = points.find((point) => point.label === String(label));
+					if (point) onSelect?.(point);
+				}}
 				{...common}
 				data={points}
 				x="label"
@@ -263,6 +269,13 @@
 		color: var(--stats-muted);
 		font-size: 12px;
 		line-height: 1.4;
+	}
+	.chart :global(.lc-arc-line:focus) {
+		outline: none;
+	}
+	.chart :global(.lc-arc-line:focus-visible) {
+		stroke: var(--stats-accent);
+		stroke-width: 2px;
 	}
 	.chart :global(.lc-arc-line:hover) {
 		filter: brightness(1.1);

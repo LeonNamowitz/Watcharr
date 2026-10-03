@@ -27,6 +27,8 @@
 	let episodeTab = $state<"current" | "older">("current");
 	let highestTab = $state<"current" | "older">("current");
 	let yearlyFavoriteCount = $state(5);
+	// Rows added per click for Cast and Directors & creators only.
+	const peopleExpansionRows = 3;
 	let peopleMode = $state<"most" | "rating">("most");
 	let categorySort = $state<"count" | "rating">("count");
 	let higherCount = $state(5);
@@ -63,6 +65,18 @@
 				items: point.items,
 			};
 		else explore(point.label, point.titleKeys ?? []);
+	}
+	function historyItems(
+		point: StatsResponse["history"][number],
+		metric: string,
+	) {
+		const reviewed = new Set(point.reviewedTitleKeys ?? []);
+		return (point.items ?? []).filter((item) => {
+			if (metric === "movies") return item.type === "movie";
+			if (metric === "shows") return item.type === "tv";
+			if (metric === "averageRating") return (item.rating ?? 0) > 0;
+			return reviewed.has(`${item.type}:${item.id}`);
+		});
 	}
 	function weekRange(start: string) {
 		const first = new Date(`${start}T00:00:00Z`);
@@ -236,7 +250,7 @@
 		<section>
 			<div class="section-heading">
 				<h2 class="norm">Highest rated episodes</h2>
-				{#if lifetime}<span>Your favorites rated above 8/10</span>
+				{#if lifetime}<span>Your favorites rated 9/10 or above</span>
 				{:else}<div class="segmented">
 						<button
 							class:active={episodeTab === "current"}
@@ -284,9 +298,9 @@
 					: resolve("/profile")}
 				>← {publicOwner ? "Back to library" : "Profile"}</a
 			>
-			<p class="eyebrow">{data.owner.username}'s viewing journal</p>
+			<p class="eyebrow">{data.owner.username + "'s " + (data.scope === "lifetime" ? "all-time stats" : "year in film")}</p>
 			<h1 class="norm">
-				{lifetime ? "A lifetime in stories" : `${data.year} in review`}
+				{lifetime ? "A Life in " + (data.media === "tv" ? "Shows" : "Film") : `${data.year}`}
 			</h1>
 			<p class="intro">
 				{data.summary.titles.toLocaleString()}
@@ -361,22 +375,24 @@
 							color={metric.color}
 							points={data.history.map((p) => ({
 								label: String(p.year),
+								tooltipLabel: `${metric.label} · ${p.year}`,
+								items: historyItems(p, metric.key),
 								value:
 									metric.key === "averageRating" && !p.averageRating
 										? null
 										: Number(p[metric.key as keyof typeof p] ?? 0),
 								titleCount:
 									metric.key === "averageRating"
-										? p.titles
+										? historyItems(p, metric.key).length
 										: Number(p[metric.key as keyof typeof p] ?? 0),
 								averageRating: p.averageRating,
 							}))}
 							{settings}
+							onSelect={explorePoint}
 						/>
 					</div>{/each}
 			</div>
 		</section>
-		{@render episodeSection()}
 		<section>
 			<div class="section-heading">
 				<h2 class="norm">Highest-rated decades</h2>
@@ -451,7 +467,7 @@
 			/>{/if}
 	</section>
 
-	{#if !lifetime}{@render episodeSection()}{/if}
+	{@render episodeSection()}
 
 	{#if !lifetime}<section>
 			<div class="section-heading activity-heading">
@@ -499,7 +515,12 @@
 								items: w.items ?? [],
 								detail: [
 									`${w.plays} ${data.media === "tv" ? "episodes" : "watches"}`,
-									...w.titles,
+									...(data.media === "tv"
+										? (w.items ?? []).map(
+												(item) =>
+													item.episodeName || "Episode name unavailable",
+											)
+										: w.titles),
 								]
 									.filter(Boolean)
 									.join(" · "),
@@ -564,16 +585,15 @@
 		<div class="section-heading">
 			<h2 class="norm">Genres, countries & languages</h2>
 			<div class="category-controls">
-				<span>The worlds you explored · Sort by</span>
 				<div class="segmented" role="group" aria-label="Sort categories by">
 					<button
 						class:active={categorySort === "count"}
 						aria-pressed={categorySort === "count"}
-						onclick={() => (categorySort = "count")}>Count</button
+						onclick={() => (categorySort = "count")}>Most watched</button
 					><button
 						class:active={categorySort === "rating"}
 						aria-pressed={categorySort === "rating"}
-						onclick={() => (categorySort = "rating")}>Average rating</button
+						onclick={() => (categorySort = "rating")}>Highest rated</button
 					>
 				</div>
 			</div>
@@ -676,7 +696,9 @@
 
 	<section>
 		<div class="section-heading">
-			<h2 class="norm">People behind the stories</h2>
+			<h2 class="norm">
+				{data.media === "tv" ? "People behind the shows" : "People behind the films"}
+			</h2>
 			<div class="segmented">
 				<button
 					class:active={peopleMode === "most"}
@@ -693,13 +715,15 @@
 			<StatsPeople
 				title="Cast"
 				people={data.people.cast}
-				unit={data.media === "tv" ? "titles & episodes" : "titles"}
+				expansionRows={peopleExpansionRows}
+				unit={data.media === "tv" ? "episodes" : "titles"}
 				mode={peopleMode}
 				onSelect={(p) => explore(p.name, p.titleKeys, p.id)}
 				{settings}
 			/><StatsPeople
 				title="Directors & creators"
 				people={data.people.directors}
+				expansionRows={peopleExpansionRows}
 				mode={peopleMode}
 				onSelect={(p) => explore(p.name, p.titleKeys, p.id)}
 				{settings}

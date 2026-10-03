@@ -382,11 +382,17 @@ func TestWatchlistTransitionsAndHistoryUseDistinctTitles(t *testing.T) {
 	if h.Movies != 1 || h.Shows != 1 || h.AverageRating != 6 || h.Reviewed == nil || *h.Reviewed != 1 {
 		t.Fatalf("history must include both media and weight titles once: %#v", h)
 	}
+	if len(h.Items) != 2 || len(data.History[0].Items) != 1 || !reflect.DeepEqual(h.ReviewedTitleKeys, []string{"movie:701"}) {
+		t.Fatalf("history popup membership must be year-specific and distinct: %#v", data.History)
+	}
+	if h.Items[0].Type != "movie" || h.Items[1].Type != "tv" || h.Items[0].Rating != 8 || h.Items[1].Rating != 4 {
+		t.Fatalf("history cards must retain media and ratings: %#v", h.Items)
+	}
 	if len(data.Watchlist) != 0 {
 		t.Fatalf("watched planned titles and unknown ratings must not be recommendations")
 	}
 	hidden, err := s.GetStats(owner.ID, Query{Scope: ScopeLifetime, HideReviews: true})
-	if err != nil || hidden.Breakdown.Reviews != nil || hidden.History[1].Reviewed != nil {
+	if err != nil || hidden.Breakdown.Reviews != nil || hidden.History[1].Reviewed != nil || len(hidden.History[1].ReviewedTitleKeys) != 0 {
 		t.Fatalf("private review presence leaked: %#v %v", hidden, err)
 	}
 }

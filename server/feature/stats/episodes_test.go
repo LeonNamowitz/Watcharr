@@ -3,6 +3,7 @@ package stats
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -26,7 +27,7 @@ func (p episodeTMDB) SeasonDetails(string, string) (tmdb.SeasonDetails, error) {
 		return tmdb.SeasonDetails{}, errors.New("unavailable")
 	}
 	var d tmdb.SeasonDetails
-	err := json.Unmarshal([]byte(`{"episodes":[{"episode_number":1,"name":"First","air_date":"2025-01-01","guest_stars":[{"id":2,"name":"Guest"}]},{"episode_number":2,"name":"Second","air_date":"2020-01-01","guest_stars":[{"id":2,"name":"Guest"}]}]}`), &d)
+	err := json.Unmarshal([]byte(`{"episodes":[{"episode_number":1,"name":"First","still_path":"/first.jpg","air_date":"2025-01-01","guest_stars":[{"id":2,"name":"Guest"}]},{"episode_number":2,"name":"Second","air_date":"2020-01-01","guest_stars":[{"id":2,"name":"Guest"}]}]}`), &d)
 	return d, err
 }
 func (episodeTMDB) EpisodeCredits(string, string, string) (tmdb.ContentCredits, error) {
@@ -84,8 +85,14 @@ func TestEpisodeActivityRatingsAndCast(t *testing.T) {
 	if data.Summary.Titles != 0 || data.Activity.Total != 3 || data.Activity.Months[1].Plays != 3 || len(data.Activity.Months[1].Items) != 2 || data.Activity.Months[1].AverageRating != 8.5 {
 		t.Fatalf("episode-only activity: %#v", data.Activity)
 	}
-	if len(data.HighestRatedEpisodes.Current) != 1 || data.HighestRatedEpisodes.Current[0].EpisodeNumber != 1 || len(data.HighestRatedEpisodes.Older) != 1 {
+	if len(data.HighestRatedEpisodes.Current) != 1 || data.HighestRatedEpisodes.Current[0].EpisodeNumber != 1 || len(data.HighestRatedEpisodes.Older) != 0 {
 		t.Fatalf("episode rankings: %#v", data.HighestRatedEpisodes)
+	}
+	if first := data.HighestRatedEpisodes.Current[0]; first.EpisodeName != "First" || first.StillPath != "/first.jpg" {
+		t.Fatalf("episode names and thumbnails must survive stats aggregation: %#v", first)
+	}
+	if first := data.Activity.Months[1].Items[0]; first.EpisodeName != "First" || first.StillPath != "/first.jpg" {
+		t.Fatalf("activity popups must retain episode metadata: %#v", first)
 	}
 	if len(data.People.Cast) != 2 {
 		t.Fatalf("cast: %#v", data.People.Cast)
@@ -113,6 +120,62 @@ func TestPieMembershipIncludesOverlappingFirstWatchesAndRewatches(t *testing.T) 
 	for _, pie := range append(data.Release[:1], data.Plays...) {
 		if len(pie.TitleKeys) != 1 || pie.TitleKeys[0] != "movie:7" {
 			t.Fatalf("missing membership: %#v", pie)
+		}
+	}
+}
+
+func TestHighestRatedEpisodesRetainOlderAndCurrentBeyondFive(t *testing.T) {
+	records := []*watchedRecord{}
+	for _, year := range []int{2020, 2026} {
+		for i := 1; i <= 9; i++ {
+			release := time.Date(year, 1, 1, 0, 0, 0, 0, time.UTC)
+			records = append(records, &watchedRecord{
+				content: &entity.Content{TmdbID: 606, Type: entity.SHOW, Title: fmt.Sprintf("Pantheon · S1E%d", i), ReleaseDate: &release},
+				watched: entity.Watched{Rating: float64(9 + i%2)},
+				episode: &entity.WatchedEpisode{SeasonNumber: 1, EpisodeNumber: i},
+				plays:   []time.Time{date("2026-01-01")},
+			})
+		}
+	}
+	ranked := buildHighestRated(records, 2026, nil)
+	if len(ranked.Older) != 9 || len(ranked.Current) != 9 {
+		t.Fatalf("UI expansion needs all ranked episodes: %#v", ranked)
+	}
+	for _, items := range [][]MediaCard{ranked.Current, ranked.Older} {
+		seen := map[int]bool{}
+		for i, card := range items {
+			seen[card.EpisodeNumber] = true
+			if i > 0 && card.Rating > items[i-1].Rating {
+				t.Fatal("ratings must remain sorted")
+			}
+		}
+		for _, n := range []int{7, 8, 9} {
+			if !seen[n] {
+				t.Fatalf("episode %d missing", n)
+			}
+		}
+	}
+}
+
+func TestHighestRatedEpisodeMinimumAppliesToEveryPeriod(t *testing.T) {
+	records := []*watchedRecord{}
+	for _, year := range []int{2020, 2026} {
+		release := time.Date(year, 1, 1, 0, 0, 0, 0, time.UTC)
+		for _, rating := range []float64{0, 8, 8.9, 9, 10} {
+			records = append(records, &watchedRecord{content: &entity.Content{Type: entity.SHOW, ReleaseDate: &release}, watched: entity.Watched{Rating: rating}, episode: &entity.WatchedEpisode{EpisodeNumber: 1}})
+		}
+	}
+	for _, year := range []int{2026, 0} {
+		ranked := buildHighestRated(records, year, nil)
+		if (year == 2026 && (len(ranked.Current) != 2 || len(ranked.Older) != 2)) || (year == 0 && len(ranked.Current) != 4) {
+			t.Fatalf("90/100 cutoff for year %d: %#v", year, ranked)
+		}
+		for _, items := range [][]MediaCard{ranked.Current, ranked.Older} {
+			for _, card := range items {
+				if card.Rating < 9 {
+					t.Fatalf("episode below cutoff: %#v", card)
+				}
+			}
 		}
 	}
 }
