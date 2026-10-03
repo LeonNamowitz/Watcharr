@@ -76,6 +76,7 @@
 	let activityMode = $state<"week" | "month">("week");
 	let activityMetric = $state<"count" | "rating">("count");
 	let calendarYear = $state<number>();
+	let gameCalendarKind = $state<"progress" | "completions">("progress");
 	let waitingCount = $state(5);
 	let selection = $state<{
 		period?: string;
@@ -107,6 +108,7 @@
 			activityMode,
 			activityMetric,
 			calendarYear,
+			gameCalendarKind,
 			waitingCount,
 			gameCounts,
 			gameActivityKind,
@@ -138,6 +140,7 @@
 		decadeCounts = saved.decadeCounts;
 		crewCounts = saved.crewCounts;
 		calendarYear = saved.calendarYear;
+		gameCalendarKind = saved.gameCalendarKind ?? "progress";
 		waitingCount = saved.waitingCount ?? 5;
 		activityMode = saved.activityMode;
 		activityMetric = saved.activityMetric ?? "count";
@@ -287,6 +290,7 @@
 	$effect(() => {
 		if (statsView) {
 			calendarYear = undefined;
+			gameCalendarKind = "progress";
 			waitingCount = 5;
 			episodeCount = 5;
 			episodeTab = "current";
@@ -527,34 +531,71 @@
 					: resolve("/")}
 				>← {publicOwner ? "Back to library" : "Back to library"}</a
 			>
-			<p class="eyebrow">
-				{data.owner.username +
-					"'s " +
-					(selectedYear === "all"
-						? "all-time stats"
-						: selectedMedia === "tv"
-							? "year in television"
+			<div class="heading-top">
+				<div class="heading-copy">
+					<p class="eyebrow">
+						{data.owner.username +
+							"'s " +
+							(selectedYear === "all"
+								? "all-time stats"
+								: selectedMedia === "tv"
+									? "year in television"
+									: selectedMedia === "game"
+										? "year in games"
+										: "year in film")}
+					</p>
+					<h1 class="norm">
+						{selectedYear === "all"
+							? "A Life in " +
+								(selectedMedia === "game"
+									? "Games"
+									: selectedMedia === "tv"
+										? "Shows"
+										: "Film")
+							: selectedYear}
+					</h1>
+					<p class="intro">
+						{selectedYear === "all"
+							? "Across your recorded history"
 							: selectedMedia === "game"
-								? "year in games"
-								: "year in film")}
-			</p>
-			<h1 class="norm">
-				{selectedYear === "all"
-					? "A Life in " +
-						(selectedMedia === "game"
-							? "Games"
-							: selectedMedia === "tv"
-								? "Shows"
-								: "Film")
-					: selectedYear}
-			</h1>
-			<p class="intro">
-				{selectedYear === "all"
-					? "Across your recorded history"
-					: selectedMedia === "game"
-						? "Your gaming journal"
-						: `Your ${selectedMedia === "tv" ? "television" : "film"} viewing journal`}
-			</p>
+								? "Your gaming journal"
+								: `Your ${selectedMedia === "tv" ? "television" : "film"} viewing journal`}
+					</p>
+				</div>
+				<div class="controls">
+					<label
+						>Period<select
+							data-stats-control="period"
+							value={selectedYear}
+							onchange={(e) =>
+								onSelectionChange(e.currentTarget.value, selectedMedia)}
+							><option value="all">Lifetime</option
+							>{#each years as y (y)}<option value={String(y)}>{y}</option
+								>{/each}</select
+						></label
+					>
+					<StatsSegmentedControl label="Media">
+						<button
+							data-stats-control="movie"
+							class:active={selectedMedia === "movie"}
+							aria-pressed={selectedMedia === "movie"}
+							onclick={() => onSelectionChange(selectedYear, "movie")}
+							>Movies</button
+						><button
+							data-stats-control="tv"
+							class:active={selectedMedia === "tv"}
+							aria-pressed={selectedMedia === "tv"}
+							onclick={() => onSelectionChange(selectedYear, "tv")}>TV</button
+						><button
+							data-stats-control="game"
+							class:active={selectedMedia === "game"}
+							aria-pressed={selectedMedia === "game"}
+							onclick={() => onSelectionChange(selectedYear, "game")}
+							>Games</button
+						>
+					</StatsSegmentedControl>
+				</div>
+			</div>
 			<dl class="header-summary" aria-label="Media summary" aria-busy={loading}>
 				<div>
 					<dt>
@@ -567,12 +608,12 @@
 					<dd>{loading || error ? "—" : distinctTitles.toLocaleString()}</dd>
 				</div>
 				<div>
-					<dt>
+					<dt class="single-line-label">
 						{selectedMedia === "game"
 							? "Games completed"
 							: selectedMedia === "tv"
 								? "Episodes watched"
-								: "Watches"}
+								: "Movies watched"}
 					</dt>
 					<dd>
 						{loading || error
@@ -594,52 +635,18 @@
 					</dd>
 				</div>
 				<div>
-					<dt>
-						Average {selectedMedia === "game"
-							? "game"
-							: selectedMedia === "tv"
-								? "show"
-								: "film"} rating
-					</dt>
+					<dt class="single-line-label">Average rating</dt>
 					<dd>
 						{loading || error
 							? "—"
 							: averageRating(data.summary.averageRating, settings)}
 					</dd>
 				</div>
+				<div class="placeholder-card">
+					<dt>More insights</dt>
+					<dd>Coming soon</dd>
+				</div>
 			</dl>
-		</div>
-		<div class="controls">
-			<label
-				>Period<select
-					data-stats-control="period"
-					value={selectedYear}
-					onchange={(e) =>
-						onSelectionChange(e.currentTarget.value, selectedMedia)}
-					><option value="all">Lifetime</option>{#each years as y (y)}<option
-							value={String(y)}>{y}</option
-						>{/each}</select
-				></label
-			>
-			<StatsSegmentedControl label="Media">
-				<button
-					data-stats-control="movie"
-					class:active={selectedMedia === "movie"}
-					aria-pressed={selectedMedia === "movie"}
-					onclick={() => onSelectionChange(selectedYear, "movie")}
-					>Movies</button
-				><button
-					data-stats-control="tv"
-					class:active={selectedMedia === "tv"}
-					aria-pressed={selectedMedia === "tv"}
-					onclick={() => onSelectionChange(selectedYear, "tv")}>TV</button
-				><button
-					data-stats-control="game"
-					class:active={selectedMedia === "game"}
-					aria-pressed={selectedMedia === "game"}
-					onclick={() => onSelectionChange(selectedYear, "game")}>Games</button
-				>
-			</StatsSegmentedControl>
 		</div>
 	</header>
 	{#if loading}<div class="load-status" role="status">
@@ -670,7 +677,7 @@
 							</li>{/each}
 					</ul>
 				</details>{/if}
-			{#if !isGame && data.library}<StatsLibrarySections
+			{#if data.library}<StatsLibrarySections
 					{data}
 					owner={publicOwner}
 					{settings}
@@ -918,11 +925,12 @@
 						/>{/key}
 				</section>{/if}
 
-			{#if !isGame && data.library}<StatsCalendar
+			{#if data.library}<StatsCalendar
 					{data}
 					{settings}
 					onSelect={exploreSelection}
 					bind:calendarYear
+					bind:activityKind={gameCalendarKind}
 				/>{/if}
 
 			<section>
@@ -1370,13 +1378,23 @@
 		min-width: 0;
 		flex: 1;
 	}
+	.heading-top {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) auto;
+		align-items: center;
+		gap: 24px;
+		margin-top: 22px;
+	}
+	.heading-copy {
+		min-width: 0;
+	}
 	.header-summary {
 		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(min(100%, 176px), 1fr));
+		grid-template-columns: repeat(5, minmax(0, 1fr));
 		gap: 12px;
 		margin-top: 22px;
 		width: 100%;
-		max-width: 820px;
+		max-width: none;
 	}
 	.header-summary > div {
 		display: flex;
@@ -1391,6 +1409,15 @@
 	.header-summary dt {
 		color: var(--stats-text);
 		font-size: 18px;
+		font-weight: 600;
+	}
+	.header-summary .single-line-label {
+		font-size: clamp(12px, 3.5vw, 16px);
+		white-space: nowrap;
+	}
+	.header-summary .placeholder-card dd {
+		color: var(--stats-muted);
+		font-size: clamp(13px, 1.6vw, 18px);
 		font-weight: 600;
 	}
 	.header-summary dd {
@@ -1426,7 +1453,7 @@
 		letter-spacing: 0.15em;
 		font-size: 13px;
 		color: var(--stats-accent, #29acf4);
-		margin: 22px 0 10px;
+		margin: 0 0 10px;
 		overflow-wrap: anywhere;
 	}
 	h1 {
@@ -1444,7 +1471,11 @@
 	.controls {
 		display: flex;
 		flex-direction: column;
+		align-items: stretch;
 		gap: 12px;
+		flex-shrink: 0;
+		width: max-content;
+		max-width: 100%;
 	}
 	.controls label {
 		font-size: 13px;
@@ -1780,6 +1811,11 @@
 			grid-template-columns: repeat(3, minmax(0, 1fr));
 		}
 	}
+	@media (min-width: 701px) and (max-width: 900px) {
+		.header-summary {
+			grid-template-columns: repeat(4, minmax(0, 1fr));
+		}
+	}
 	@media (max-width: 700px) {
 		.stats-page .stats-content > :global(section) {
 			margin-inline: -24px;
@@ -1790,17 +1826,12 @@
 			align-items: stretch;
 			gap: 20px;
 		}
-		.controls {
-			flex-direction: row;
-			flex-wrap: wrap;
-			align-items: end;
-		}
-		.controls label {
-			flex: 1;
-			min-width: 0;
+		.heading-top {
+			grid-template-columns: minmax(0, 1fr);
+			gap: 16px;
 		}
 		.header-summary {
-			max-width: 820px;
+			grid-template-columns: repeat(auto-fit, minmax(min(100%, 176px), 1fr));
 		}
 		.category-controls {
 			justify-content: start;
@@ -1816,6 +1847,11 @@
 			gap: 24px 12px;
 		}
 	}
+	@media (min-width: 600px) and (max-width: 700px) {
+		.heading-top {
+			grid-template-columns: minmax(0, 1fr) auto;
+		}
+	}
 	@media (max-width: 520px) {
 		.stats-page {
 			padding: 20px 16px 40px;
@@ -1827,16 +1863,6 @@
 		}
 		.header-summary {
 			grid-template-columns: repeat(2, minmax(0, 1fr));
-		}
-		.controls {
-			flex-direction: row;
-			flex-wrap: wrap;
-			align-items: end;
-			gap: 12px;
-		}
-		.controls label {
-			flex: 1;
-			min-width: 0;
 		}
 		select {
 			min-width: 0;

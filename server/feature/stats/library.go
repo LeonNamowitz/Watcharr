@@ -55,8 +55,8 @@ func topLevelStatus(a entity.Activity) entity.WatchedStatus {
 	return activityStatus(a.Data)
 }
 
-func sortedActivities(record *watchedRecord) []entity.Activity {
-	activities := append([]entity.Activity(nil), record.watched.Activity...)
+func sortedActivities(events []entity.Activity) []entity.Activity {
+	activities := append([]entity.Activity(nil), events...)
 	sort.SliceStable(activities, func(i, j int) bool {
 		a, b := effectiveDate(activities[i].CreatedAt, activities[i].CustomDate), effectiveDate(activities[j].CreatedAt, activities[j].CustomDate)
 		if a.Equal(b) {
@@ -67,19 +67,24 @@ func sortedActivities(record *watchedRecord) []entity.Activity {
 	return activities
 }
 
+// savedMediaRecord lets title and game adapters share status and conversion rules.
+type savedMediaRecord struct {
+	watched         entity.Watched
+	card            MediaCard
+	firstCompletion *completion
+}
+type completion struct {
+	date       time.Time
+	activityID uint
+}
+type datedMediaRecord struct {
+	key   string
+	card  MediaCard
+	dates []time.Time
+}
+
 func buildLibrary(records, episodes []*watchedRecord, q Query) LibraryStats {
-	result := LibraryStats{Statuses: []StatusGroup{}, Momentum: []MomentumPoint{}, Waiting: WaitingStats{Buckets: []WaitingBucket{}, Longest: []WaitingTitle{}}}
-	for i, status := range []entity.WatchedStatus{entity.FINISHED, entity.WATCHING, entity.PLANNED, entity.HOLD, entity.DROPPED} {
-		result.Statuses = append(result.Statuses, StatusGroup{Status: status, Label: []string{"Finished", "Watching", "Planned", "On hold", "Dropped"}[i], Items: []MediaCard{}})
-	}
-	for _, label := range []string{"Same day", "1–7 days", "8–30 days", "31–90 days", "91–365 days", "Over 365 days"} {
-		result.Waiting.Buckets = append(result.Waiting.Buckets, WaitingBucket{Label: label, Items: []MediaCard{}})
-	}
 	// Episode completion dates use the same import/custom-date rules as Activity.
-	type completion struct {
-		date       time.Time
-		activityID uint
-	}
 	firstEpisodes := map[uint]completion{}
 	for _, ep := range episodes {
 		if ep.firstPlay == nil {
@@ -89,6 +94,26 @@ func buildLibrary(records, episodes []*watchedRecord, q Query) LibraryStats {
 		if old, ok := firstEpisodes[ep.parent.watched.ID]; !ok || d.Before(old.date) || (d.Equal(old.date) && id != 0 && old.activityID != 0 && id < old.activityID) {
 			firstEpisodes[ep.parent.watched.ID] = completion{date: d, activityID: id}
 		}
+	}
+
+	media := make([]savedMediaRecord, 0, len(records))
+	for _, record := range records {
+		r := savedMediaRecord{watched: record.watched, card: mediaCard(record, nil)}
+		if ep, ok := firstEpisodes[record.watched.ID]; ok {
+			r.firstCompletion = &ep
+		}
+		media = append(media, r)
+	}
+	return buildMediaLibrary(media, q)
+}
+
+func buildMediaLibrary(records []savedMediaRecord, q Query) LibraryStats {
+	result := LibraryStats{Statuses: []StatusGroup{}, Momentum: []MomentumPoint{}, Waiting: WaitingStats{Buckets: []WaitingBucket{}, Longest: []WaitingTitle{}}}
+	for i, status := range []entity.WatchedStatus{entity.FINISHED, entity.WATCHING, entity.PLANNED, entity.HOLD, entity.DROPPED} {
+		result.Statuses = append(result.Statuses, StatusGroup{Status: status, Label: []string{"Finished", "Watching", "Planned", "On hold", "Dropped"}[i], Items: []MediaCard{}})
+	}
+	for _, label := range []string{"Same day", "1–7 days", "8–30 days", "31–90 days", "91–365 days", "Over 365 days"} {
+		result.Waiting.Buckets = append(result.Waiting.Buckets, WaitingBucket{Label: label, Items: []MediaCard{}})
 	}
 
 	momentum := map[string]*MomentumPoint{}
@@ -107,7 +132,7 @@ func buildLibrary(records, episodes []*watchedRecord, q Query) LibraryStats {
 		statuses := map[entity.WatchedStatus]bool{}
 		var plan, firstWatch *time.Time
 		var planID, watchID uint
-		for _, a := range sortedActivities(record) {
+		for _, a := range sortedActivities(record.watched.Activity) {
 			d := effectiveDate(a.CreatedAt, a.CustomDate)
 			status := topLevelStatus(a)
 			if status != "" && inScope(d) {
@@ -124,13 +149,13 @@ func buildLibrary(records, episodes []*watchedRecord, q Query) LibraryStats {
 				watchID = a.ID
 			}
 		}
-		if ep, ok := firstEpisodes[record.watched.ID]; ok && (firstWatch == nil || ep.date.Before(*firstWatch) || (ep.date.Equal(*firstWatch) && ep.activityID != 0 && watchID != 0 && ep.activityID < watchID)) {
+		if ep := record.firstCompletion; ep != nil && (firstWatch == nil || ep.date.Before(*firstWatch) || (ep.date.Equal(*firstWatch) && ep.activityID != 0 && watchID != 0 && ep.activityID < watchID)) {
 			d := ep.date
 			firstWatch = &d
 			watchID = ep.activityID
 		}
 
-		card := mediaCard(record, nil)
+		card := record.card
 		for i := range result.Statuses {
 			group := &result.Statuses[i]
 			include := statuses[group.Status]
@@ -231,11 +256,19 @@ func sortCardsByTitle(cards []MediaCard) {
 
 // Sparse days keep lifetime payloads bounded; the UI fills empty calendar dates.
 func buildCalendar(records []*watchedRecord) []DailyStat {
+	media := make([]datedMediaRecord, 0, len(records))
+	for _, r := range records {
+		media = append(media, datedMediaRecord{key: recordKey(r), card: mediaCard(r, nil), dates: r.plays})
+	}
+	return buildMediaCalendar(media)
+}
+
+func buildMediaCalendar(records []datedMediaRecord) []DailyStat {
 	days := map[string]*DailyStat{}
 	indexes := map[string]map[string]int{}
 	for _, record := range records {
-		for _, d := range record.plays {
-			day, key := d.Format("2006-01-02"), recordKey(record)
+		for _, d := range record.dates {
+			day, key := d.UTC().Format("2006-01-02"), record.key
 			if days[day] == nil {
 				days[day] = &DailyStat{Date: day, Items: []MediaCard{}}
 				indexes[day] = map[string]int{}
@@ -244,7 +277,7 @@ func buildCalendar(records []*watchedRecord) []DailyStat {
 			if index, ok := indexes[day][key]; ok {
 				days[day].Items[index].Plays++
 			} else {
-				card := mediaCard(record, nil)
+				card := record.card
 				card.Date = day
 				card.Plays = 1
 				indexes[day][key] = len(days[day].Items)

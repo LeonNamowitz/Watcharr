@@ -27,6 +27,12 @@
 		waitingCount?: number;
 	} = $props();
 	const library = $derived(data.library);
+	const isGame = $derived(data.media === "game");
+	const titleUnit = $derived(isGame ? "games" : "titles");
+	const conversion = $derived(isGame ? "completed" : "watched");
+	const convertedFromList = $derived(
+		isGame ? "first completed from backlog" : "first watched from watchlist",
+	);
 	const lifetime = $derived(data.scope === "lifetime");
 	const statuses = $derived(library?.statuses.filter((s) => s.count > 0) ?? []);
 	const statusMaximum = $derived(Math.max(1, ...statuses.map((s) => s.count)));
@@ -79,7 +85,7 @@
 			(["planned", "watched"] as const).flatMap((kind) => {
 				const items = kind === "planned" ? point.planned : point.watched;
 				if (!items.length) return [];
-				const label = `${kind === "planned" ? "First planned" : "First watched from watchlist"} · ${point.period}`;
+				const label = `${kind === "planned" ? "First planned" : `First ${conversion} from ${isGame ? "backlog" : "watchlist"}`} · ${point.period}`;
 				return [
 					{
 						label,
@@ -87,10 +93,7 @@
 						titleCount: items.length,
 						averageRating: bucketRating(items),
 						items,
-						detail:
-							kind === "planned"
-								? "first planned"
-								: "first watched from watchlist",
+						detail: kind === "planned" ? "first planned" : convertedFromList,
 					},
 				];
 			}),
@@ -135,7 +138,7 @@
 			<span
 				>{lifetime
 					? "Current saved statuses"
-					: `Titles entering each status in ${data.year}`}</span
+					: `${isGame ? "Games" : "Titles"} entering each status in ${data.year}`}</span
 			>
 		</div>
 		<div
@@ -189,7 +192,7 @@
 							period: lifetime ? "Current library" : String(data.year),
 						});
 					}}
-					aria-label={`Browse ${group.count} titles: ${label}`}
+					aria-label={`Browse ${group.count} ${titleUnit}: ${label}`}
 				>
 					<span class="status-label">{label}</span>
 					<span class="track"
@@ -202,11 +205,12 @@
 				</button>
 			{:else}<p class="note">
 					No {lifetime
-						? "saved titles"
+						? `saved ${titleUnit}`
 						: "recorded status changes in this year"}.
 				</p>{/each}
 		</div>
 		<StatsBrowseList
+			valueUnit={titleUnit}
 			points={statusPoints}
 			{settings}
 			onSelect={(point) =>
@@ -222,18 +226,20 @@
 	</section>
 	<section class="library-section">
 		<div class="section-heading">
-			<h2 class="norm">Watchlist momentum</h2>
+			<h2 class="norm">{isGame ? "Backlog" : "Watchlist"} momentum</h2>
 			<span
-				>{lifetime ? "Through the years" : data.year} · first-time titles</span
+				>{lifetime ? "Through the years" : data.year} · first-time {titleUnit}</span
 			>
 		</div>
 		<div class="totals">
 			<span><strong>{library.planned.toLocaleString()}</strong> added</span
-			><span><strong>{library.watched.toLocaleString()}</strong> watched</span>
+			><span
+				><strong>{library.watched.toLocaleString()}</strong> {conversion}</span
+			>
 		</div>
 		<div class="legend">
 			<span><i class="planned"></i>First added</span><span
-				><i class="watched"></i>First watched</span
+				><i class="watched"></i>First {conversion}</span
 			>
 		</div>
 		{#if library.planned || library.watched}
@@ -241,7 +247,7 @@
 				class="momentum"
 				class:annual={lifetime}
 				role="group"
-				aria-label="First planned versus first watched"
+				aria-label={`First planned versus first ${conversion}`}
 			>
 				{#each library.momentum as point (point.period)}
 					<div class="momentum-period">
@@ -250,7 +256,7 @@
 								{@const items =
 									kind === "planned" ? point.planned : point.watched}
 								{@const detail = kind === "planned" ? "" : ""}
-								{@const label = `${kind === "planned" ? "First planned" : "First watched"} · ${point.period}`}
+								{@const label = `${kind === "planned" ? "First planned" : `First ${conversion}`} · ${point.period}`}
 								<button
 									class="plain momentum-bar"
 									class:planned={kind === "planned"}
@@ -268,7 +274,7 @@
 									aria-describedby={hoveredTooltip?.label === label
 										? "stats-library-tooltip"
 										: undefined}
-									aria-label={`Browse ${items.length} titles: ${label}`}
+									aria-label={`Browse ${items.length} ${titleUnit}: ${label}`}
 									onclick={() => {
 										hideTooltip();
 										onSelect({
@@ -288,6 +294,7 @@
 				{/each}
 			</div>
 			<StatsBrowseList
+				valueUnit={titleUnit}
 				points={momentumBrowsePoints}
 				{settings}
 				onSelect={(point) =>
@@ -299,13 +306,19 @@
 					})}
 			/>
 		{:else}<p class="note">
-				No qualifying watchlist additions or first watches in this period.
+				No qualifying {isGame ? "backlog" : "watchlist"} additions or first {isGame
+					? "completions"
+					: "watches"} in this period.
 			</p>{/if}
 	</section>
 	<section class="library-section">
 		<div class="section-heading">
-			<h2 class="norm">Time on your watchlist</h2>
-			<span>Time before the first recorded watch</span>
+			<h2 class="norm">
+				{isGame ? "Time in your backlog" : "Time on your watchlist"}
+			</h2>
+			<span
+				>Time before the first recorded {isGame ? "completion" : "watch"}</span
+			>
 		</div>
 		<div class="totals">
 			<span
@@ -315,14 +328,18 @@
 						: library.waiting.medianDays.toLocaleString()}</strong
 				> median days waiting</span
 			><span
-				><strong>{library.watched.toLocaleString()}</strong> titles previously planned</span
+				><strong>{library.watched.toLocaleString()}</strong>
+				{titleUnit} previously planned</span
 			>
 		</div>
 		{#if library.waiting.excluded}<p class="note">
-				{library.waiting.excluded.toLocaleString()} first-watched titles excluded.
+				{library.waiting.excluded.toLocaleString()} first-{conversion}
+				{titleUnit} excluded.
 			</p>{/if}
 		<StatsChart
-			title="Watchlist waiting time"
+			title={`${isGame ? "Backlog" : "Watchlist"} waiting time`}
+			valueUnit={titleUnit}
+			{titleUnit}
 			points={library.waiting.buckets.map((bucket) => ({
 				label: bucket.label,
 				value: bucket.items.length,
@@ -335,7 +352,7 @@
 				onSelect({
 					label: `Waited ${point.label.toLowerCase()}`,
 					items: point.items ?? [],
-					description: "first watched from watchlist",
+					description: convertedFromList,
 				})}
 		/>
 		{#if library.waiting.longest.length}
@@ -348,7 +365,7 @@
 				{settings}
 				leftAligned
 				detail={(c) =>
-					`${waitingDays.get(`${c.type}:${c.id}`)} days before first watch`}
+					`${waitingDays.get(`${c.type}:${c.id}`)} days before first ${isGame ? "completion" : "watch"}`}
 			/>
 			<StatsExpansion
 				count={waitingCount}
@@ -361,6 +378,7 @@
 {#if hoveredTooltip}
 	<StatsTooltip
 		label={hoveredTooltip.label}
+		{titleUnit}
 		titleCount={hoveredTooltip.titleCount}
 		averageRating={hoveredTooltip.averageRating}
 		detail={hoveredTooltip.detail}

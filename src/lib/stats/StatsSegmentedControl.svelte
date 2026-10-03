@@ -51,6 +51,7 @@
 	}
 	.segmented > :global(button:hover) {
 		background: color-mix(in srgb, #29acf4 12%, transparent);
+		color: var(--stats-accent, #29acf4);
 	}
 	.segmented > :global(button:focus-visible) {
 		outline: 2px solid var(--stats-accent);

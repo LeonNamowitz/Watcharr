@@ -158,6 +158,7 @@ export interface ChartPoint {
 }
 
 export interface StatsGames {
+	calendarCompletions?: StatsDay[];
 	platforms: StatsBar[];
 	modes: StatsBar[];
 	themes: StatsBar[];

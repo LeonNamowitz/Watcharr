@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { StatsDay, StatsResponse, StatsSelection } from "./types";
+	import StatsSegmentedControl from "./StatsSegmentedControl.svelte";
 	import StatsTooltip from "./StatsTooltip.svelte";
 	import { averageRating, meanRating, statsUnitLabel } from "./format";
 	import type { RatingSettings } from "@/lib/rating/helpers";
@@ -9,16 +10,29 @@
 		settings,
 		onSelect,
 		calendarYear = $bindable<number | undefined>(),
+		activityKind = $bindable<"progress" | "completions">("progress"),
 	}: {
 		data: StatsResponse;
 		settings: RatingSettings;
 		onSelect: (selection: StatsSelection) => void;
 		calendarYear?: number;
+		activityKind?: "progress" | "completions";
 	} = $props();
+	const isGame = $derived(data.media === "game");
+	const calendarDays = $derived(
+		isGame && activityKind === "completions"
+			? (data.games?.calendarCompletions ?? [])
+			: (data.calendar ?? []),
+	);
 	const lifetime = $derived(data.scope === "lifetime");
 	const years = $derived(
 		[
-			...new Set((data.calendar ?? []).map((d) => Number(d.date.slice(0, 4)))),
+			...new Set(
+				[
+					...(data.calendar ?? []),
+					...(isGame ? (data.games?.calendarCompletions ?? []) : []),
+				].map((d) => Number(d.date.slice(0, 4))),
+			),
 		].sort((a, b) => b - a),
 	);
 	const year = $derived(
@@ -29,10 +43,24 @@
 			: (data.year ?? new Date().getUTCFullYear()),
 	);
 	const days = $derived(
-		(data.calendar ?? []).filter((d) => Number(d.date.slice(0, 4)) === year),
+		calendarDays.filter((d) => Number(d.date.slice(0, 4)) === year),
 	);
 	const byDate = $derived(new Map(days.map((d) => [d.date, d])));
-	const unit = $derived(data.media === "tv" ? "episodes" : "watches");
+	const unit = $derived(
+		isGame
+			? activityKind === "progress"
+				? "progress events"
+				: "completions"
+			: data.media === "tv"
+				? "episodes"
+				: "watches",
+	);
+	$effect(() => {
+		// Metric and year changes invalidate any previously displayed day tooltip.
+		void activityKind;
+		void year;
+		hoveredDay = undefined;
+	});
 	type CalendarTooltip = {
 		label: string;
 		plays: number;
@@ -109,8 +137,14 @@
 			onSelect({
 				label: prettyDate(date),
 				items: day.items,
-				description: data.media === "tv" ? "episodes watched" : "watched",
-				period: `${day.plays} ${unit}`,
+				description: isGame
+					? activityKind === "progress"
+						? "with recorded progress"
+						: "completed"
+					: data.media === "tv"
+						? "episodes watched"
+						: "watched",
+				period: countLabel(day.plays),
 			});
 	}
 	function showTooltip(day: StatsDay, event: PointerEvent | FocusEvent) {
@@ -126,7 +160,7 @@
 				meanRating(day.items.map((item) => item.rating ?? 0)),
 				settings,
 			),
-			detail: `${day.items.length} unique ${day.items.length === 1 ? "title" : "titles"}`,
+			detail: `${day.items.length} unique ${isGame ? (day.items.length === 1 ? "game" : "games") : day.items.length === 1 ? "title" : "titles"}`,
 		};
 	}
 	function hideTooltip() {
@@ -136,7 +170,21 @@
 
 <section class="calendar-section">
 	<div class="section-heading">
-		<h2 class="norm">Viewing calendar</h2>
+		<h2 class="norm">{isGame ? "Gaming" : "Viewing"} calendar</h2>
+		{#if isGame}
+			<StatsSegmentedControl label="Gaming calendar metric">
+				<button
+					class:active={activityKind === "progress"}
+					aria-pressed={activityKind === "progress"}
+					onclick={() => (activityKind = "progress")}>Progress</button
+				>
+				<button
+					class:active={activityKind === "completions"}
+					aria-pressed={activityKind === "completions"}
+					onclick={() => (activityKind = "completions")}>Completions</button
+				>
+			</StatsSegmentedControl>
+		{/if}
 		{#if lifetime && years.length}<label
 				>Calendar year <select
 					aria-label="Calendar year"
@@ -147,6 +195,7 @@
 				></label
 			>{:else}<span>{year} · dates in UTC</span>{/if}
 	</div>
+
 	<div class="summary">
 		<span><strong>{summary.total.toLocaleString()}</strong> {unit}</span>
 		<span><strong>{days.length}</strong> active days</span>
@@ -191,7 +240,7 @@
 							class:level-two={count === 2}
 							class:level-three={count >= 3}
 							disabled={!count}
-							aria-label={`${prettyDate(date)}: ${countLabel(count)}${count ? ". Browse recorded titles" : ""}`}
+							aria-label={`${prettyDate(date)}: ${countLabel(count)}${count ? `. Browse recorded ${isGame ? "games" : "titles"}` : ""}`}
 							aria-describedby={hoveredDay?.label === prettyDate(date)
 								? "stats-calendar-tooltip"
 								: undefined}
@@ -221,9 +270,13 @@
 		{/each}
 	</div>
 	<p class="note">
-		{data.media === "tv"
-			? "Completed episodes"
-			: "Recorded movie plays, including rewatches"}. Select a highlighted day
+		{isGame
+			? activityKind === "progress"
+				? "Recorded progress, once per game per UTC day"
+				: "Recorded completions, including replays"
+			: data.media === "tv"
+				? "Completed episodes"
+				: "Recorded movie plays, including rewatches"}. Select a highlighted day
 		to browse. Streaks are measured within the displayed year.
 	</p>
 </section>

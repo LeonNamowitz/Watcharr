@@ -56,7 +56,7 @@ func TestLibraryStatusActivityIsYearlyDistinctAndIndependentOfPlays(t *testing.T
 	if lifetime[entity.WATCHING] != 1 || lifetime[entity.DROPPED] != 0 || lifetime[entity.PLANNED] != 0 {
 		t.Fatalf("lifetime must use current saved status: %v", lifetime)
 	}
-	activities := sortedActivities(r)
+	activities := sortedActivities(r.watched.Activity)
 	if activities[0].ID != 8 || activities[1].ID != 1 {
 		t.Fatalf("custom dates must determine event ordering: %#v", activities)
 	}

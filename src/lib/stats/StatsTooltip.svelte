@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { statsUnitLabel } from "./format";
+	import { statsUnitLabel, type StatsUnit } from "./format";
 	let {
 		label,
 		titleCount,
@@ -11,7 +11,7 @@
 	}: {
 		label: string;
 		titleCount: number;
-		titleUnit?: "titles" | "games" | "watches" | "episodes";
+		titleUnit?: StatsUnit;
 		averageRating: string;
 		detail?: string;
 		id?: string;

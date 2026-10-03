@@ -14,6 +14,7 @@ import (
 )
 
 type GameStats struct {
+	CalendarCompletions  []DailyStat   `json:"calendarCompletions"`
 	Platforms            []BarStat     `json:"platforms"`
 	Modes                []BarStat     `json:"modes"`
 	Themes               []BarStat     `json:"themes"`
@@ -162,6 +163,20 @@ func (s *Service) getGameStats(userID uint, q Query) (StatsResponse, error) {
 			scoped = append(scoped, r)
 		}
 	}
+	// These sections use cached cards from every saved game, before enrichment.
+	media := make([]savedMediaRecord, 0, len(all))
+	progress, completions := []datedMediaRecord{}, []datedMediaRecord{}
+	for _, r := range all {
+		media = append(media, savedMediaRecord{watched: r.watched, card: r.card})
+		progress = append(progress, datedMediaRecord{key: gameKey(r), card: r.card, dates: gameDatesInScope(r.progress, q)})
+		completions = append(completions, datedMediaRecord{key: gameKey(r), card: r.card, dates: gameDatesInScope(r.completions, q)})
+	}
+	library := buildMediaLibrary(media, q)
+	for i := range library.Statuses {
+		if library.Statuses[i].Status == entity.WATCHING {
+			library.Statuses[i].Label = "Playing"
+		}
+	}
 	// Enrich only cards needed by this view; history uses saved metadata.
 	enrich := append(append(append([]*gameRecord{}, scoped...), backlog...), additions...)
 	failures := s.enrichGames(enrich)
@@ -174,6 +189,7 @@ func (s *Service) getGameStats(userID uint, q Query) (StatsResponse, error) {
 		scoped[i] = &clone
 	}
 	response := StatsResponse{Scope: q.Scope, Year: q.Year, Media: "game", Owner: owner.GetSafe(), ReviewsVisible: !q.HideReviews,
+		Library: &library, Calendar: buildMediaCalendar(progress),
 		History: history, Posters: gameCards(scoped), Watchlist: gameBacklogPicks(backlog, userID, q),
 		Genres: gameBars(scoped, "genres"), Countries: []BarStat{}, Languages: []BarStat{}, Studios: []PersonStat{},
 		People: PeopleStats{Cast: []PersonStat{}, Directors: []PersonStat{}}, Crew: []CrewDepartment{}, Episodes: []MediaCard{},
@@ -203,7 +219,7 @@ func (s *Service) getGameStats(userID uint, q Query) (StatsResponse, error) {
 	response.Milestones = gameMilestones(scoped)
 	response.Breakdown = gameBreakdown(scoped, additions, q)
 	response.HighsLows, response.RatingDifferences = gameHighsLows(scoped)
-	games := &GameStats{Platforms: gameBars(scoped, "platforms"), Modes: gameBars(scoped, "modes"),
+	games := &GameStats{CalendarCompletions: buildMediaCalendar(completions), Platforms: gameBars(scoped, "platforms"), Modes: gameBars(scoped, "modes"),
 		Themes: gameBars(scoped, "themes"), Perspectives: gameBars(scoped, "perspectives"),
 		Developers: gameBars(scoped, "developers"), Publishers: gameBars(scoped, "publishers"),
 		Statuses: []PieStat{}, Completion: []PieStat{}, Completions: gameActivity(scoped, true, q)}

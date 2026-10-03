@@ -267,6 +267,7 @@ func TestGameMetadataFallbackDeduplicationAndReadOnly(t *testing.T) {
 	db.Create(&owner)
 	one := createStatsGame(t, db, owner.ID, 1, entity.WATCHING, 9, nil)
 	createStatsGame(t, db, owner.ID, 2, entity.HOLD, 0, nil)
+	addGameStatsActivity(t, db, one, entity.ADDED_WATCHED, `WATCHING`, "2024-01-01", false)
 	provider := &gameStatsProvider{data: map[int]igdb.GameStatsDetails{1: {ID: 1, Rating: 75, RatingCount: 100, Genres: []igdb.StatsCategory{{Name: "RPG"}, {Name: "RPG"}}, Themes: []igdb.StatsCategory{{Name: "Fantasy"}}, Perspectives: []igdb.StatsCategory{{Name: "First person"}}}}, err: errors.New("one batch failed")}
 	details := provider.data[1]
 	if err := json.Unmarshal([]byte(`{"involved_companies":[{"company":{"id":7,"name":"Studio"},"developer":true,"publisher":true},{"company":{"id":7,"name":"Studio"},"developer":true}]}`), &details); err != nil {
@@ -282,6 +283,9 @@ func TestGameMetadataFallbackDeduplicationAndReadOnly(t *testing.T) {
 	}
 	if data.HighsLows.HighestCommunityRated.ID != 2 || data.Posters[0].CommunityRating != 7.5 {
 		t.Fatal("local scores must survive enrichment failure")
+	}
+	if data.Library.Statuses[1].Items[0].CommunityRating != 8 || len(data.Calendar) != 1 || len(data.Calendar[0].Items) != 2 {
+		t.Fatal("library and calendars must use cached metadata, including failed titles")
 	}
 	var persisted entity.Game
 	db.First(&persisted, *one.GameID)
@@ -319,8 +323,9 @@ func TestPublicGameStatsPrivacyOwnerIsolationAndHiddenReviews(t *testing.T) {
 		t.Fatalf("owner/review isolation: %s", r.Body.String())
 	}
 	r = request(t, engine, base+"&year=2025")
+	data = StatsResponse{}
 	json.Unmarshal(r.Body.Bytes(), &data)
-	if data.Summary.Titles != 0 {
+	if data.Summary.Titles != 0 || len(data.Calendar) != 0 || len(data.Games.CalendarCompletions) != 0 || data.Library.Watched != 0 || data.Library.Waiting.Excluded != 0 {
 		t.Fatal("foreign owner activity leaked")
 	}
 	auth, err := jwt.NewWithClaims(jwt.SigningMethodHS256, entity.TokenClaims{UserID: viewer.ID, RegisteredClaims: jwt.RegisteredClaims{IssuedAt: jwt.NewNumericDate(time.Now()), ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour))}}).SignedString([]byte("test"))
@@ -340,7 +345,7 @@ func TestPublicGameStatsPrivacyOwnerIsolationAndHiddenReviews(t *testing.T) {
 		if strings.Contains(path, "public") {
 			expectedID = 41
 		}
-		if rec.Code != http.StatusOK || len(response.Posters) != 1 || response.Posters[0].ID != expectedID {
+		if rec.Code != http.StatusOK || len(response.Posters) != 1 || response.Posters[0].ID != expectedID || len(response.Calendar) != 1 || response.Calendar[0].Items[0].ID != expectedID {
 			t.Fatalf("authenticated owner isolation: %s", rec.Body.String())
 		}
 	}
