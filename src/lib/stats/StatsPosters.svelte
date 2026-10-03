@@ -10,6 +10,8 @@
 		owner,
 		settings,
 		tiny = false,
+		wall = false,
+		fivePerRow = false,
 		comparison = false,
 		detail,
 	}: {
@@ -17,6 +19,8 @@
 		owner?: { id: string; username: string };
 		settings?: RatingSettings;
 		tiny?: boolean;
+		wall?: boolean;
+		fivePerRow?: boolean;
 		comparison?: boolean;
 		detail?: (card: StatsMediaCard) => string;
 	} = $props();
@@ -33,7 +37,7 @@
 	}
 </script>
 
-<div class="posters" class:tiny>
+<div class="posters" class:tiny class:wall class:five-per-row={fivePerRow}>
 	{#each items as c (`${c.type}:${c.id}`)}
 		<a
 			href={href(c)}
@@ -116,7 +120,7 @@
 		overflow-wrap: anywhere;
 	}
 	.meta {
-		font-size: 13px;
+		font-size: 14px;
 		color: var(--stats-accent, #29acf4);
 		overflow-wrap: anywhere;
 	}
@@ -127,6 +131,14 @@
 	.tiny .image {
 		border-radius: 3px;
 	}
+	.five-per-row {
+		grid-template-columns: repeat(5, minmax(0, 1fr));
+		gap: 8px;
+	}
+	.wall {
+		grid-template-columns: repeat(auto-fill, minmax(min(70px, 100%), 72px));
+		gap: 6px;
+	}
 	.empty {
 		font-size: 13px;
 		opacity: 0.6;
@@ -136,7 +148,10 @@
 		display: flex;
 		align-items: center;
 		gap: 7px;
-		font-size: 14px;
+		font-size: 16px;
+	}
+	.comparison b {
+		font-size: 17px;
 	}
 	.comparison b:first-child {
 		color: var(--stats-accent);

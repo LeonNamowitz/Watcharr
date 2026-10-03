@@ -1,4 +1,5 @@
 <script lang="ts">
+	import StatsExpansion from "./StatsExpansion.svelte";
 	import type { StatsPerson } from "./types";
 	import { type RatingSettings } from "@/lib/rating/helpers";
 	import { averageRating } from "./format";
@@ -60,11 +61,11 @@
 				No contributors with two watched titles yet.
 			</p>{/each}
 	</div>
-	{#if count < sorted.length}<button
-			class="plain more"
-			onclick={() => (count += 5)}
-			>Show more <span>({sorted.length - count} remaining)</span></button
-		>{/if}
+	<StatsExpansion
+		{count}
+		total={sorted.length}
+		onChange={(value) => (count = value)}
+	/>
 </div>
 
 <style>
@@ -75,7 +76,7 @@
 	.people {
 		display: grid;
 		grid-template-columns: repeat(5, minmax(0, 1fr));
-		gap: 18px 12px;
+		gap: 14px 8px;
 	}
 	.person {
 		min-width: 0;
@@ -88,7 +89,8 @@
 		text-decoration: none;
 	}
 	.portrait {
-		width: min(108px, 100%);
+		position: relative;
+		width: min(144px, 100%);
 		aspect-ratio: 1;
 		border-radius: 50%;
 		overflow: hidden;
@@ -99,20 +101,31 @@
 		display: grid;
 		place-items: center;
 		font-size: 28px;
-		color: #6495ed;
+		color: #51ad79;
 	}
 	.portrait img {
+		position: absolute;
+		inset: 0;
+		display: block;
 		width: 100%;
 		height: 100%;
 		object-fit: cover;
-		object-position: 50% 30%;
+		/* Vertical crop: 0% keeps the source top and moves the face lower.
+           Increase the second percentage to move the photo up. */
+		object-position: 50% 0%;
 	}
 	.portrait.studio {
 		border-radius: 8px;
+		aspect-ratio: 3 / 2;
+		background: #fff;
+		border-color: #fff;
 	}
 	.studio img {
 		object-fit: contain;
-		padding: 8px;
+		padding: 12px;
+		filter: none;
+		opacity: 1;
+		mix-blend-mode: normal;
 	}
 	strong {
 		font-size: 14px;
@@ -125,14 +138,6 @@
 		font-size: 13px;
 		color: var(--stats-muted);
 		margin-top: 4px;
-	}
-	.more {
-		margin-top: 20px;
-		font-size: 14px;
-		color: var(--stats-accent, #29acf4);
-	}
-	.more span {
-		opacity: 0.7;
 	}
 	.empty {
 		grid-column: 1/-1;
@@ -151,9 +156,6 @@
 		outline: 2px solid var(--stats-accent);
 		outline-offset: 4px;
 		border-radius: 8px;
-	}
-	.more:hover {
-		text-decoration: underline;
 	}
 	@media (min-width: 521px) and (max-width: 900px) {
 		.people {

@@ -1,24 +1,88 @@
 <script lang="ts">
+	import StatsTooltip from "./StatsTooltip.svelte";
+	import StatsExpansion from "./StatsExpansion.svelte";
 	import { BarChart } from "layerchart/svg";
-	import { averageRating } from "./format";
+	import { averageRating, decimal } from "./format";
 	import type { RatingSettings } from "@/lib/rating/helpers";
+	import { RatingSystem } from "@/types";
 	import type { StatsBar } from "./types";
 	let {
 		title,
 		items,
 		color = "#29acf4",
+		sortBy = "count",
 		settings,
 		onSelect,
 	}: {
 		title: string;
 		items: StatsBar[];
 		color?: string;
+		sortBy?: "count" | "rating";
 		settings: RatingSettings;
 		onSelect: (item: StatsBar) => void;
 	} = $props();
 	let count = $state(5);
-	const maximum = $derived(Math.max(1, ...items.map((item) => item.count)));
+	let hovered = $state<StatsBar>();
+	let tooltipAnchor: HTMLElement | undefined;
+	let tooltipLeft = $state(0);
+	let tooltipTop = $state(0);
+	function showTooltip(item: StatsBar, element: EventTarget | null) {
+		if (!(element instanceof HTMLElement)) return;
+		tooltipAnchor = element;
+		const rect = element.getBoundingClientRect();
+		tooltipLeft = Math.max(16, Math.min(rect.left, window.innerWidth - 296));
+		tooltipTop =
+			rect.bottom + 8 + 116 < window.innerHeight
+				? rect.bottom + 8
+				: Math.max(16, rect.top - 116);
+		hovered = item;
+	}
+	function repositionTooltip() {
+		if (hovered && tooltipAnchor) {
+			const rect = tooltipAnchor.getBoundingClientRect();
+			if (rect.bottom < 0 || rect.top > window.innerHeight) hideTooltip();
+			else showTooltip(hovered, tooltipAnchor);
+		}
+	}
+	function hideTooltip() {
+		tooltipAnchor = undefined;
+		hovered = undefined;
+	}
+
+	$effect(() => {
+		if (sortBy) count = 5;
+	});
+	const ranked = $derived(
+		[...items].sort((a, b) =>
+			sortBy === "rating"
+				? b.averageRating - a.averageRating ||
+					b.count - a.count ||
+					a.label.localeCompare(b.label)
+				: b.count - a.count ||
+					b.averageRating - a.averageRating ||
+					a.label.localeCompare(b.label),
+		),
+	);
+	const ratingScale = $derived(
+		settings.ratingSystem === RatingSystem.OutOf5
+			? 5
+			: settings.ratingSystem === RatingSystem.OutOf100
+				? 100
+				: 10,
+	);
+	const maximum = $derived(
+		sortBy === "rating"
+			? ratingScale
+			: Math.max(1, ...items.map((item) => item.count)),
+	);
+	function ratingValue(value: number) {
+		if (settings.ratingSystem === RatingSystem.OutOf5) return value / 2;
+		if (settings.ratingSystem === RatingSystem.OutOf100) return value * 10;
+		return value;
+	}
 </script>
+
+<svelte:window onscroll={repositionTooltip} onresize={repositionTooltip} />
 
 <div
 	class="ranking"
@@ -28,21 +92,43 @@
 >
 	<h3 class="norm">{title}</h3>
 	<div class="rows">
-		{#each items.slice(0, count) as item (item.label)}
+		{#each ranked.slice(0, count) as item (item.label)}
+			{@const barValue =
+				sortBy === "rating" ? ratingValue(item.averageRating) : item.count}
 			<button
 				class="plain row"
-				onclick={() => onSelect(item)}
-				aria-label={`${item.label}: ${item.count} watched titles. Explore titles.`}
-				title={`${item.label} · ${averageRating(item.averageRating, settings)} average`}
+				onclick={() => {
+					hideTooltip();
+					onSelect(item);
+				}}
+				onpointerenter={(event) => showTooltip(item, event.currentTarget)}
+				onpointermove={(event) => showTooltip(item, event.currentTarget)}
+				onpointerleave={hideTooltip}
+				onfocus={(event) => showTooltip(item, event.currentTarget)}
+				onblur={hideTooltip}
+				onkeydown={(event) => {
+					if (event.key === "Escape") hideTooltip();
+				}}
+				aria-describedby={hovered === item
+					? `stats-${title}-tooltip`
+					: undefined}
+				aria-label={`${item.label}: ${item.count} watched titles, ${averageRating(item.averageRating, settings)} average. Bar shows ${sortBy === "rating" ? "rating" : "title count"}. Explore titles.`}
 			>
 				<span class="label"
-					><span>{item.label}</span><strong
-						>{item.count.toLocaleString()}</strong
+					><span>{item.label}</span><span class="values"
+						><strong
+							>{sortBy === "rating"
+								? decimal(ratingValue(item.averageRating)).replace(
+										/([.,])0$/,
+										"",
+									)
+								: item.count.toLocaleString()}</strong
+						></span
 					></span
 				>
 				<div class="track" aria-hidden="true">
 					<BarChart
-						data={[{ label: item.label, value: item.count }]}
+						data={[{ label: item.label, value: barValue }]}
 						orientation="horizontal"
 						x="value"
 						y="label"
@@ -68,15 +154,23 @@
 			</button>
 		{:else}<p class="empty">No recorded metadata yet.</p>{/each}
 	</div>
-	{#if items.length}<div class="scale" aria-hidden="true">
-			<span>0</span><span>{maximum.toLocaleString()} titles</span>
-		</div>{/if}
-	{#if count < items.length}<button
-			class="plain more"
-			onclick={() => (count += 5)}
-			>Show more <span>({items.length - count} remaining)</span></button
-		>{/if}
+
+	<StatsExpansion
+		{count}
+		total={ranked.length}
+		onChange={(value) => (count = value)}
+	/>
 </div>
+
+{#if hovered}
+	<StatsTooltip
+		label={hovered.label}
+		value={`${hovered.count.toLocaleString()} titles`}
+		detail={`Average personal rating: ${averageRating(hovered.averageRating, settings)}`}
+		id={`stats-${title}-tooltip`}
+		position={{ left: tooltipLeft, top: tooltipTop }}
+	/>
+{/if}
 
 <style>
 	.ranking {
@@ -108,7 +202,7 @@
 		font-size: 14px;
 		line-height: 1.3;
 	}
-	.label > span {
+	.label > span:first-child {
 		min-width: 0;
 		white-space: nowrap;
 		overflow: hidden;
@@ -118,6 +212,13 @@
 		flex: none;
 		font-size: 14px;
 		color: var(--stats-accent);
+	}
+	.values {
+		display: flex;
+		align-items: baseline;
+		justify-content: end;
+		gap: 8px;
+		flex: none;
 	}
 	.track {
 		height: 10px;
@@ -135,22 +236,6 @@
 		outline: 2px solid var(--stats-accent);
 		outline-offset: 4px;
 	}
-	.scale {
-		display: flex;
-		justify-content: space-between;
-		font-size: 12px;
-		color: var(--stats-muted);
-		margin-top: 8px;
-	}
-	.more {
-		margin-top: 16px;
-		font-size: 14px;
-		color: var(--stats-accent);
-	}
-	.more:hover {
-		text-decoration: underline;
-	}
-	.more span,
 	.empty {
 		color: var(--stats-muted);
 	}

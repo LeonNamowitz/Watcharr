@@ -1,4 +1,5 @@
 <script lang="ts">
+	import StatsExpansion from "./StatsExpansion.svelte";
 	import { resolve } from "$app/paths";
 	import { onMount } from "svelte";
 	import StatsPosters from "./StatsPosters.svelte";
@@ -11,6 +12,7 @@
 		owner,
 		settings,
 		personId,
+		description = "watched",
 		onClose,
 	}: {
 		label: string;
@@ -19,6 +21,7 @@
 		owner?: { id: string; username: string };
 		settings: RatingSettings;
 		personId?: number;
+		description?: string;
 		onClose: () => void;
 	} = $props();
 	let dialog: HTMLDialogElement;
@@ -51,9 +54,9 @@
 	<header>
 		<div>
 			<p>
-				{period} · {items.length.toLocaleString()} watched {items.length === 1
-					? "title"
-					: "titles"}
+				{period} · {items.length.toLocaleString()}
+				{items.length === 1 ? "title" : "titles"}
+				{description}
 			</p>
 			<h2 class="norm" id="stats-dialog-title">{label}</h2>
 		</div>
@@ -65,11 +68,11 @@
 	</header>
 	<div class="body">
 		<StatsPosters items={items.slice(0, count)} {owner} {settings} />
-		{#if count < items.length}<button
-				class="plain more"
-				onclick={() => (count += 5)}
-				>Show more ({items.length - count} remaining)</button
-			>{/if}
+		<StatsExpansion
+			{count}
+			total={items.length}
+			onChange={(value) => (count = value)}
+		/>
 	</div>
 	{#if personId}<footer>
 			<a
@@ -138,13 +141,9 @@
 	.body {
 		padding: 22px;
 	}
-	.more,
 	a {
 		color: var(--stats-accent);
 		font-size: 14px;
-	}
-	.more {
-		margin-top: 24px;
 	}
 	footer {
 		padding: 16px 22px;
@@ -154,7 +153,6 @@
 		background: var(--stats-border);
 		color: var(--stats-accent);
 	}
-	.more:hover,
 	a:hover {
 		text-decoration: underline;
 	}

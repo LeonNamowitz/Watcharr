@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { setContext } from "svelte";
+	import StatsExpansion from "./StatsExpansion.svelte";
 	import { resolve } from "$app/paths";
 	import StatsChart from "./StatsChart.svelte";
 	import StatsRankedChart from "./StatsRankedChart.svelte";
@@ -13,7 +13,6 @@
 		StatsMediaCard,
 		StatsPie,
 		ChartPoint,
-		StatsChartSelection,
 	} from "./types";
 	let {
 		data,
@@ -24,13 +23,10 @@
 		publicOwner?: { id: string; username: string };
 		onSelectionChange: (year: string, media: "movie" | "tv") => void;
 	} = $props();
-	let selectedChart = $state<symbol>();
-	setContext<StatsChartSelection>("watcharr:stats:selection", {
-		current: () => selectedChart,
-		select: (chart) => (selectedChart = chart),
-	});
 	let highestTab = $state<"current" | "older">("current");
+	let yearlyFavoriteCount = $state(5);
 	let peopleMode = $state<"most" | "rating">("most");
+	let categorySort = $state<"count" | "rating">("count");
 	let higherCount = $state(5);
 	let lowerCount = $state(5);
 	let mostWatchedCount = $state(5);
@@ -42,9 +38,9 @@
 		label: string;
 		items: StatsMediaCard[];
 		personId?: number;
+		description?: string;
 	}>();
 	function explore(label: string, keys: string[], personId?: number) {
-		selectedChart = undefined;
 		const membership = new Set(keys);
 		selection = {
 			label,
@@ -70,6 +66,7 @@
 		ratingStep: data.owner.ratingStep,
 	});
 	const lifetime = $derived(data.scope === "lifetime");
+	const statsView = $derived(`${data.scope}:${data.year}:${data.media}`);
 	const period = $derived(lifetime ? "Lifetime" : String(data.year));
 	const mediaLabel = $derived(data.media === "movie" ? "Films" : "Shows");
 	const yearValue = $derived(lifetime ? "all" : String(data.year));
@@ -84,6 +81,35 @@
 	);
 	const higher = $derived(data.ratingDifferences.higher ?? []);
 	const lower = $derived(data.ratingDifferences.lower ?? []);
+	const watchlistTitles = $derived(data.breakdown.watchlistTitles ?? []);
+	const yearlyHighlights = $derived.by(() => {
+		const year = data.year;
+		if (!year) return [];
+		const ranked = data.posters
+			.filter(
+				(card) =>
+					(highestTab === "current"
+						? card.releaseYear === year
+						: (card.releaseYear ?? 0) > 0 && (card.releaseYear ?? 0) < year) &&
+					(card.rating ?? 0) > 0,
+			)
+			.sort(
+				(a, b) =>
+					(b.rating ?? 0) - (a.rating ?? 0) || a.title.localeCompare(b.title),
+			);
+		const aboveThreshold = ranked.filter(
+			(card) => (card.rating ?? 0) >= 8,
+		).length;
+		return ranked.slice(0, Math.max(5, aboveThreshold));
+	});
+	$effect(() => {
+		if (statsView) {
+			yearlyFavoriteCount = 5;
+			favoriteCount = 5;
+			highestTab = "current";
+			categorySort = "count";
+		}
+	});
 	const ratingPoints = $derived.by(() => {
 		const distribution = data.breakdown.ratingDistribution;
 		const rated = distribution.filter((b) => b.rating > 0 && b.count > 0);
@@ -244,7 +270,7 @@
 				<span>Movies & TV · unique titles each year</span>
 			</div>
 			<div class="timeline-grid">
-				{#each [{ key: "movies", label: "Films watched", color: "#29acf4" }, { key: "shows", label: "Shows watched", color: "#6495ed" }, { key: "averageRating", label: "Average rating", color: "#f5b85a" }, ...(data.reviewsVisible ? [{ key: "reviewed", label: "Reviewed", color: "#f47983" }] : [])] as metric (metric.key)}<div
+				{#each [{ key: "movies", label: "Films watched", color: "#29acf4" }, { key: "shows", label: "Shows watched", color: "#51ad79" }, { key: "averageRating", label: "Average rating", color: "#f5b85a" }, ...(data.reviewsVisible ? [{ key: "reviewed", label: "Reviewed", color: "#f47983" }] : [])] as metric (metric.key)}<div
 					>
 						<h3 class="norm">{metric.label}</h3>
 						<StatsChart
@@ -283,18 +309,16 @@
 							owner={publicOwner}
 							{settings}
 							tiny
+							fivePerRow
 						/>
 						{#if !decade.items.length}<p class="muted">
 								No titles rated above 8/10 in this decade.
 							</p>{/if}
-						{#if (decadeCounts[decade.decade] ?? 5) < decade.items.length}<button
-								class="plain more"
-								onclick={() =>
-									(decadeCounts[decade.decade] =
-										(decadeCounts[decade.decade] ?? 5) + 5)}
-								>Show more ({decade.items.length -
-									(decadeCounts[decade.decade] ?? 5)} remaining)</button
-							>{/if}
+						<StatsExpansion
+							count={decadeCounts[decade.decade] ?? 5}
+							total={decade.items.length}
+							onChange={(value) => (decadeCounts[decade.decade] = value)}
+						/>
 					</div>{:else}<p class="muted">
 						Watch and rate a few more titles to discover your favorite decades.
 					</p>{/each}
@@ -305,39 +329,47 @@
 	<section>
 		<div class="section-heading">
 			<h2 class="norm">Highest rated {mediaLabel.toLowerCase()}</h2>
-			{#if !lifetime}<div class="segmented small">
+			{#if !lifetime}<div class="segmented">
 					<button
 						class:active={highestTab === "current"}
 						aria-pressed={highestTab === "current"}
-						onclick={() => (highestTab = "current")}
-						>{data.year} releases</button
+						onclick={() => {
+							highestTab = "current";
+							yearlyFavoriteCount = 5;
+						}}>{data.year} releases</button
 					><button
 						class:active={highestTab === "older"}
 						aria-pressed={highestTab === "older"}
-						onclick={() => (highestTab = "older")}>Older</button
+						onclick={() => {
+							highestTab = "older";
+							yearlyFavoriteCount = 5;
+						}}>Older</button
 					>
 				</div>{:else}<span>Your favorites rated above 8/10</span>{/if}
 		</div>
 		<StatsPosters
 			items={lifetime
 				? data.highestRated.current.slice(0, favoriteCount)
-				: highestTab === "current"
-					? data.highestRated.current
-					: data.highestRated.older}
+				: yearlyHighlights.slice(0, yearlyFavoriteCount)}
 			owner={publicOwner}
 			{settings}
 		/>
-		{#if lifetime && favoriteCount < data.highestRated.current.length}<button
-				class="plain more"
-				onclick={() => (favoriteCount += 5)}
-				>Show more ({data.highestRated.current.length - favoriteCount} remaining)</button
-			>{/if}
+		{#if lifetime}<StatsExpansion
+				count={favoriteCount}
+				total={data.highestRated.current.length}
+				onChange={(value) => (favoriteCount = value)}
+			/>{/if}
+		{#if !lifetime}<StatsExpansion
+				count={yearlyFavoriteCount}
+				total={yearlyHighlights.length}
+				onChange={(value) => (yearlyFavoriteCount = value)}
+			/>{/if}
 	</section>
 
 	{#if !lifetime}<section>
 			<div class="section-heading activity-heading">
 				<h2 class="norm">Activity</h2>
-				<div class="segmented small" aria-label="Activity interval">
+				<div class="segmented" aria-label="Activity interval">
 					<button
 						class:active={activityMode === "week"}
 						aria-pressed={activityMode === "week"}
@@ -351,6 +383,10 @@
 				</div>
 			</div>
 			<div class="averages activity-averages">
+				<span
+					><strong>{data.summary.titles.toLocaleString()}</strong>
+					{data.media === "movie" ? "films" : "shows"} watched</span
+				>
 				<span
 					><strong>{decimal(data.activity.averagePerWeek)}</strong> / week</span
 				><span
@@ -386,6 +422,8 @@
 									? `${averageRating(m.averageRating, settings)} average`
 									: undefined,
 							}))}
+					showData={activityMode === "week"}
+					dataLabel="Browse weekly titles"
 				/>{/key}
 		</section>{/if}
 
@@ -416,31 +454,46 @@
 				{settings}
 				detail={(c) => `${c.plays} watches`}
 			/>
-			{#if data.milestones.mostWatched.length > mostWatchedCount}
-				<button class="plain more" onclick={() => (mostWatchedCount += 5)}>
-					Show more
-				</button>
-			{/if}
+			<StatsExpansion
+				count={mostWatchedCount}
+				total={data.milestones.mostWatched.length}
+				onChange={(value) => (mostWatchedCount = value)}
+			/>
 		{/if}
 	</section>
 
 	<section>
 		<div class="section-heading">
 			<h2 class="norm">Genres, countries & languages</h2>
-			<span>The worlds you explored</span>
+			<div class="category-controls">
+				<span>The worlds you explored · Sort by</span>
+				<div class="segmented" role="group" aria-label="Sort categories by">
+					<button
+						class:active={categorySort === "count"}
+						aria-pressed={categorySort === "count"}
+						onclick={() => (categorySort = "count")}>Count</button
+					><button
+						class:active={categorySort === "rating"}
+						aria-pressed={categorySort === "rating"}
+						onclick={() => (categorySort = "rating")}>Average rating</button
+					>
+				</div>
+			</div>
 		</div>
 		<div class="categories">
 			<StatsRankedChart
 				title="Genres"
 				items={data.genres}
 				{settings}
+				sortBy={categorySort}
 				onSelect={(item) => explore(item.label, item.titleKeys)}
 			/>
 			<StatsRankedChart
 				title="Countries"
 				items={data.countries}
-				color="#819bdc"
+				color="#51ad79"
 				{settings}
+				sortBy={categorySort}
 				onSelect={(item) => explore(item.label, item.titleKeys)}
 			/>
 			<StatsRankedChart
@@ -448,6 +501,7 @@
 				items={data.languages}
 				color="#d9aa64"
 				{settings}
+				sortBy={categorySort}
 				onSelect={(item) => explore(item.label, item.titleKeys)}
 			/>
 		</div>
@@ -458,16 +512,27 @@
 			<h2 class="norm">Breakdown</h2>
 			<span>Patterns in your viewing</span>
 		</div>
-		<div class="watchlist-summary">
+		<button
+			class="plain watchlist-summary"
+			disabled={!watchlistTitles.length}
+			aria-haspopup="dialog"
+			aria-label={`Show ${data.breakdown.watchlistAdditions} titles added to your watchlist`}
+			onclick={() =>
+				(selection = {
+					label: "Added to watchlist",
+					items: watchlistTitles,
+					description: "added to watchlist",
+				})}
+		>
 			<strong>{data.breakdown.watchlistAdditions.toLocaleString()}</strong>
-			<div>
-				<h3 class="norm">Added to watchlist</h3>
-				<p>
+			<span class="watchlist-copy">
+				<span class="watchlist-title">Added to watchlist</span>
+				<span class="watchlist-period">
 					{lifetime ? "Across your recorded history" : `In ${data.year}`} · distinct
 					titles
-				</p>
-			</div>
-		</div>
+				</span>
+			</span>
+		</button>
 		<div class="pies">
 			{#each [...(!lifetime ? [{ title: "Release years", items: data.breakdown.release }] : []), { title: "Watches & rewatches", items: data.breakdown.plays }, ...(data.reviewsVisible ? [{ title: "Reviews", items: data.breakdown.reviews ?? [] }] : [])] as group (group.title)}<div
 					class="pie"
@@ -481,7 +546,7 @@
 					/>
 					<div class="pie-legend">
 						{#each pies(group.items) as item, i (item.label)}<span
-								><i style={`background:${i === 0 ? "#29acf4" : "#6495ed"}`}
+								><i style={`background:${i === 0 ? "#29acf4" : "#f5b85a"}`}
 								></i>{item.label}<b>{item.value}</b></span
 							>{/each}
 					</div>
@@ -502,7 +567,7 @@
 	<section>
 		<div class="section-heading">
 			<h2 class="norm">People behind the stories</h2>
-			<div class="segmented small">
+			<div class="segmented">
 				<button
 					class:active={peopleMode === "most"}
 					aria-pressed={peopleMode === "most"}
@@ -569,13 +634,13 @@
 									</li>{/each}
 							</ul>
 
-							{#if remaining > 0}<button
-									class="plain more"
-									onclick={() =>
-										(crewCounts[`${department.department}:${job.job}`] =
-											(crewCounts[`${department.department}:${job.job}`] ?? 5) +
-											5)}>Show more ({remaining} remaining)</button
-								>{/if}
+							<StatsExpansion
+								count={crewCounts[`${department.department}:${job.job}`] ?? 5}
+								total={remaining +
+									(crewCounts[`${department.department}:${job.job}`] ?? 5)}
+								onChange={(value) =>
+									(crewCounts[`${department.department}:${job.job}`] = value)}
+							/>
 						</details>{/each}
 				</details>{:else}<p class="muted">
 					No recurring crew credits yet.
@@ -610,11 +675,11 @@
 			owner={publicOwner}
 			{settings}
 			comparison
-		/>{#if higherCount < higher.length}<button
-				class="plain more"
-				onclick={() => (higherCount += 5)}
-				>Show more ({higher.length - higherCount} remaining)</button
-			>{/if}
+		/><StatsExpansion
+			count={higherCount}
+			total={higher.length}
+			onChange={(value) => (higherCount = value)}
+		/>
 	</section>
 	<section>
 		<div class="section-heading">
@@ -626,11 +691,11 @@
 			owner={publicOwner}
 			{settings}
 			comparison
-		/>{#if lowerCount < lower.length}<button
-				class="plain more"
-				onclick={() => (lowerCount += 5)}
-				>Show more ({lower.length - lowerCount} remaining)</button
-			>{/if}
+		/><StatsExpansion
+			count={lowerCount}
+			total={lower.length}
+			onChange={(value) => (lowerCount = value)}
+		/>
 	</section>
 	<section>
 		<div class="section-heading">
@@ -639,7 +704,13 @@
 			</h2>
 			<span>{data.posters.length} distinct titles</span>
 		</div>
-		<StatsPosters items={data.posters} owner={publicOwner} {settings} tiny />
+		<StatsPosters
+			items={data.posters}
+			owner={publicOwner}
+			{settings}
+			tiny
+			wall
+		/>
 	</section>
 	<section>
 		<div class="section-heading">
@@ -672,11 +743,9 @@
 <style>
 	:global(:root.theme-dark) .stats-page {
 		--stats-accent: #29acf4;
-		--stats-blue: #6495ed;
 	}
 	.stats-page {
 		--stats-accent: #086fa8;
-		--stats-blue: #3a67b6;
 		max-width: 1050px;
 		width: 100%;
 		margin: 0 auto;
@@ -754,9 +823,13 @@
 		max-width: 100%;
 	}
 	.segmented button {
-		flex: 1;
-		min-width: 0;
-		padding: 7px 13px;
+		flex: 1 0 auto;
+		width: auto;
+		white-space: nowrap;
+		min-width: 80px;
+		min-height: 40px;
+		line-height: 20px;
+		padding: 9px 13px;
 		border: 0;
 		background: transparent;
 		color: inherit;
@@ -767,10 +840,6 @@
 	.segmented button.active {
 		background: #29acf425;
 		color: var(--stats-accent, #29acf4);
-	}
-	.small button {
-		font-size: 13px;
-		padding: 6px 10px;
 	}
 	section {
 		padding: 26px 0 30px;
@@ -794,8 +863,19 @@
 		font-size: 13px;
 		color: var(--stats-muted);
 	}
-	h3 {
+	.category-controls {
+		display: flex;
+		align-items: center;
+		justify-content: end;
+		gap: 10px;
+		flex-wrap: wrap;
+	}
+	.category-controls > span {
 		font-size: 13px;
+		color: var(--stats-muted);
+	}
+	h3 {
+		font-size: 16px;
 		font-weight: 600;
 		margin: 0 0 14px;
 	}
@@ -960,11 +1040,6 @@
 		grid-template-columns: minmax(0, 1fr);
 		max-width: 135px;
 	}
-	.more {
-		color: var(--stats-accent, #29acf4);
-		font-size: 14px;
-		margin-top: 18px;
-	}
 	.coverage {
 		padding: 14px;
 		background: #f5b85a15;
@@ -980,7 +1055,7 @@
 		overflow: auto;
 	}
 	.empty-year {
-		background: #6495ed12;
+		background: #51ad7912;
 		border-radius: 10px;
 		padding: 24px;
 		margin-bottom: 20px;
@@ -999,6 +1074,8 @@
 	}
 	.watchlist-summary {
 		display: flex;
+		width: 100%;
+		box-sizing: border-box;
 		align-items: center;
 		gap: 20px;
 		padding: 20px 24px;
@@ -1006,28 +1083,48 @@
 		border: 1px solid var(--stats-border);
 		border-radius: 12px;
 		background: color-mix(in srgb, #29acf4 7%, var(--stats-surface));
+		color: inherit;
+		font: inherit;
+		text-align: left;
+		box-shadow: none;
+		cursor: pointer;
+		transition:
+			border-color 0.15s,
+			background-color 0.15s;
+	}
+	.watchlist-summary:not(:disabled):hover {
+		border-color: var(--stats-accent);
+		background: color-mix(in srgb, #29acf4 12%, var(--stats-surface));
+	}
+	.watchlist-summary:disabled {
+		cursor: default;
+		opacity: 1;
 	}
 	.watchlist-summary > strong {
 		font-size: 40px;
 		line-height: 1;
 		color: var(--stats-accent);
 	}
-	.watchlist-summary h3 {
+	.watchlist-title {
+		display: block;
 		font-size: 18px;
-		margin: 0 0 4px;
+		font-weight: 600;
+		margin-bottom: 4px;
 	}
-	.watchlist-summary p {
+	.watchlist-period {
+		display: block;
 		font-size: 13px;
 		color: var(--stats-muted);
-		margin: 0;
 	}
 	.activity-averages {
+		align-items: baseline;
+		flex-wrap: wrap;
+		row-gap: 8px;
 		margin: -4px 0 18px;
 	}
 	.segmented button:hover {
 		background: color-mix(in srgb, #29acf4 12%, transparent);
 	}
-	.more:hover,
 	.back:hover,
 	.crew-person:hover {
 		color: var(--stats-accent);
@@ -1043,6 +1140,9 @@
 		color: var(--stats-accent);
 	}
 	@media (max-width: 700px) {
+		.category-controls {
+			justify-content: start;
+		}
 		.categories {
 			grid-template-columns: 1fr;
 			gap: 28px;
@@ -1083,9 +1183,6 @@
 			grid-template-columns: 1fr;
 			gap: 24px;
 		}
-		.decades :global(.posters) {
-			max-width: 240px;
-		}
 		.highs-lows {
 			grid-template-columns: repeat(2, minmax(0, 1fr));
 		}
@@ -1095,11 +1192,19 @@
 		.section-heading {
 			align-items: flex-start;
 		}
+		.category-controls {
+			justify-content: start;
+		}
 		h2 {
 			font-size: 18px;
 		}
 		.milestones {
 			gap: 16px;
+		}
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.watchlist-summary {
+			transition: none;
 		}
 	}
 </style>

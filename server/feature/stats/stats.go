@@ -163,6 +163,7 @@ type Breakdown struct {
 	Reviews            []PieStat      `json:"reviews"`
 	RatingDistribution []RatingBucket `json:"ratingDistribution"`
 	WatchlistAdditions int            `json:"watchlistAdditions"`
+	WatchlistTitles    []MediaCard    `json:"watchlistTitles"`
 }
 
 type PersonStat struct {
@@ -310,7 +311,10 @@ func (s *Service) GetStats(userID uint, q Query) (StatsResponse, error) {
 	}
 
 	watchlist := filterWatchlist(records)
-	enrichmentRecords := append(append([]*watchedRecord{}, scopeRecords...), watchlist...)
+	watchlistAdditions := recordsWithWatchlistAdditions(records, q)
+	enrichmentRecords := append([]*watchedRecord{}, scopeRecords...)
+	enrichmentRecords = append(enrichmentRecords, watchlist...)
+	enrichmentRecords = append(enrichmentRecords, watchlistAdditions...)
 	metadata, failures := s.enrich(enrichmentRecords)
 	for _, r := range enrichmentRecords {
 		if c := metadata[contentKey(r.content)].card; c != nil {
@@ -348,7 +352,7 @@ func (s *Service) GetStats(userID uint, q Query) (StatsResponse, error) {
 		response.Activity = fillActivity(response.Activity, scopeRecords, q.Year, time.Now().UTC())
 	}
 	response.Milestones = buildMilestones(scopeRecords, metadata)
-	response.Breakdown = buildBreakdown(scopeRecords, records, q)
+	response.Breakdown = buildBreakdown(scopeRecords, records, q, metadata)
 	response.HighsLows = buildHighsLows(scopeRecords, metadata)
 	response.RatingDifferences = buildRatingDifferences(scopeRecords, metadata)
 	response.Metadata.FailedTitles = uniqueStrings(response.Metadata.FailedTitles)
@@ -751,6 +755,19 @@ func buildHighestRated(records []*watchedRecord, year int, metadata map[string]c
 	limit := 5
 	if year == 0 {
 		limit = len(current)
+	} else {
+		qualified := 0
+		for _, record := range current {
+			if record.watched.Rating >= 8 {
+				qualified++
+			}
+		}
+		if qualified > limit {
+			limit = qualified
+		}
+		if limit > len(current) {
+			limit = len(current)
+		}
 	}
 	return HighestRated{Current: cards(current, metadata, limit), Older: cards(older, metadata, 5)}
 }
@@ -909,7 +926,7 @@ func buildBars(records []*watchedRecord, metadata map[string]contentMetadata, ge
 	return result
 }
 
-func buildBreakdown(records, allRecords []*watchedRecord, q Query) Breakdown {
+func buildBreakdown(records, allRecords []*watchedRecord, q Query, metadata map[string]contentMetadata) Breakdown {
 	current, older := 0, 0
 	reviews, notReviewed := 0, 0
 	ratingCounts := make([]int, 101)
@@ -946,22 +963,28 @@ func buildBreakdown(records, allRecords []*watchedRecord, q Query) Breakdown {
 	for rating, count := range ratingCounts {
 		distribution = append(distribution, RatingBucket{Rating: float64(rating) / 10, Count: count})
 	}
-	watchlistAdditions := 0
-	for _, record := range allRecords {
-		for _, d := range record.addDates {
-			if q.Scope == ScopeLifetime || d.Year() == q.Year {
-				watchlistAdditions++
-				break
-			}
-		}
-	}
+	watchlistTitles := uniqueCards(recordsWithWatchlistAdditions(allRecords, q), metadata)
 	return Breakdown{
 		Release:            []PieStat{{Label: "Selected year", Count: current}, {Label: "Older", Count: older}},
 		Plays:              []PieStat{{Label: "First watches", Count: titles}, {Label: "Rewatches", Count: rewatches}},
 		Reviews:            []PieStat{{Label: "Reviewed", Count: reviews}, {Label: "Not reviewed", Count: notReviewed}},
 		RatingDistribution: distribution,
-		WatchlistAdditions: watchlistAdditions,
+		WatchlistAdditions: len(watchlistTitles),
+		WatchlistTitles:    watchlistTitles,
 	}
+}
+
+func recordsWithWatchlistAdditions(records []*watchedRecord, q Query) []*watchedRecord {
+	result := make([]*watchedRecord, 0)
+	for _, record := range records {
+		for _, date := range record.addDates {
+			if q.Scope == ScopeLifetime || date.Year() == q.Year {
+				result = append(result, record)
+				break
+			}
+		}
+	}
+	return result
 }
 
 func buildPeople(records []*watchedRecord, metadata map[string]contentMetadata) PeopleStats {

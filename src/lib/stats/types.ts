@@ -86,6 +86,7 @@ export interface StatsResponse {
 		reviews: StatsPie[] | null;
 		ratingDistribution: { rating: number; count: number }[];
 		watchlistAdditions: number;
+		watchlistTitles: StatsMediaCard[];
 	};
 	people: { cast: StatsPerson[]; directors: StatsPerson[] };
 	studios: StatsPerson[];
@@ -117,9 +118,4 @@ export interface ChartPoint {
 	label: string;
 	value: number | null;
 	detail?: string;
-}
-
-export interface StatsChartSelection {
-	current: () => symbol | undefined;
-	select: (chart: symbol | undefined) => void;
 }
