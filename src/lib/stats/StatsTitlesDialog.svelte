@@ -13,6 +13,7 @@
 		settings,
 		personId,
 		description = "watched",
+		expansionRows,
 		onClose,
 	}: {
 		label: string;
@@ -22,10 +23,12 @@
 		settings: RatingSettings;
 		personId?: number;
 		description?: string;
+		expansionRows: number;
 		onClose: () => void;
 	} = $props();
 	let dialog: HTMLDialogElement;
 	let count = $state(5);
+	let columns = $state(5);
 	onMount(() => {
 		const { body, documentElement: root } = document;
 		const { scrollX, scrollY } = window;
@@ -50,7 +53,17 @@
 		});
 		root.style.overflow = "hidden";
 		dialog.showModal();
+		const postersGrid = dialog.querySelector<HTMLElement>(".posters");
+		const updateColumns = () => {
+			if (postersGrid)
+				columns = getComputedStyle(postersGrid).gridTemplateColumns.split(" ")
+					.length;
+		};
+		updateColumns();
+		const observer = postersGrid ? new ResizeObserver(updateColumns) : undefined;
+		if (postersGrid) observer?.observe(postersGrid);
 		return () => {
+			observer?.disconnect();
 			if (dialog.open) dialog.close();
 			Object.assign(body.style, previousStyles);
 			root.style.overflow = rootOverflow;
@@ -99,6 +112,7 @@
 		<StatsPosters items={items.slice(0, count)} {owner} {settings} />
 		<StatsExpansion
 			{count}
+			step={expansionRows * columns}
 			total={items.length}
 			onChange={(value) => (count = value)}
 		/>

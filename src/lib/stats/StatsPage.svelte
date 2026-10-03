@@ -29,6 +29,8 @@
 	let yearlyFavoriteCount = $state(5);
 	// Rows added per click for Cast and Directors & creators only.
 	const peopleExpansionRows = 3;
+	// Rows added per click in the title list popup.
+	const titleDialogExpansionRows = 2;
 	let peopleMode = $state<"most" | "rating">("most");
 	let categorySort = $state<"count" | "rating">("count");
 	let higherCount = $state(5);
@@ -866,6 +868,7 @@
 				{period}
 				owner={publicOwner}
 				{settings}
+				expansionRows={titleDialogExpansionRows}
 				onClose={() => (selection = undefined)}
 			/>{/key}{/if}
 	<footer>
