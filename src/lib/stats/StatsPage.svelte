@@ -10,6 +10,8 @@
 	import StatsPosters from "./StatsPosters.svelte";
 	import StatsPeople from "./StatsPeople.svelte";
 	import StatsGameSections from "./StatsGameSections.svelte";
+	import StatsLibrarySections from "./StatsLibrarySections.svelte";
+	import StatsCalendar from "./StatsCalendar.svelte";
 	import { type RatingSettings } from "@/lib/rating/helpers";
 	import type {
 		StatsResponse,
@@ -17,6 +19,7 @@
 		StatsMediaCard,
 		StatsPie,
 		ChartPoint,
+		StatsSelection,
 	} from "./types";
 	let {
 		data,
@@ -66,7 +69,10 @@
 	let backgroundPreview = $state<
 		"panels" | "panels-edge-grid" | "tonal-wash" | "edge-grid"
 	>("panels");
+	let calendarYear = $state<number>();
+	let waitingCount = $state(5);
 	let selection = $state<{
+		period?: string;
 		label: string;
 		items: StatsMediaCard[];
 		personId?: number;
@@ -94,6 +100,8 @@
 			crewCounts,
 			activityMode,
 			activityMetric,
+			calendarYear,
+			waitingCount,
 			gameCounts,
 			gameActivityKind,
 			backgroundPreview,
@@ -124,6 +132,8 @@
 		favoriteCount = saved.favoriteCount;
 		decadeCounts = saved.decadeCounts;
 		crewCounts = saved.crewCounts;
+		calendarYear = saved.calendarYear;
+		waitingCount = saved.waitingCount ?? 5;
 		activityMode = saved.activityMode;
 		activityMetric = saved.activityMetric ?? "count";
 		gameActivityKind = saved.gameActivityKind;
@@ -161,6 +171,10 @@
 				)
 				.sort((a, b) => a.title.localeCompare(b.title)),
 		};
+	}
+	function exploreSelection(value: StatsSelection) {
+		dialogState = undefined;
+		selection = value;
 	}
 	function explorePoint(point: ChartPoint) {
 		dialogState = undefined;
@@ -268,6 +282,8 @@
 	});
 	$effect(() => {
 		if (statsView) {
+			calendarYear = undefined;
+			waitingCount = 5;
 			episodeCount = 5;
 			episodeTab = "current";
 			yearlyFavoriteCount = 5;
@@ -421,8 +437,7 @@
 				: []
 			: [
 					{
-						label:
-							data.media === "tv" && lifetime ? "Longest show" : "Longest",
+						label: data.media === "tv" && lifetime ? "Longest show" : "Longest",
 						card: data.highsLows.longest,
 						detail: runtimeDetail,
 					},
@@ -663,6 +678,13 @@
 							</li>{/each}
 					</ul>
 				</details>{/if}
+			{#if !isGame && data.library}<StatsLibrarySections
+					{data}
+					owner={publicOwner}
+					{settings}
+					onSelect={exploreSelection}
+					bind:waitingCount
+				/>{/if}
 			{#if !data.summary.titles && !data.activity.total}<div class="empty-year">
 					<h2 class="norm">A fresh page in your journal</h2>
 					<p>
@@ -903,6 +925,12 @@
 							onSelect={explorePoint}
 						/>{/key}
 				</section>{/if}
+
+			{#if !isGame && data.library}<StatsCalendar
+					{data}
+					onSelect={exploreSelection}
+					bind:calendarYear
+				/>{/if}
 
 			<section>
 				<div class="section-heading">
@@ -1265,7 +1293,7 @@
 						bind:this={titlesDialog}
 						initialState={dialogState}
 						{...selection}
-						{period}
+						period={selection.period ?? period}
 						owner={publicOwner}
 						{settings}
 						expansionRows={titleDialogExpansionRows}

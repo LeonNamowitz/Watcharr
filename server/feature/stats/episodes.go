@@ -43,6 +43,8 @@ func (s *Service) loadEpisodes(records []*watchedRecord, q Query, years map[int]
 		ep := &episodes[i]
 		parent := parents[ep.WatchedID]
 		dates := []time.Time{}
+		var firstPlay *time.Time
+		var firstPlayID uint
 		ratedDate := ep.CreatedAt.UTC()
 		for _, activity := range parent.watched.Activity {
 			var payload struct {
@@ -60,10 +62,17 @@ func (s *Service) loadEpisodes(records []*watchedRecord, q Query, years map[int]
 			}
 			if (added || activity.Type == entity.EPISODE_STATUS_CHANGED) && (payload.Status == string(entity.FINISHED) || (added && payload.Status == "" && ep.Status == entity.FINISHED)) {
 				dates = append(dates, d)
+				if firstPlay == nil || d.Before(*firstPlay) || (d.Equal(*firstPlay) && activity.ID < firstPlayID) {
+					date := d
+					firstPlay = &date
+					firstPlayID = activity.ID
+				}
 			}
 		}
 		if len(dates) == 0 && ep.Status == entity.FINISHED {
-			dates = append(dates, ep.CreatedAt.UTC())
+			d := ep.CreatedAt.UTC()
+			dates = append(dates, d)
+			firstPlay = &d
 		}
 		for _, d := range dates {
 			years[d.Year()] = true
@@ -88,6 +97,8 @@ func (s *Service) loadEpisodes(records []*watchedRecord, q Query, years map[int]
 		c.Title = fmt.Sprintf("%s · S%dE%d", c.Title, ep.SeasonNumber, ep.EpisodeNumber)
 		c.ReleaseDate = nil
 		r := &watchedRecord{content: &c, episode: ep, parent: parent, watched: entity.Watched{UserID: ep.UserID, Rating: rating}, plays: scoped}
+		r.firstPlay = firstPlay
+		r.firstPlayID = firstPlayID
 		r.watched.ID = ep.ID
 		result = append(result, r)
 	}

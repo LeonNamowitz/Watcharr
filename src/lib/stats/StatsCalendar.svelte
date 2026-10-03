@@ -1,0 +1,307 @@
+<script lang="ts">
+	import type { StatsResponse, StatsSelection } from "./types";
+	let {
+		data,
+		onSelect,
+		calendarYear = $bindable<number | undefined>(),
+	}: {
+		data: StatsResponse;
+		onSelect: (selection: StatsSelection) => void;
+		calendarYear?: number;
+	} = $props();
+	const lifetime = $derived(data.scope === "lifetime");
+	const years = $derived(
+		[
+			...new Set((data.calendar ?? []).map((d) => Number(d.date.slice(0, 4)))),
+		].sort((a, b) => b - a),
+	);
+	const year = $derived(
+		lifetime
+			? calendarYear !== undefined && years.includes(calendarYear)
+				? calendarYear
+				: (years[0] ?? new Date().getUTCFullYear())
+			: (data.year ?? new Date().getUTCFullYear()),
+	);
+	const days = $derived(
+		(data.calendar ?? []).filter((d) => Number(d.date.slice(0, 4)) === year),
+	);
+	const byDate = $derived(new Map(days.map((d) => [d.date, d])));
+	const maximum = $derived(Math.max(1, ...days.map((d) => d.plays)));
+	const unit = $derived(data.media === "tv" ? "episodes" : "watches");
+	const summary = $derived.by(() => {
+		let streak = 0,
+			longest = 0,
+			previous: number | undefined;
+		let busiest: (typeof days)[number] | undefined;
+		for (const day of days) {
+			const current = new Date(`${day.date}T00:00:00Z`).getTime();
+			streak =
+				previous !== undefined && current - previous === 86400000
+					? streak + 1
+					: 1;
+			longest = Math.max(longest, streak);
+			previous = current;
+			if (!busiest || day.plays > busiest.plays) busiest = day;
+		}
+		return {
+			longest,
+			busiest,
+			total: days.reduce((sum, d) => sum + d.plays, 0),
+		};
+	});
+	function countLabel(count: number) {
+		return `${count} ${count === 1 ? (data.media === "tv" ? "episode" : "watch") : unit}`;
+	}
+	function dateKey(month: number, day: number) {
+		return `${String(year).padStart(4, "0")}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+	}
+	function monthInfo(month: number) {
+		const date = new Date(`${dateKey(month, 1)}T00:00:00Z`);
+		const leapYear = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+		const monthDays = [
+			31,
+			leapYear ? 29 : 28,
+			31,
+			30,
+			31,
+			30,
+			31,
+			31,
+			30,
+			31,
+			30,
+			31,
+		];
+		return {
+			label: date.toLocaleDateString(undefined, {
+				month: "long",
+				timeZone: "UTC",
+			}),
+			offset: (date.getUTCDay() + 6) % 7,
+			count: monthDays[month],
+		};
+	}
+	function prettyDate(date: string) {
+		return new Date(`${date}T00:00:00Z`).toLocaleDateString(undefined, {
+			month: "long",
+			day: "numeric",
+			year: "numeric",
+			timeZone: "UTC",
+		});
+	}
+	function explore(date: string) {
+		const day = byDate.get(date);
+		if (day)
+			onSelect({
+				label: prettyDate(date),
+				items: day.items,
+				description: data.media === "tv" ? "episodes watched" : "watched",
+				period: `${day.plays} ${unit}`,
+			});
+	}
+</script>
+
+<section class="calendar-section">
+	<div class="section-heading">
+		<h2 class="norm">Viewing calendar</h2>
+		{#if lifetime && years.length}<label
+				>Calendar year <select
+					aria-label="Calendar year"
+					value={year}
+					onchange={(event) =>
+						(calendarYear = Number(event.currentTarget.value))}
+					>{#each years as y (y)}<option value={y}>{y}</option>{/each}</select
+				></label
+			>{:else}<span>{year} · dates in UTC</span>{/if}
+	</div>
+	<div class="summary">
+		<span><strong>{summary.total.toLocaleString()}</strong> {unit}</span>
+		<span><strong>{days.length}</strong> active days</span>
+		<span
+			><strong>{summary.longest}</strong>
+			{summary.longest === 1 ? "day" : "days"} · longest streak</span
+		>
+		{#if summary.busiest}<button
+				class="plain busiest"
+				onclick={() => summary.busiest && explore(summary.busiest.date)}
+				>Busiest: {prettyDate(summary.busiest.date)} · {countLabel(
+					summary.busiest.plays,
+				)}</button
+			>{/if}
+	</div>
+	<div class="legend">
+		<span>Fewer</span>{#each [0, 1, 2, 3, 4] as level (level)}<i
+				style:background={level
+					? `color-mix(in srgb, var(--stats-accent) ${20 + level * 20}%, var(--stats-surface))`
+					: "var(--stats-border)"}
+			></i>{/each}<span>More {unit}</span>
+	</div>
+	{#if !days.length}<p class="note">
+			No recorded {unit} for this calendar year.
+		</p>{/if}
+	<div class="months">
+		{#each Array.from({ length: 12 }, (_, i) => i) as month (month)}
+			{@const info = monthInfo(month)}
+			<div class="month" role="group" aria-label={`${info.label} ${year}`}>
+				<h3 class="norm">{info.label}</h3>
+				<div class="month-grid">
+					{#each ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"] as weekday (weekday)}<span
+							class="weekday">{weekday}</span
+						>{/each}
+					{#each Array.from({ length: info.offset }, (_, i) => i) as blank (blank)}<span
+							aria-hidden="true"
+						></span>{/each}
+					{#each Array.from({ length: info.count }, (_, i) => i + 1) as day (day)}
+						{@const date = dateKey(month, day)}
+						{@const count = byDate.get(date)?.plays ?? 0}
+						<button
+							class="plain day"
+							class:active={count > 0}
+							disabled={!count}
+							style:background={count
+								? `color-mix(in srgb, var(--stats-accent) ${20 + Math.ceil((count / maximum) * 4) * 20}%, var(--stats-surface))`
+								: "var(--stats-border)"}
+							title={`${prettyDate(date)}: ${countLabel(count)}`}
+							aria-label={`${prettyDate(date)}: ${countLabel(count)}${count ? ". Browse recorded titles" : ""}`}
+							onclick={() => explore(date)}>{day}</button
+						>
+					{/each}
+				</div>
+			</div>
+		{/each}
+	</div>
+	<p class="note">
+		{data.media === "tv"
+			? "Completed episodes"
+			: "Recorded movie plays, including rewatches"}. Select a highlighted day
+		to browse. Streaks are measured within the displayed year.
+	</p>
+</section>
+
+<style>
+	.calendar-section {
+		min-width: 0;
+		padding: 26px 0 30px;
+		border-top: 1px solid var(--stats-border);
+	}
+	.section-heading {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: baseline;
+		justify-content: space-between;
+		gap: 12px;
+		margin-bottom: 18px;
+	}
+	h2 {
+		font-size: 22px;
+	}
+	h3 {
+		font-size: 15px;
+		margin-bottom: 10px;
+	}
+	.section-heading > span,
+	.section-heading label,
+	.note {
+		font-size: 13px;
+		color: var(--stats-muted);
+	}
+	select {
+		margin-left: 8px;
+		padding: 5px 8px;
+		color: var(--stats-text);
+		background: var(--stats-surface);
+		border: 1px solid var(--stats-border);
+		border-radius: 5px;
+	}
+	.summary {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: baseline;
+		gap: 10px 24px;
+		color: var(--stats-muted);
+		font-size: 13px;
+	}
+	.summary strong {
+		font-size: 22px;
+		color: var(--stats-text);
+		padding-right: 3px;
+	}
+	.busiest {
+		color: var(--stats-accent);
+		text-align: left;
+	}
+	.legend {
+		display: flex;
+		align-items: center;
+		gap: 5px;
+		margin: 18px 0 24px;
+		color: var(--stats-muted);
+		font-size: 12px;
+	}
+	.legend i {
+		display: block;
+		width: 12px;
+		height: 12px;
+		border-radius: 2px;
+	}
+	.months {
+		display: grid;
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+		gap: 24px;
+	}
+	.month-grid {
+		display: grid;
+		grid-template-columns: repeat(7, minmax(0, 1fr));
+		gap: 5px;
+	}
+	.weekday {
+		text-align: center;
+		font-size: 11px;
+		color: var(--stats-muted);
+		padding-bottom: 3px;
+	}
+	.day {
+		width: 100%;
+		aspect-ratio: 1;
+		border-radius: 4px;
+		color: var(--stats-muted);
+		font-size: 12px;
+		padding: 0;
+	}
+	.day.active {
+		color: var(--stats-text);
+		cursor: pointer;
+	}
+	.day.active:hover {
+		outline: 1px solid var(--stats-accent);
+		outline-offset: 2px;
+	}
+	.day:disabled {
+		opacity: 0.55;
+	}
+	button:focus-visible,
+	select:focus-visible {
+		outline: 2px solid var(--stats-accent);
+		outline-offset: 3px;
+	}
+	.note {
+		margin-top: 20px;
+	}
+	.busiest {
+		cursor: pointer;
+	}
+	@media (max-width: 800px) {
+		.months {
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+			gap: 20px;
+		}
+	}
+	@media (max-width: 500px) {
+		.months {
+			grid-template-columns: minmax(0, 1fr);
+		}
+		.day {
+			max-height: 40px;
+		}
+	}
+</style>

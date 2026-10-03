@@ -42,6 +42,8 @@ export interface StatsPie {
 	count: number;
 }
 export interface StatsResponse {
+	library?: StatsLibrary;
+	calendar?: StatsDay[];
 	games?: StatsGames;
 	scope: "year" | "lifetime";
 	year?: number;
@@ -175,4 +177,42 @@ export interface StatsGames {
 		distribution: StatsPie[];
 		byRating: { rating: number; hours: number; items: StatsMediaCard[] }[];
 	};
+}
+
+export interface StatsLibrary {
+	statuses: {
+		status: string;
+		label: string;
+		count: number;
+		items: StatsMediaCard[];
+	}[];
+	momentum: {
+		period: string;
+		planned: StatsMediaCard[];
+		watched: StatsMediaCard[];
+	}[];
+	planned: number;
+	watched: number;
+	waiting: {
+		medianDays: number | null;
+		excluded: number;
+		buckets: { label: string; items: StatsMediaCard[] }[];
+		longest: {
+			item: StatsMediaCard;
+			days: number;
+			plannedDate: string;
+			watchedDate: string;
+		}[];
+	};
+}
+export interface StatsDay {
+	date: string;
+	plays: number;
+	items: StatsMediaCard[];
+}
+export interface StatsSelection {
+	label: string;
+	items: StatsMediaCard[];
+	description?: string;
+	period?: string;
 }

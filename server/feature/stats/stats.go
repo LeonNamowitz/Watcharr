@@ -56,6 +56,8 @@ func NewService(db *gorm.DB, provider TMDBProvider, games ...IGDBProvider) *Serv
 }
 
 type StatsResponse struct {
+	Library              *LibraryStats     `json:"library,omitempty"`
+	Calendar             []DailyStat       `json:"calendar,omitempty"`
 	Games                *GameStats        `json:"games,omitempty"`
 	Scope                string            `json:"scope"`
 	Media                string            `json:"media"`
@@ -256,6 +258,7 @@ type watchedRecord struct {
 	content     *entity.Content
 	plays       []time.Time
 	firstPlay   *time.Time
+	firstPlayID uint
 	addDates    []time.Time
 	episode     *entity.WatchedEpisode
 	parent      *watchedRecord
@@ -324,6 +327,9 @@ func (s *Service) GetStats(userID uint, q Query) (StatsResponse, error) {
 		r := &watchedRecord{watched: watched[i], content: watched[i].Content}
 		for _, activity := range watched[i].Activity {
 			date := effectiveDate(activity.CreatedAt, activity.CustomDate)
+			if topLevelStatus(activity) != "" {
+				availableYears[date.Year()] = true
+			}
 			if activity.CountAsPlay {
 				r.plays = append(r.plays, date)
 				availableYears[date.Year()] = true
@@ -361,6 +367,14 @@ func (s *Service) GetStats(userID uint, q Query) (StatsResponse, error) {
 	if err != nil {
 		return StatsResponse{}, err
 	}
+	allEpisodes := episodeRecords
+	if q.Media == "tv" && q.Scope == ScopeYear {
+		allEpisodes, err = s.loadEpisodes(records, Query{Scope: ScopeLifetime, Media: "tv"}, availableYears)
+		if err != nil {
+			return StatsResponse{}, err
+		}
+	}
+	library := buildLibrary(records, allEpisodes, q)
 	for year := range availableYears {
 		if !containsYear(years, year) {
 			years = append(years, year)
@@ -405,6 +419,7 @@ func (s *Service) GetStats(userID uint, q Query) (StatsResponse, error) {
 		Watchlist:      topWatchlist(watchlist, userID, q),
 		Metadata:       metadataStatus,
 	}
+	response.Library = &library
 	response.Summary = buildSummary(scopeRecords)
 	response.HighestRated = buildHighestRated(scopeRecords, q.Year, metadata)
 	activityRecords := scopeRecords
@@ -416,6 +431,7 @@ func (s *Service) GetStats(userID uint, q Query) (StatsResponse, error) {
 		response.People.Cast = buildEpisodeCast(episodeRecords, metadata)
 	}
 	response.Summary.Hours = estimatedHours(hoursRecords, episodeRecords)
+	response.Calendar = buildCalendar(activityRecords)
 	response.Activity = buildActivity(activityRecords)
 	if q.Scope == ScopeYear {
 		response.Activity = fillActivity(response.Activity, activityRecords, q.Year, time.Now().UTC())

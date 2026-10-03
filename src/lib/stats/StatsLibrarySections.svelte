@@ -1,0 +1,453 @@
+<script lang="ts">
+	import StatsChart from "./StatsChart.svelte";
+	import StatsPosters from "./StatsPosters.svelte";
+	import StatsExpansion from "./StatsExpansion.svelte";
+	import type { StatsResponse, StatsSelection, StatsMediaCard } from "./types";
+	import type { RatingSettings } from "@/lib/rating/helpers";
+	let {
+		data,
+		owner,
+		settings,
+		onSelect,
+		waitingCount = $bindable(5),
+	}: {
+		data: StatsResponse;
+		owner?: { id: string; username: string };
+		settings: RatingSettings;
+		onSelect: (selection: StatsSelection) => void;
+		waitingCount?: number;
+	} = $props();
+	const library = $derived(data.library);
+	const lifetime = $derived(data.scope === "lifetime");
+	const statuses = $derived(library?.statuses.filter((s) => s.count > 0) ?? []);
+	const statusMaximum = $derived(Math.max(1, ...statuses.map((s) => s.count)));
+	const momentumMaximum = $derived(
+		Math.max(
+			1,
+			...(library?.momentum.flatMap((p) => [
+				p.planned.length,
+				p.watched.length,
+			]) ?? []),
+		),
+	);
+	const colors: Record<string, string> = {
+		FINISHED: "#51ad79",
+		WATCHING: "#29acf4",
+		PLANNED: "#f5b85a",
+		HOLD: "#b19bea",
+		DROPPED: "#f47983",
+	};
+	function bucketRating(items: StatsMediaCard[]) {
+		const ratings = items
+			.map((item) => item.rating ?? 0)
+			.filter((rating) => rating > 0);
+		return ratings.length
+			? ratings.reduce((sum, rating) => sum + rating, 0) / ratings.length
+			: 0;
+	}
+	function periodLabel(period: string) {
+		return lifetime
+			? period
+			: new Date(`${period}-01T00:00:00Z`).toLocaleDateString(undefined, {
+					month: "short",
+					timeZone: "UTC",
+				});
+	}
+	const waitingDays = $derived(
+		new Map(
+			library?.waiting.longest.map((w) => [
+				`${w.item.type}:${w.item.id}`,
+				w.days,
+			]) ?? [],
+		),
+	);
+</script>
+
+{#if library}
+	<section class="library-section">
+		<div class="section-heading">
+			<h2 class="norm">{lifetime ? "Current library" : "Status activity"}</h2>
+			<span
+				>{lifetime
+					? "Current saved statuses"
+					: `Titles entering each status in ${data.year}`}</span
+			>
+		</div>
+		{#if !lifetime}<p class="note">
+				A title can enter several statuses in a year. Each title counts once per
+				status.
+			</p>{/if}
+		<div
+			class="status-bars"
+			role="group"
+			aria-label={lifetime
+				? "Current library statuses"
+				: `Status activity in ${data.year}`}
+		>
+			{#each statuses as group (group.status)}
+				{@const label = lifetime
+					? group.label
+					: `${group.label} in ${data.year}`}
+				<button
+					class="plain status-row"
+					onclick={() =>
+						onSelect({
+							label,
+							items: group.items,
+							description: lifetime
+								? `currently ${group.label.toLowerCase()}`
+								: `recorded as ${group.label.toLowerCase()}`,
+							period: lifetime ? "Current library" : String(data.year),
+						})}
+					aria-label={`Browse ${group.count} titles: ${label}`}
+				>
+					<span class="status-label">{label}</span>
+					<span class="track"
+						><span
+							style:width={`${(group.count / statusMaximum) * 100}%`}
+							style:background={colors[group.status]}
+						></span></span
+					>
+					<strong>{group.count.toLocaleString()}</strong>
+				</button>
+			{:else}<p class="note">
+					No {lifetime
+						? "saved titles"
+						: "recorded status changes in this year"}.
+				</p>{/each}
+		</div>
+	</section>
+	<section class="library-section">
+		<div class="section-heading">
+			<h2 class="norm">Watchlist momentum</h2>
+			<span
+				>{lifetime ? "Through the years" : data.year} · first-time titles</span
+			>
+		</div>
+		<div class="totals">
+			<span
+				><strong>{library.planned.toLocaleString()}</strong> added</span
+			><span
+				><strong>{library.watched.toLocaleString()}</strong> watched</span
+			>
+		</div>
+		<p class="note">
+			First watches can come from earlier watchlist additions. Rewatches and
+			replanning are excluded.
+		</p>
+		<div class="legend">
+			<span><i class="planned"></i>First added</span><span
+				><i class="watched"></i>First watched</span
+			>
+		</div>
+		{#if library.planned || library.watched}
+			<div
+				class="momentum"
+				class:annual={lifetime}
+				role="group"
+				aria-label="First planned versus first watched"
+			>
+				{#each library.momentum as point (point.period)}
+					<div class="momentum-period">
+						<div class="pair">
+							{#each ["planned", "watched"] as kind (kind)}
+								{@const items =
+									kind === "planned" ? point.planned : point.watched}
+								{@const label = `${kind === "planned" ? "First planned" : "First watched from watchlist"} · ${point.period}`}
+								<button
+									class="plain momentum-bar"
+									class:planned={kind === "planned"}
+									class:watched={kind === "watched"}
+									style:height={`${items.length ? Math.max(8, (items.length / momentumMaximum) * 110) : 0}px`}
+									disabled={!items.length}
+									title={`${label}: ${items.length}`}
+									aria-label={`Browse ${items.length} titles: ${label}`}
+									onclick={() =>
+										onSelect({
+											label,
+											items,
+											description:
+												kind === "planned"
+													? "first planned"
+													: "first watched from watchlist",
+											period: point.period,
+										})}><span>{items.length || ""}</span></button
+								>
+							{/each}
+						</div>
+						<span class="period-label">{periodLabel(point.period)}</span>
+					</div>
+				{/each}
+			</div>
+			<details>
+				<summary
+					>Browse watchlist titles by {lifetime ? "year" : "month"}</summary
+				>
+				<div class="browse-list">
+					{#each library.momentum as point (point.period)}{#each ["planned", "watched"] as kind (kind)}
+							{@const items =
+								kind === "planned" ? point.planned : point.watched}
+							{#if items.length}<button
+									class="plain browse-row"
+									onclick={() =>
+										onSelect({
+											label: `${kind === "planned" ? "First planned" : "First watched from watchlist"} · ${point.period}`,
+											items,
+											description:
+												kind === "planned"
+													? "first planned"
+													: "first watched from watchlist",
+											period: point.period,
+										})}
+									><span
+										>{point.period} · {kind === "planned"
+											? "First planned"
+											: "First watched"}</span
+									><strong>{items.length}</strong></button
+								>{/if}
+						{/each}{/each}
+				</div>
+			</details>
+		{:else}<p class="note">
+				No qualifying watchlist additions or first watches in this period.
+			</p>{/if}
+	</section>
+	<section class="library-section">
+		<div class="section-heading">
+			<h2 class="norm">Time on your watchlist</h2>
+			<span>Before the first recorded watch</span>
+		</div>
+		<div class="totals">
+			<span
+				><strong
+					>{library.waiting.medianDays === null
+						? "—"
+						: library.waiting.medianDays.toLocaleString()}</strong
+				> median days waiting</span
+			><span
+				><strong>{library.watched.toLocaleString()}</strong> titles with planning
+				history</span
+			>
+		</div>
+		{#if library.waiting.excluded}<p class="note">
+				{library.waiting.excluded.toLocaleString()} first-watched titles excluded:
+				planning history is missing or follows their first watch.
+			</p>{/if}
+		<StatsChart
+			title="Watchlist waiting time"
+			points={library.waiting.buckets.map((bucket) => ({
+				label: bucket.label,
+				value: bucket.items.length,
+				titleCount: bucket.items.length,
+				averageRating: bucketRating(bucket.items),
+				items: bucket.items,
+			}))}
+			{settings}
+			onSelect={(point) =>
+				onSelect({
+					label: `Waited ${point.label.toLowerCase()}`,
+					items: point.items ?? [],
+					description: "first watched from watchlist",
+				})}
+		/>
+		{#if library.waiting.longest.length}
+			<h3 class="norm">The longest waits</h3>
+			<StatsPosters
+				items={library.waiting.longest
+					.slice(0, waitingCount)
+					.map((w) => w.item)}
+				{owner}
+				{settings}
+				leftAligned
+				detail={(c) =>
+					`${waitingDays.get(`${c.type}:${c.id}`)} days before first watch`}
+			/>
+			<StatsExpansion
+				count={waitingCount}
+				total={library.waiting.longest.length}
+				onChange={(count) => (waitingCount = count)}
+			/>
+		{/if}
+	</section>
+{/if}
+
+<style>
+	.library-section {
+		min-width: 0;
+		padding: 26px 0 30px;
+		border-top: 1px solid var(--stats-border);
+	}
+	.section-heading {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: baseline;
+		justify-content: space-between;
+		gap: 8px 16px;
+		margin-bottom: 18px;
+	}
+	h2 {
+		font-size: 22px;
+	}
+	h3 {
+		font-size: 17px;
+		margin: 22px 0 14px;
+	}
+	.section-heading > span,
+	.note,
+	summary {
+		color: var(--stats-muted);
+		font-size: 13px;
+	}
+	.note {
+		margin: 10px 0 18px;
+	}
+	.status-bars {
+		display: grid;
+		gap: 12px;
+	}
+	.status-row {
+		display: grid;
+		grid-template-columns: minmax(120px, 180px) minmax(0, 1fr) 45px;
+		gap: 14px;
+		align-items: center;
+		width: 100%;
+		text-align: left;
+		color: inherit;
+		padding: 6px 0;
+	}
+	.track {
+		display: block;
+		height: 15px;
+		background: var(--stats-border);
+		border-radius: 4px;
+		overflow: hidden;
+	}
+	.track > span {
+		display: block;
+		height: 100%;
+		border-radius: inherit;
+	}
+	.status-row > strong {
+		text-align: right;
+	}
+	.totals {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 10px 28px;
+		color: var(--stats-muted);
+		font-size: 14px;
+	}
+	.totals strong {
+		color: var(--stats-text);
+		font-size: 22px;
+		padding-right: 4px;
+	}
+	.legend {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 18px;
+		font-size: 12px;
+		margin: 20px 0;
+		color: var(--stats-muted);
+	}
+	.legend span {
+		display: flex;
+		align-items: center;
+		gap: 7px;
+	}
+	.legend i {
+		width: 10px;
+		height: 10px;
+		border-radius: 2px;
+	}
+	.planned {
+		background: #f5b85a;
+	}
+	.watched {
+		background: #29acf4;
+	}
+	.momentum {
+		display: grid;
+		grid-template-columns: repeat(12, minmax(0, 1fr));
+		gap: 10px;
+		margin-top: 25px;
+	}
+	.momentum.annual {
+		grid-template-columns: repeat(auto-fit, minmax(58px, 1fr));
+	}
+	.momentum-period {
+		min-width: 0;
+		text-align: center;
+	}
+	.pair {
+		height: 132px;
+		display: flex;
+		align-items: end;
+		justify-content: center;
+		gap: 5px;
+		border-bottom: 1px solid var(--stats-border);
+	}
+	.momentum-bar {
+		position: relative;
+		width: 24px;
+		max-width: 42%;
+		min-height: 0;
+		padding: 0;
+		border-radius: 3px 3px 0 0;
+	}
+	.momentum-bar > span {
+		position: absolute;
+		bottom: calc(100% + 3px);
+		left: 50%;
+		transform: translateX(-50%);
+		font-size: 11px;
+		color: var(--stats-muted);
+	}
+	.period-label {
+		display: block;
+		font-size: 12px;
+		margin-top: 7px;
+		color: var(--stats-muted);
+	}
+	summary {
+		margin-top: 18px;
+		cursor: pointer;
+	}
+	.browse-list {
+		max-height: 240px;
+		overflow: auto;
+		margin-top: 10px;
+	}
+	.browse-row {
+		display: flex;
+		justify-content: space-between;
+		gap: 10px;
+		width: 100%;
+		padding: 8px 0;
+		color: inherit;
+		text-align: left;
+		font-size: 13px;
+	}
+	button:not(:disabled) {
+		cursor: pointer;
+	}
+	button:not(:disabled):hover {
+		filter: brightness(1.15);
+	}
+	button:focus-visible,
+	summary:focus-visible {
+		outline: 2px solid var(--stats-accent);
+		outline-offset: 3px;
+	}
+	@media (max-width: 600px) {
+		.momentum {
+			grid-template-columns: repeat(6, minmax(0, 1fr));
+			gap: 18px 8px;
+		}
+		.status-row {
+			grid-template-columns: minmax(90px, 125px) minmax(0, 1fr) 32px;
+			gap: 8px;
+			font-size: 13px;
+		}
+	}
+</style>

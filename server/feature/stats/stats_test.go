@@ -247,6 +247,9 @@ func TestStatsMetadataFailureKeepsLocalResults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if response.Library == nil || statusCounts(*response.Library)[entity.FINISHED] != 1 || len(response.Calendar) != 1 {
+		t.Fatalf("local insights must survive metadata failure: %#v", response)
+	}
 	if response.Summary.Titles != 1 || !response.Metadata.Partial || len(response.Metadata.FailedTitles) != 1 || response.Metadata.FailedTitles[0] != content.Title {
 		t.Fatalf("partial response = %#v, want local title and affected title warning", response)
 	}
@@ -309,6 +312,9 @@ func TestPublicStatsIsOwnerScopedAndAnonymous(t *testing.T) {
 	var response StatsResponse
 	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
 		t.Fatal(err)
+	}
+	if response.Library == nil || statusCounts(*response.Library)[entity.FINISHED] != 1 || len(response.Calendar) != 1 {
+		t.Fatalf("public insights must describe the owner: %#v", response)
 	}
 	if response.Summary.Titles != 1 || response.Summary.Plays != 1 {
 		t.Fatalf("public summary = %#v", response.Summary)
@@ -537,6 +543,9 @@ func TestAuthenticatedStatsAndPublicViewerKeepOwnerScope(t *testing.T) {
 		}
 		if r.Code != 200 || len(data.Posters) != 1 || data.Posters[0].Title != expected {
 			t.Fatalf("wrong stats owner: %s", r.Body.String())
+		}
+		if data.Library == nil || data.Library.Waiting.Excluded != 1 || len(data.Calendar) != 1 || data.Calendar[0].Items[0].Title != expected {
+			t.Fatalf("new insights must use the requested owner: %s", r.Body.String())
 		}
 		expectedKey := "movie:902"
 		if strings.Contains(p, "public") {
