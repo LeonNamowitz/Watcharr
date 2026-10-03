@@ -306,8 +306,10 @@
 					href={resolve("/(public)/lists/[id]/[username]/stats", {
 						id: meta.id,
 						username: meta.username,
-					})}>Stats</a
+					})}
 				>
+					Stats
+				</a>
 				{#if canFollow}
 					<button
 						class="plain follow"
@@ -427,13 +429,48 @@
 {/if}
 
 <style lang="scss">
+	:global(:root.theme-dark) .stats-link {
+		--stats-link-accent: #29acf4;
+	}
+
 	.stats-link {
-		font-size: 13px;
-		color: inherit;
-		padding: 6px 10px;
-		background: rgba(100, 149, 237, 0.12);
-		border-radius: 6px;
+		--stats-link-accent: #086fa8;
+		display: inline-flex;
+		flex: 0 0 auto;
+		align-items: center;
+		justify-content: center;
+		padding: 7px 12px;
+		border: 1px solid $accent-color;
+		border-radius: 999px;
+		background-color: $accent-color;
+		color: $text-color;
+		fill: currentColor;
+		font-size: 14px;
+		font-weight: 600;
+		line-height: 1;
 		text-decoration: none;
+		white-space: nowrap;
+		transition:
+			background-color 150ms ease,
+			border-color 150ms ease,
+			color 150ms ease;
+
+		&:focus-visible {
+			outline: 2px solid $accent-color-hover;
+			outline-offset: 3px;
+		}
+	}
+
+	@media (hover: hover) {
+		.stats-link:hover {
+			background-color: color-mix(
+				in srgb,
+				var(--stats-link-accent) 12%,
+				$bg-color
+			);
+			border-color: color-mix(in srgb, var(--stats-link-accent) 45%, $bg-color);
+			color: var(--stats-link-accent);
+		}
 	}
 	.content {
 		display: flex;

@@ -295,8 +295,8 @@
 				class="back"
 				href={publicOwner
 					? resolve("/(public)/lists/[id]/[username]", publicOwner)
-					: resolve("/profile")}
-				>← {publicOwner ? "Back to library" : "Profile"}</a
+					: resolve("/")}
+				>← {publicOwner ? "Back to library" : "Back to library"}</a
 			>
 			<p class="eyebrow">{data.owner.username + "'s " + (data.scope === "lifetime" ? "all-time stats" : "year in film")}</p>
 			<h1 class="norm">
@@ -945,9 +945,36 @@
 	}
 	select {
 		min-width: 160px;
-		padding: 8px 12px;
+		padding: 9px 36px 9px 12px;
 		font-size: 14px;
 		width: 100%;
+		appearance: none;
+		color-scheme: dark;
+		color: #f3f7fa;
+		background-color: #17232d;
+		background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='none' stroke='%2329acf4' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.8' d='m3.5 6 4.5 4 4.5-4'/%3E%3C/svg%3E");
+		background-repeat: no-repeat;
+		background-position: right 12px center;
+		background-size: 14px;
+		border: 1px solid color-mix(in srgb, var(--stats-accent) 45%, #344450);
+		border-radius: 7px;
+		font-weight: 600;
+		cursor: pointer;
+		transition:
+			border-color 140ms ease,
+			background-color 140ms ease;
+	}
+	select:hover {
+		border-color: var(--stats-accent);
+		background-color: #1d2d39;
+	}
+	select:focus-visible {
+		outline: 2px solid var(--stats-accent);
+		outline-offset: 2px;
+	}
+	select option {
+		color: #f3f7fa;
+		background: #17232d;
 	}
 	.segmented {
 		display: flex;
