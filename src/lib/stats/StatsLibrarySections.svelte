@@ -4,7 +4,7 @@
 	import StatsPosters from "./StatsPosters.svelte";
 	import StatsExpansion from "./StatsExpansion.svelte";
 	import StatsTooltip from "./StatsTooltip.svelte";
-	import { averageRating } from "./format";
+	import { averageRating, meanRating } from "./format";
 	import { statsTooltipPosition } from "./tooltipPosition";
 	import type { RatingSettings } from "@/lib/rating/helpers";
 	import type {
@@ -47,12 +47,7 @@
 		DROPPED: "#f47983",
 	};
 	function bucketRating(items: StatsMediaCard[]) {
-		const ratings = items
-			.map((item) => item.rating ?? 0)
-			.filter((rating) => rating > 0);
-		return ratings.length
-			? ratings.reduce((sum, rating) => sum + rating, 0) / ratings.length
-			: 0;
+		return meanRating(items.map((item) => item.rating ?? 0));
 	}
 	function periodLabel(period: string) {
 		return lifetime
@@ -254,10 +249,7 @@
 							{#each ["planned", "watched"] as kind (kind)}
 								{@const items =
 									kind === "planned" ? point.planned : point.watched}
-								{@const detail =
-									kind === "planned"
-										? ""
-										: ""}
+								{@const detail = kind === "planned" ? "" : ""}
 								{@const label = `${kind === "planned" ? "First planned" : "First watched"} · ${point.period}`}
 								<button
 									class="plain momentum-bar"
@@ -383,22 +375,10 @@
 		padding: 26px 0 30px;
 		border-top: 1px solid var(--stats-border);
 	}
-	.section-heading {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: baseline;
-		justify-content: space-between;
-		gap: 8px 16px;
-		margin-bottom: 18px;
-	}
-	h2 {
-		font-size: 22px;
-	}
 	h3 {
 		font-size: 17px;
 		margin: 22px 0 14px;
 	}
-	.section-heading > span,
 	.note {
 		color: var(--stats-muted);
 		font-size: 13px;

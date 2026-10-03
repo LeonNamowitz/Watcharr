@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { averageRating } from "./format";
+	import { averageRating, statsUnitLabel, type StatsUnit } from "./format";
 	import type { RatingSettings } from "@/lib/rating/helpers";
 	import type { ChartPoint } from "./types";
 
@@ -11,33 +11,12 @@
 	}: {
 		points: ChartPoint[];
 		settings?: RatingSettings;
-		valueUnit?:
-			| "titles"
-			| "watches"
-			| "episodes"
-			| "games"
-			| "progress events"
-			| "completions"
-			| "hours";
+		valueUnit?: StatsUnit;
 		onSelect?: (point: ChartPoint) => void;
 	} = $props();
 	function countLabel(point: ChartPoint) {
 		const value = point.value ?? 0;
-		const singular =
-			valueUnit === "watches"
-				? "watch"
-				: valueUnit === "episodes"
-					? "episode"
-					: valueUnit === "progress events"
-						? "progress event"
-						: valueUnit === "completions"
-							? "completion"
-							: valueUnit === "hours"
-								? "hour"
-								: valueUnit === "games"
-									? "game"
-									: "title";
-		return `${value.toLocaleString(undefined, { maximumFractionDigits: 0 })} ${value === 1 ? singular : valueUnit}`;
+		return `${value.toLocaleString(undefined, { maximumFractionDigits: 0 })} ${statsUnitLabel(valueUnit, value)}`;
 	}
 	function preview(point: ChartPoint) {
 		const items = point.items ?? [];

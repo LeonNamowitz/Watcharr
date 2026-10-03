@@ -3,7 +3,7 @@
 	import StatsBrowseList from "./StatsBrowseList.svelte";
 	import { Bar, BarChart, LineChart, PieChart } from "layerchart/svg";
 	import { Tooltip } from "layerchart/svg";
-	import { averageRating } from "./format";
+	import { averageRating, type StatsUnit } from "./format";
 	import { type ComponentProps } from "svelte";
 	import type { RatingSettings } from "@/lib/rating/helpers";
 	import type { ChartPoint } from "./types";
@@ -26,14 +26,7 @@
 		height?: number;
 		showData?: boolean;
 		titleUnit?: "titles" | "games";
-		valueUnit?:
-			| "titles"
-			| "watches"
-			| "episodes"
-			| "games"
-			| "progress events"
-			| "completions"
-			| "hours";
+		valueUnit?: StatsUnit;
 		settings?: RatingSettings;
 		onSelect?: (point: ChartPoint) => void;
 	} = $props();

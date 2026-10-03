@@ -1,4 +1,5 @@
 <script lang="ts">
+	import StatsSegmentedControl from "./StatsSegmentedControl.svelte";
 	import { getContext, tick } from "svelte";
 	import Error from "@/lib/Error.svelte";
 	import StatsExpansion from "./StatsExpansion.svelte";
@@ -6,7 +7,8 @@
 	import StatsChart from "./StatsChart.svelte";
 	import StatsRankedChart from "./StatsRankedChart.svelte";
 	import StatsTitlesDialog from "./StatsTitlesDialog.svelte";
-	import { averageRating, decimal } from "./format";
+	import { averageRating, decimal, meanRating } from "./format";
+	import "./stats.css";
 	import StatsPosters from "./StatsPosters.svelte";
 	import StatsPeople from "./StatsPeople.svelte";
 	import StatsGameSections from "./StatsGameSections.svelte";
@@ -351,12 +353,9 @@
 		),
 	);
 	function averageForTitles(titleKeys: string[]) {
-		const ratings = [...new Set(titleKeys)]
-			.map((key) => ratingsByTitle.get(key) ?? 0)
-			.filter((rating) => rating > 0);
-		return ratings.length
-			? ratings.reduce((total, rating) => total + rating, 0) / ratings.length
-			: 0;
+		return meanRating(
+			[...new Set(titleKeys)].map((key) => ratingsByTitle.get(key) ?? 0),
+		);
 	}
 	function pies(items: StatsPie[]): ChartPoint[] {
 		const total = items.reduce((a, b) => a + b.count, 0);
@@ -477,7 +476,7 @@
 			<div class="section-heading">
 				<h2 class="norm">Highest rated episodes</h2>
 				{#if lifetime}<span>Your favorites rated 9/10 or above</span>
-				{:else}<div class="segmented">
+				{:else}<StatsSegmentedControl>
 						<button
 							class:active={episodeTab === "current"}
 							aria-pressed={episodeTab === "current"}
@@ -494,7 +493,7 @@
 								episodeCount = 5;
 							}}>Older</button
 						>
-					</div>{/if}
+					</StatsSegmentedControl>{/if}
 			</div>
 			<StatsPosters
 				items={episodes.slice(0, episodeCount)}
@@ -622,7 +621,7 @@
 						>{/each}</select
 				></label
 			>
-			<div class="segmented" aria-label="Media">
+			<StatsSegmentedControl label="Media">
 				<button
 					data-stats-control="movie"
 					class:active={selectedMedia === "movie"}
@@ -640,7 +639,7 @@
 					aria-pressed={selectedMedia === "game"}
 					onclick={() => onSelectionChange(selectedYear, "game")}>Games</button
 				>
-			</div>
+			</StatsSegmentedControl>
 		</div>
 	</header>
 	{#if loading}<div class="load-status" role="status">
@@ -769,7 +768,7 @@
 			<section>
 				<div class="section-heading">
 					<h2 class="norm">Highest rated {mediaLabel.toLowerCase()}</h2>
-					{#if !lifetime}<div class="segmented">
+					{#if !lifetime}<StatsSegmentedControl>
 							<button
 								class:active={highestTab === "current"}
 								aria-pressed={highestTab === "current"}
@@ -785,7 +784,9 @@
 									yearlyFavoriteCount = 5;
 								}}>Older</button
 							>
-						</div>{:else}<span>Your favorites rated above 8/10</span>{/if}
+						</StatsSegmentedControl>{:else}<span
+							>Your favorites rated above 8/10</span
+						>{/if}
 				</div>
 				<StatsPosters
 					items={lifetime
@@ -814,7 +815,7 @@
 			{#if !lifetime && !isGame}<section>
 					<div class="section-heading activity-heading">
 						<h2 class="norm">Activity</h2>
-						<div class="segmented" aria-label="Activity metric">
+						<StatsSegmentedControl label="Activity metric">
 							<button
 								class:active={activityMetric === "count"}
 								aria-pressed={activityMetric === "count"}
@@ -825,8 +826,8 @@
 								aria-pressed={activityMetric === "rating"}
 								onclick={() => (activityMetric = "rating")}>Rating</button
 							>
-						</div>
-						<div class="segmented" aria-label="Activity interval">
+						</StatsSegmentedControl>
+						<StatsSegmentedControl label="Activity interval">
 							<button
 								class:active={activityMode === "week"}
 								aria-pressed={activityMode === "week"}
@@ -837,7 +838,7 @@
 								aria-pressed={activityMode === "month"}
 								onclick={() => (activityMode = "month")}>Month</button
 							>
-						</div>
+						</StatsSegmentedControl>
 					</div>
 					<div class="averages activity-averages">
 						<span
@@ -919,6 +920,7 @@
 
 			{#if !isGame && data.library}<StatsCalendar
 					{data}
+					{settings}
 					onSelect={exploreSelection}
 					bind:calendarYear
 				/>{/if}
@@ -966,11 +968,7 @@
 					<div class="section-heading">
 						<h2 class="norm">Genres, countries & languages</h2>
 						<div class="category-controls">
-							<div
-								class="segmented"
-								role="group"
-								aria-label="Sort categories by"
-							>
+							<StatsSegmentedControl role="group" label="Sort categories by">
 								<button
 									class:active={categorySort === "count"}
 									aria-pressed={categorySort === "count"}
@@ -981,7 +979,7 @@
 									onclick={() => (categorySort = "rating")}
 									>Highest rated</button
 								>
-							</div>
+							</StatsSegmentedControl>
 						</div>
 					</div>
 					<div class="categories">
@@ -1098,7 +1096,7 @@
 								? "People behind the shows"
 								: "People behind the films"}
 						</h2>
-						<div class="segmented">
+						<StatsSegmentedControl>
 							<button
 								class:active={peopleMode === "most"}
 								aria-pressed={peopleMode === "most"}
@@ -1108,7 +1106,7 @@
 								aria-pressed={peopleMode === "rating"}
 								onclick={() => (peopleMode = "rating")}>Highest rated</button
 							>
-						</div>
+						</StatsSegmentedControl>
 					</div>
 					<div class="people-sections">
 						<StatsPeople
@@ -1374,32 +1372,34 @@
 	}
 	.header-summary {
 		display: grid;
-		grid-template-columns: repeat(4, minmax(0, 1fr));
-		gap: 16px;
+		grid-template-columns: repeat(auto-fit, minmax(min(100%, 176px), 1fr));
+		gap: 12px;
 		margin-top: 22px;
-		max-width: 610px;
-		padding-top: 18px;
-		border-top: 1px solid var(--stats-border);
+		width: 100%;
+		max-width: 820px;
 	}
 	.header-summary > div {
-		display: grid;
-		grid-template-rows: 38px auto;
-		gap: 4px;
+		display: flex;
+		flex-direction: column;
+		gap: 3px;
 		min-width: 0;
+		padding: 14px 16px;
+		border: 1px solid var(--stats-border);
+		border-radius: 10px;
+		background: var(--stats-surface);
 	}
 	.header-summary dt {
-		grid-row: 2;
-		font-size: 12px;
-		color: var(--stats-muted);
+		color: var(--stats-text);
+		font-size: 18px;
+		font-weight: 600;
 	}
 	.header-summary dd {
-		grid-row: 1;
-		align-self: end;
-		font-size: clamp(23px, 3vw, 32px);
+		margin: 0;
+		color: var(--stats-accent);
+		font-size: clamp(20px, 3vw, 32px);
 		line-height: 1.2;
-		font-weight: 600;
-		letter-spacing: -0.035em;
-		overflow-wrap: anywhere;
+		font-weight: 700;
+		white-space: nowrap;
 	}
 	.load-status {
 		display: flex;
@@ -1486,55 +1486,10 @@
 		color: #f3f7fa;
 		background: #17232d;
 	}
-	.segmented {
-		display: flex;
-		background: #8881;
-		border: 1px solid #8883;
-		border-radius: 7px;
-		padding: 3px;
-		max-width: 100%;
-	}
-	.segmented button {
-		flex: 1 0 auto;
-		width: auto;
-		white-space: nowrap;
-		min-width: 80px;
-		min-height: 40px;
-		line-height: 20px;
-		padding: 9px 13px;
-		border: 0;
-		background: transparent;
-		color: inherit;
-		font-size: 14px;
-		border-radius: 4px;
-		box-shadow: none;
-	}
-	.segmented button.active {
-		background: #29acf425;
-		color: var(--stats-accent, #29acf4);
-	}
 	section,
 	:global(section.stats-game-section) {
 		padding: 26px 0 30px;
 		border-top: 1px solid #8883;
-	}
-	.section-heading {
-		display: flex;
-		justify-content: space-between;
-		gap: 12px;
-		align-items: center;
-		flex-wrap: wrap;
-		margin-bottom: 22px;
-	}
-	h2 {
-		font-size: 19px;
-		font-weight: 600;
-		margin: 0;
-		letter-spacing: -0.02em;
-	}
-	.section-heading > span {
-		font-size: 13px;
-		color: var(--stats-muted);
 	}
 	.category-controls {
 		display: flex;
@@ -1806,9 +1761,6 @@
 		row-gap: 8px;
 		margin: -4px 0 18px;
 	}
-	.segmented button:hover {
-		background: color-mix(in srgb, #29acf4 12%, transparent);
-	}
 	.back:hover,
 	.crew-person:hover {
 		color: var(--stats-accent);
@@ -1848,7 +1800,7 @@
 			min-width: 0;
 		}
 		.header-summary {
-			max-width: none;
+			max-width: 820px;
 		}
 		.category-controls {
 			justify-content: start;
@@ -1907,14 +1859,8 @@
 		.pies {
 			grid-template-columns: 1fr;
 		}
-		.section-heading {
-			align-items: flex-start;
-		}
 		.category-controls {
 			justify-content: start;
-		}
-		h2 {
-			font-size: 18px;
 		}
 		.milestones {
 			grid-template-columns: repeat(2, minmax(0, 1fr));

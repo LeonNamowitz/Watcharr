@@ -1,0 +1,27 @@
+.stats-page .section-heading {
+	display: flex;
+	justify-content: space-between;
+	gap: 12px;
+	align-items: center;
+	flex-wrap: wrap;
+	margin-bottom: 22px;
+}
+
+.stats-page .section-heading h2,
+.stats-page .empty-year h2 {
+	font-size: 23px;
+	font-weight: 600;
+	margin: 0;
+	letter-spacing: -0.02em;
+}
+
+.stats-page .section-heading > span {
+	font-size: 13px;
+	color: var(--stats-muted);
+}
+
+@media (max-width: 520px) {
+	.stats-page .section-heading {
+		align-items: flex-start;
+	}
+}

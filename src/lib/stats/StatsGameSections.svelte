@@ -1,9 +1,10 @@
 <script lang="ts">
+	import StatsSegmentedControl from "./StatsSegmentedControl.svelte";
 	import StatsChart from "./StatsChart.svelte";
 	import StatsRankedChart from "./StatsRankedChart.svelte";
 	import StatsPosters from "./StatsPosters.svelte";
 	import StatsExpansion from "./StatsExpansion.svelte";
-	import { decimal } from "./format";
+	import { decimal, meanRating } from "./format";
 	import type { RatingSettings } from "@/lib/rating/helpers";
 	import type { StatsResponse, ChartPoint } from "./types";
 
@@ -150,12 +151,11 @@
 			titleCount: b.count,
 			averageRating: (() => {
 				const keys = new Set(b.titleKeys ?? []);
-				const ratings = data.posters
-					.filter((c) => keys.has(`game:${c.id}`) && (c.rating ?? 0) > 0)
-					.map((c) => c.rating ?? 0);
-				return ratings.length
-					? ratings.reduce((a, v) => a + v, 0) / ratings.length
-					: 0;
+				return meanRating(
+					data.posters
+						.filter((c) => keys.has(`game:${c.id}`))
+						.map((c) => c.rating ?? 0),
+				);
 			})(),
 			titleKeys: b.titleKeys ?? [],
 		}));
@@ -167,7 +167,7 @@
 		<section class="stats-game-section">
 			<div class="section-heading">
 				<h2 class="norm">Activity</h2>
-				<div class="segmented" aria-label="Activity metric">
+				<StatsSegmentedControl label="Activity metric" wrap>
 					<button
 						class="plain"
 						class:active={activityKind === "progress"}
@@ -180,8 +180,8 @@
 						aria-pressed={activityKind === "completions"}
 						onclick={() => (activityKind = "completions")}>Completions</button
 					>
-				</div>
-				<div class="segmented" aria-label="Activity interval">
+				</StatsSegmentedControl>
+				<StatsSegmentedControl label="Activity interval" wrap>
 					<button
 						class="plain"
 						class:active={interval === "week"}
@@ -194,7 +194,7 @@
 						aria-pressed={interval === "month"}
 						onclick={() => (interval = "month")}>Month</button
 					>
-				</div>
+				</StatsSegmentedControl>
 			</div>
 			<div class="averages activity-averages">
 				<span
@@ -228,7 +228,7 @@
 						? "Developers & publishers"
 						: "Genres & play styles"}
 				</h2>
-				<div class="segmented" aria-label="Sort game rankings">
+				<StatsSegmentedControl label="Sort game rankings" wrap>
 					<button
 						class="plain"
 						class:active={sortBy === "count"}
@@ -241,7 +241,7 @@
 						aria-pressed={sortBy === "rating"}
 						onclick={() => (sortBy = "rating")}>Highest rated</button
 					>
-				</div>
+				</StatsSegmentedControl>
 			</div>
 			<div class="rankings">
 				{#each rankings as group (group.key)}<StatsRankedChart
@@ -336,24 +336,11 @@
 {/if}
 
 <style>
-	.section-heading {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 12px;
-		justify-content: space-between;
-		align-items: center;
-		margin-bottom: 18px;
-	}
-	h2 {
-		font-size: 23px;
-		margin: 0;
-	}
 	h3 {
 		font-size: 17px;
 		margin: 22px 0 14px;
 	}
-	.muted,
-	.section-heading > span {
+	.muted {
 		color: var(--stats-muted);
 		font-size: 13px;
 	}
@@ -374,36 +361,6 @@
 		row-gap: 8px;
 		margin: -4px 0 18px;
 	}
-	.segmented {
-		display: flex;
-		flex-wrap: wrap;
-		background: color-mix(in srgb, var(--stats-text) 5%, transparent);
-		border: 1px solid var(--stats-border);
-		border-radius: 8px;
-		padding: 3px;
-		gap: 3px;
-	}
-	button {
-		background: transparent;
-		border: none;
-		border-radius: 5px;
-		color: var(--stats-muted);
-		padding: 6px 10px;
-		font: inherit;
-		font-size: 14px;
-		min-height: 40px;
-		width: auto;
-		flex: 1 0 auto;
-		cursor: pointer;
-	}
-	button.active {
-		background: color-mix(in srgb, var(--stats-accent) 18%, transparent);
-		color: var(--stats-accent);
-	}
-	button:focus-visible {
-		outline: 2px solid var(--stats-accent);
-		outline-offset: 3px;
-	}
 	.rankings {
 		display: grid;
 		grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -422,10 +379,7 @@
 		padding: 14px 16px;
 		border: 1px solid var(--stats-border);
 		border-radius: 10px;
-		background: color-mix(in srgb, var(--stats-text) 3%, transparent);
-	}
-	.playtime-intro h2 {
-		font-size: 28px;
+		background: var(--stats-surface);
 	}
 	.playtime-intro p {
 		margin: 6px 0 0;

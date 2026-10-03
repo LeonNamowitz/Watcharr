@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { statsUnitLabel } from "./format";
 	let {
 		label,
 		titleCount,
@@ -16,17 +17,7 @@
 		id?: string;
 		position?: { left: number; top: number };
 	} = $props();
-	const unitLabel = $derived(
-		titleCount === 1
-			? titleUnit === "watches"
-				? "watch"
-				: titleUnit === "episodes"
-					? "episode"
-					: titleUnit === "games"
-						? "game"
-						: "title"
-			: titleUnit,
-	);
+	const unitLabel = $derived(statsUnitLabel(titleUnit, titleCount));
 </script>
 
 <div

@@ -1,14 +1,17 @@
 <script lang="ts">
 	import type { StatsDay, StatsResponse, StatsSelection } from "./types";
 	import StatsTooltip from "./StatsTooltip.svelte";
-	import { averageRating } from "./format";
+	import { averageRating, meanRating, statsUnitLabel } from "./format";
+	import type { RatingSettings } from "@/lib/rating/helpers";
 	import { statsTooltipPosition } from "./tooltipPosition";
 	let {
 		data,
+		settings,
 		onSelect,
 		calendarYear = $bindable<number | undefined>(),
 	}: {
 		data: StatsResponse;
+		settings: RatingSettings;
 		onSelect: (selection: StatsSelection) => void;
 		calendarYear?: number;
 	} = $props();
@@ -61,7 +64,7 @@
 		};
 	});
 	function countLabel(count: number) {
-		return `${count} ${count === 1 ? (data.media === "tv" ? "episode" : "watch") : unit}`;
+		return `${count} ${statsUnitLabel(unit, count)}`;
 	}
 	function dateKey(month: number, day: number) {
 		return `${String(year).padStart(4, "0")}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
@@ -116,16 +119,12 @@
 		const position = statsTooltipPosition(event, element);
 		tooltipLeft = position.left;
 		tooltipTop = position.top;
-		const ratings = day.items
-			.map((item) => item.rating ?? 0)
-			.filter((rating) => rating > 0);
 		hoveredDay = {
 			label: prettyDate(day.date),
 			plays: day.plays,
 			averageRating: averageRating(
-				ratings.length
-					? ratings.reduce((sum, rating) => sum + rating, 0) / ratings.length
-					: 0,
+				meanRating(day.items.map((item) => item.rating ?? 0)),
+				settings,
 			),
 			detail: `${day.items.length} unique ${day.items.length === 1 ? "title" : "titles"}`,
 		};
@@ -246,22 +245,10 @@
 		padding: 26px 0 30px;
 		border-top: 1px solid var(--stats-border);
 	}
-	.section-heading {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: baseline;
-		justify-content: space-between;
-		gap: 12px;
-		margin-bottom: 18px;
-	}
-	h2 {
-		font-size: 22px;
-	}
 	h3 {
 		font-size: 15px;
 		margin-bottom: 10px;
 	}
-	.section-heading > span,
 	.section-heading label,
 	.note {
 		font-size: 13px;
