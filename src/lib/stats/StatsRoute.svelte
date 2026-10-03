@@ -1,3 +1,10 @@
+<script module lang="ts">
+	import { SvelteMap } from "svelte/reactivity";
+	// Keep large responses out of SvelteKit's sessionStorage snapshots.
+	const savedResponses = new SvelteMap<string, StatsResponse>();
+	let nextToken = 0;
+</script>
+
 <script lang="ts">
 	import { resolve } from "$app/paths";
 	import { goto } from "$app/navigation";
@@ -14,14 +21,66 @@
 	let error = $state<unknown>();
 	let loading = $state(true);
 	let focusAfterLoad: string | undefined;
+	let statsPage = $state<StatsPage>();
+	let requestVersion = 0;
+	let restoredKey: string | undefined;
+	let pendingContext: ReturnType<StatsPage["capture"]> | undefined;
 	const year = $derived(
 		page.url.searchParams.get("year") ?? String(new Date().getUTCFullYear()),
 	);
 	const media = $derived(
 		page.url.searchParams.get("media") === "tv" ? "tv" : "movie",
 	);
+	const requestKey = $derived(
+		`${publicOwner?.id ?? "private"}:${publicOwner?.username ?? ""}:${year}:${media}`,
+	);
+
+	export function capture() {
+		if (loading || error || !data || !statsPage) return null;
+		const token = String(nextToken++);
+		savedResponses.set(token, $state.snapshot(data));
+		while (savedResponses.size > 10) {
+			const oldest = savedResponses.keys().next().value;
+			if (oldest === undefined) break;
+			savedResponses.delete(oldest);
+		}
+		return { key: requestKey, token, context: statsPage.capture() };
+	}
+
+	async function restoreContext(version: number) {
+		await tick();
+		if (version !== requestVersion || !pendingContext || !statsPage) return;
+		const context = pendingContext;
+		pendingContext = undefined;
+		await statsPage.restore(context);
+	}
+
+	export function restore(saved: ReturnType<typeof capture>) {
+		if (!saved || saved.key !== requestKey) return;
+		pendingContext = saved.context;
+		const response = savedResponses.get(saved.token);
+		if (!response) {
+			// After a reload or cache eviction, apply context once data arrives.
+			if (!loading && data) void restoreContext(requestVersion);
+			return;
+		}
+		restoredKey = saved.key;
+		const version = ++requestVersion;
+		data = response;
+		error = undefined;
+		loading = false;
+		void restoreContext(version);
+	}
 	$effect(() => {
 		const owner = publicOwner;
+		const key = requestKey;
+		if (restoredKey === key) {
+			restoredKey = undefined;
+			return;
+		}
+		restoredKey = undefined;
+		const version = ++requestVersion;
+		const isActive = () => active && version === requestVersion;
 		const params = new URLSearchParams({ year, media });
 		const path = owner
 			? `/public/users/${encodeURIComponent(owner.id)}/${encodeURIComponent(owner.username)}/stats`
@@ -32,18 +91,19 @@
 		(owner ? noAuthReq : req)
 			.get<StatsResponse>(`${path}?${params}`)
 			.then((result) => {
-				if (active) data = result;
+				if (isActive()) data = result;
 			})
 			.catch((err) => {
-				if (active) error = err;
+				if (isActive()) error = err;
 			})
 			.finally(async () => {
-				if (!active) return;
+				if (!isActive()) return;
 				loading = false;
+				await restoreContext(version);
 				const control = focusAfterLoad;
 				focusAfterLoad = undefined;
 				await tick();
-				if (active && control && document.activeElement === document.body) {
+				if (isActive() && control && document.activeElement === document.body) {
 					document
 						.querySelector<HTMLElement>(
 							`.stats-page [data-stats-control="${control}"]`,
@@ -79,6 +139,7 @@
 	</div>{:else if error}<div class="error">
 		<Error {error} pretty="Unable to load these stats." />
 	</div>{:else if data}{#key `${publicOwner?.id ?? "private"}:${data.scope}:${data.year}:${data.media}`}<StatsPage
+			bind:this={statsPage}
 			{data}
 			{publicOwner}
 			onSelectionChange={changeSelection}

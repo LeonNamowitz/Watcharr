@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tick } from "svelte";
 	import StatsExpansion from "./StatsExpansion.svelte";
 	import { resolve } from "$app/paths";
 	import StatsChart from "./StatsChart.svelte";
@@ -40,13 +41,85 @@
 	let decadeCounts = $state<Record<number, number>>({});
 	let crewCounts = $state<Record<string, number>>({});
 	let activityMode = $state<"week" | "month">("week");
+	let backgroundPreview = $state<"panels" | "tonal-wash" | "edge-grid">(
+		"panels",
+	);
 	let selection = $state<{
 		label: string;
 		items: StatsMediaCard[];
 		personId?: number;
 		description?: string;
 	}>();
+	let categoryCounts = $state({ genres: 5, countries: 5, languages: 5 });
+	let peopleCounts = $state({ cast: 5, directors: 5, studios: 5 });
+	let root: HTMLDivElement;
+	let titlesDialog = $state<StatsTitlesDialog>();
+	let dialogState = $state<ReturnType<StatsTitlesDialog["capture"]>>();
+	export function capture() {
+		const dialog = titlesDialog?.capture();
+		return $state.snapshot({
+			episodeCount,
+			episodeTab,
+			highestTab,
+			yearlyFavoriteCount,
+			peopleMode,
+			categorySort,
+			higherCount,
+			lowerCount,
+			mostWatchedCount,
+			favoriteCount,
+			decadeCounts,
+			crewCounts,
+			activityMode,
+			backgroundPreview,
+			peopleCounts,
+			categoryCounts,
+			selection,
+			dialog,
+			openDetails: Array.from(
+				root.querySelectorAll("details"),
+				(el) => el.open,
+			),
+			scrollX: dialog?.scrollX ?? window.scrollX,
+			scrollY: dialog?.scrollY ?? window.scrollY,
+		});
+	}
+	export async function restore(saved: ReturnType<typeof capture>) {
+		// Restore the full page height before scrolling or reopening a modal.
+		selection = undefined;
+		episodeCount = saved.episodeCount;
+		episodeTab = saved.episodeTab;
+		highestTab = saved.highestTab;
+		yearlyFavoriteCount = saved.yearlyFavoriteCount;
+		peopleMode = saved.peopleMode;
+		categorySort = saved.categorySort;
+		higherCount = saved.higherCount;
+		lowerCount = saved.lowerCount;
+		mostWatchedCount = saved.mostWatchedCount;
+		favoriteCount = saved.favoriteCount;
+		decadeCounts = saved.decadeCounts;
+		crewCounts = saved.crewCounts;
+		activityMode = saved.activityMode;
+		backgroundPreview = saved.backgroundPreview;
+		peopleCounts = saved.peopleCounts;
+		await tick();
+		// Ranked charts reset their expansion when sorting changes.
+		categoryCounts = saved.categoryCounts;
+		await tick();
+		root.querySelectorAll("details").forEach((el, index) => {
+			el.open = saved.openDetails[index] ?? false;
+		});
+		window.scrollTo({
+			left: saved.scrollX,
+			top: saved.scrollY,
+			behavior: "instant",
+		});
+		dialogState = saved.dialog;
+		selection = saved.selection;
+	}
+
 	function explore(label: string, keys: string[], personId?: number) {
+		dialogState = undefined;
 		const membership = new Set(keys);
 		selection = {
 			label,
@@ -61,6 +134,7 @@
 		};
 	}
 	function explorePoint(point: ChartPoint) {
+		dialogState = undefined;
 		if (point.items)
 			selection = {
 				label: point.tooltipLabel ?? point.label,
@@ -290,7 +364,11 @@
 	><title>{data.owner.username} · {period} stats · Watcharr</title></svelte:head
 >
 
-<div class="stats-page">
+<div
+	bind:this={root}
+	class="stats-page"
+	data-background-style={backgroundPreview}
+>
 	<header>
 		<div class="heading">
 			<a
@@ -300,9 +378,15 @@
 					: resolve("/")}
 				>← {publicOwner ? "Back to library" : "Back to library"}</a
 			>
-			<p class="eyebrow">{data.owner.username + "'s " + (data.scope === "lifetime" ? "all-time stats" : "year in film")}</p>
+			<p class="eyebrow">
+				{data.owner.username +
+					"'s " +
+					(data.scope === "lifetime" ? "all-time stats" : "year in film")}
+			</p>
 			<h1 class="norm">
-				{lifetime ? "A Life in " + (data.media === "tv" ? "Shows" : "Film") : `${data.year}`}
+				{lifetime
+					? "A Life in " + (data.media === "tv" ? "Shows" : "Film")
+					: `${data.year}`}
 			</h1>
 			<p class="intro">
 				{data.summary.titles.toLocaleString()}
@@ -336,6 +420,14 @@
 					onclick={() => onSelectionChange(yearValue, "tv")}>TV</button
 				>
 			</div>
+			<label class="preview-control">
+				Background preview
+				<select bind:value={backgroundPreview}>
+					<option value="panels">Section panels</option>
+					<option value="tonal-wash">Soft full-page wash</option>
+					<option value="edge-grid">Edge vignette + grid dots</option>
+				</select>
+			</label>
 		</div>
 	</header>
 	{#if data.metadata.partial}<details class="coverage">
@@ -603,6 +695,7 @@
 		<div class="categories">
 			<StatsRankedChart
 				title="Genres"
+				bind:count={categoryCounts.genres}
 				items={data.genres}
 				{settings}
 				sortBy={categorySort}
@@ -610,6 +703,7 @@
 			/>
 			<StatsRankedChart
 				title="Countries"
+				bind:count={categoryCounts.countries}
 				items={data.countries}
 				color="#51ad79"
 				{settings}
@@ -618,6 +712,7 @@
 			/>
 			<StatsRankedChart
 				title="Languages"
+				bind:count={categoryCounts.languages}
 				items={data.languages}
 				color="#d9aa64"
 				{settings}
@@ -676,7 +771,9 @@
 					</div>
 				</div>{/each}
 		</div>
-		<div class="rating-heading"><h3 class="norm">Rating distribution</h3></div>
+		<div class="rating-heading">
+			<h3 class="norm">Rating distribution</h3>
+		</div>
 		<StatsChart
 			title="Rating distribution"
 			points={ratingPoints.map((p) => ({
@@ -699,7 +796,9 @@
 	<section>
 		<div class="section-heading">
 			<h2 class="norm">
-				{data.media === "tv" ? "People behind the shows" : "People behind the films"}
+				{data.media === "tv"
+					? "People behind the shows"
+					: "People behind the films"}
 			</h2>
 			<div class="segmented">
 				<button
@@ -716,6 +815,7 @@
 		<div class="people-sections">
 			<StatsPeople
 				title="Cast"
+				bind:count={peopleCounts.cast}
 				people={data.people.cast}
 				expansionRows={peopleExpansionRows}
 				unit={data.media === "tv" ? "episodes" : "titles"}
@@ -724,6 +824,7 @@
 				{settings}
 			/><StatsPeople
 				title="Directors & creators"
+				bind:count={peopleCounts.directors}
 				people={data.people.directors}
 				expansionRows={peopleExpansionRows}
 				mode={peopleMode}
@@ -731,6 +832,7 @@
 				{settings}
 			/><StatsPeople
 				title="Studios"
+				bind:count={peopleCounts.studios}
 				people={data.studios}
 				mode={peopleMode}
 				onSelect={(p) => explore(p.name, p.titleKeys)}
@@ -864,12 +966,17 @@
 		/>
 	</section>
 	{#if selection}{#key selection}<StatsTitlesDialog
+				bind:this={titlesDialog}
+				initialState={dialogState}
 				{...selection}
 				{period}
 				owner={publicOwner}
 				{settings}
 				expansionRows={titleDialogExpansionRows}
-				onClose={() => (selection = undefined)}
+				onClose={() => {
+					selection = undefined;
+					dialogState = undefined;
+				}}
 			/>{/key}{/if}
 	<footer>
 		Based on recorded whole-title watches. Past years use current saved ratings{data.reviewsVisible
@@ -884,9 +991,9 @@
 	}
 	.stats-page {
 		--stats-accent: #086fa8;
-		max-width: 1050px;
+		max-width: none;
 		width: 100%;
-		margin: 0 auto;
+		margin: 0;
 		padding: 24px 32px 60px;
 		box-sizing: border-box;
 		min-width: 0;
@@ -897,6 +1004,49 @@
 		--stats-muted: color-mix(in srgb, var(--text-color) 67%, var(--bg-color));
 		--stats-border: color-mix(in srgb, var(--text-color) 14%, var(--bg-color));
 		--stats-surface: color-mix(in srgb, var(--bg-color) 96%, var(--text-color));
+	}
+	.stats-page > :is(header, .coverage, .empty-year, section, footer) {
+		max-width: 1050px;
+		width: 100%;
+		margin-right: auto;
+		margin-left: auto;
+	}
+	.stats-page[data-background-style="tonal-wash"] {
+		background-image: linear-gradient(
+			175deg,
+			color-mix(in srgb, var(--stats-accent) 5%, var(--bg-color)) 0%,
+			var(--bg-color) 48%,
+			color-mix(in srgb, #51ad79 2.5%, var(--bg-color)) 100%
+		);
+	}
+	.stats-page[data-background-style="edge-grid"] {
+		background-image:
+			radial-gradient(
+				circle,
+				color-mix(in srgb, var(--text-color) 14%, transparent) 1px,
+				transparent 1.2px
+			),
+			linear-gradient(
+				90deg,
+				color-mix(in srgb, var(--stats-accent) 5%, var(--bg-color)) 0%,
+				color-mix(in srgb, var(--stats-accent) 1.5%, var(--bg-color)) 18%,
+				var(--bg-color) 42%,
+				var(--bg-color) 58%,
+				color-mix(in srgb, var(--stats-accent) 1.5%, var(--bg-color)) 82%,
+				color-mix(in srgb, var(--stats-accent) 5%, var(--bg-color)) 100%
+			);
+		background-size:
+			24px 24px,
+			100% 100%;
+		background-repeat: repeat, no-repeat;
+	}
+	.stats-page[data-background-style="panels"] > section {
+		padding: 22px 24px;
+		margin-top: 14px;
+		border: 1px solid
+			color-mix(in srgb, var(--stats-accent) 7%, var(--bg-color));
+		border-radius: 10px;
+		background: color-mix(in srgb, var(--stats-accent) 2%, var(--bg-color));
 	}
 	header {
 		display: flex;
@@ -945,6 +1095,9 @@
 		letter-spacing: 0.08em;
 		display: grid;
 		gap: 6px;
+	}
+	.preview-control {
+		min-width: 200px;
 	}
 	select {
 		min-width: 160px;
@@ -1332,6 +1485,7 @@
 		}
 		.controls {
 			flex-direction: row;
+			flex-wrap: wrap;
 			align-items: end;
 			gap: 12px;
 		}
@@ -1339,8 +1493,14 @@
 			flex: 1;
 			min-width: 0;
 		}
+		.controls .preview-control {
+			flex: 0 0 100%;
+		}
 		select {
 			min-width: 0;
+		}
+		.stats-page[data-background-style="panels"] > section {
+			padding: 18px 16px;
 		}
 		.timeline-grid,
 		.crew {

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { untrack } from "svelte";
 	import StatsTooltip from "./StatsTooltip.svelte";
 	import StatsExpansion from "./StatsExpansion.svelte";
 	import { BarChart } from "layerchart/svg";
@@ -13,6 +14,7 @@
 		sortBy = "count",
 		settings,
 		onSelect,
+		count = $bindable(5),
 	}: {
 		title: string;
 		items: StatsBar[];
@@ -20,8 +22,8 @@
 		sortBy?: "count" | "rating";
 		settings: RatingSettings;
 		onSelect: (item: StatsBar) => void;
+		count?: number;
 	} = $props();
-	let count = $state(5);
 	let hovered = $state<StatsBar>();
 	let tooltipAnchor: HTMLElement | undefined;
 	let tooltipLeft = $state(0);
@@ -50,7 +52,10 @@
 	}
 
 	$effect(() => {
-		if (sortBy) count = 5;
+		const sort = sortBy;
+		untrack(() => {
+			if (sort) count = 5;
+		});
 	});
 	const ranked = $derived(
 		[...items].sort((a, b) =>

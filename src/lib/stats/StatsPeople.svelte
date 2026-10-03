@@ -13,6 +13,7 @@
 		studios = false,
 		unit = "titles",
 		expansionRows = 0,
+		count = $bindable(5),
 	}: {
 		title: string;
 		people: StatsPerson[];
@@ -22,8 +23,8 @@
 		studios?: boolean;
 		unit?: string;
 		expansionRows?: number;
+		count?: number;
 	} = $props();
-	let count = $state(5);
 	let peopleGrid: HTMLDivElement;
 	let columns = $state(5);
 	onMount(() => {

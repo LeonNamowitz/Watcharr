@@ -162,7 +162,7 @@
 		gap: 8px;
 	}
 	.wall {
-		grid-template-columns: repeat(auto-fill, minmax(min(70px, 100%), 72px));
+		grid-template-columns: repeat(auto-fill, minmax(min(70px, 100%), 1fr));
 		gap: 6px;
 	}
 	.empty {

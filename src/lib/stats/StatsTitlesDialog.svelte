@@ -1,7 +1,7 @@
 <script lang="ts">
 	import StatsExpansion from "./StatsExpansion.svelte";
 	import { resolve } from "$app/paths";
-	import { onMount } from "svelte";
+	import { onMount, untrack } from "svelte";
 	import StatsPosters from "./StatsPosters.svelte";
 	import type { StatsMediaCard } from "./types";
 	import type { RatingSettings } from "@/lib/rating/helpers";
@@ -15,6 +15,7 @@
 		description = "watched",
 		expansionRows,
 		onClose,
+		initialState,
 	}: {
 		label: string;
 		items: StatsMediaCard[];
@@ -25,13 +26,24 @@
 		description?: string;
 		expansionRows: number;
 		onClose: () => void;
+		initialState?: {
+			count: number;
+			scrollTop: number;
+			scrollX: number;
+			scrollY: number;
+		};
 	} = $props();
 	let dialog: HTMLDialogElement;
-	let count = $state(5);
+	let count = $state(untrack(() => initialState?.count ?? 5));
+	let pageScroll = { scrollX: 0, scrollY: 0 };
+	export function capture() {
+		return { count, scrollTop: dialog.scrollTop, ...pageScroll };
+	}
 	let columns = $state(5);
 	onMount(() => {
 		const { body, documentElement: root } = document;
-		const { scrollX, scrollY } = window;
+		const { scrollX, scrollY } = initialState ?? window;
+		pageScroll = { scrollX, scrollY };
 		const previousStyles = {
 			position: body.style.position,
 			top: body.style.top,
@@ -53,14 +65,17 @@
 		});
 		root.style.overflow = "hidden";
 		dialog.showModal();
+		dialog.scrollTop = initialState?.scrollTop ?? 0;
 		const postersGrid = dialog.querySelector<HTMLElement>(".posters");
 		const updateColumns = () => {
 			if (postersGrid)
-				columns = getComputedStyle(postersGrid).gridTemplateColumns.split(" ")
-					.length;
+				columns =
+					getComputedStyle(postersGrid).gridTemplateColumns.split(" ").length;
 		};
 		updateColumns();
-		const observer = postersGrid ? new ResizeObserver(updateColumns) : undefined;
+		const observer = postersGrid
+			? new ResizeObserver(updateColumns)
+			: undefined;
 		if (postersGrid) observer?.observe(postersGrid);
 		return () => {
 			observer?.disconnect();
