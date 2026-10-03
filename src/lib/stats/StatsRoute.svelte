@@ -18,6 +18,10 @@
 	let { publicOwner }: { publicOwner?: { id: string; username: string } } =
 		$props();
 	let data = $state<StatsResponse>();
+	let loadedOwnerKey = $state<string>();
+	const ownerKey = $derived(
+		`${publicOwner?.id ?? "private"}:${publicOwner?.username ?? ""}`,
+	);
 	let error = $state<unknown>();
 	let loading = $state(true);
 	let focusAfterLoad: string | undefined;
@@ -67,12 +71,14 @@
 		restoredKey = saved.key;
 		const version = ++requestVersion;
 		data = response;
+		loadedOwnerKey = ownerKey;
 		error = undefined;
 		loading = false;
 		void restoreContext(version);
 	}
 	$effect(() => {
 		const owner = publicOwner;
+		const requestedOwnerKey = ownerKey;
 		const key = requestKey;
 		if (restoredKey === key) {
 			restoredKey = undefined;
@@ -91,7 +97,10 @@
 		(owner ? noAuthReq : req)
 			.get<StatsResponse>(`${path}?${params}`)
 			.then((result) => {
-				if (isActive()) data = result;
+				if (isActive()) {
+					data = result;
+					loadedOwnerKey = requestedOwnerKey;
+				}
 			})
 			.catch((err) => {
 				if (isActive()) error = err;
@@ -133,17 +142,23 @@
 	}
 </script>
 
-{#if loading}<div class="loading">
+{#if data && loadedOwnerKey === ownerKey}
+	<StatsPage
+		bind:this={statsPage}
+		{data}
+		{publicOwner}
+		{loading}
+		{error}
+		requestedYear={year}
+		requestedMedia={media}
+		onSelectionChange={changeSelection}
+	/>
+{:else if loading}<div class="loading" role="status">
 		<Spinner />
 		<p>Gathering your viewing journal…</p>
 	</div>{:else if error}<div class="error">
 		<Error {error} pretty="Unable to load these stats." />
-	</div>{:else if data}{#key `${publicOwner?.id ?? "private"}:${data.scope}:${data.year}:${data.media}`}<StatsPage
-			bind:this={statsPage}
-			{data}
-			{publicOwner}
-			onSelectionChange={changeSelection}
-		/>{/key}{/if}
+	</div>{/if}
 
 <style>
 	.loading,

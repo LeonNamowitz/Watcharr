@@ -384,7 +384,7 @@ func (s *Service) GetStats(userID uint, q Query) (StatsResponse, error) {
 		s.enrichEpisodes(episodeRecords, metadata, &response.Metadata)
 		response.HighestRatedEpisodes = buildHighestRated(episodeRecords, q.Year, metadata)
 		response.Episodes = uniqueCards(episodeRecords, metadata)
-		response.People.Cast = buildEpisodeCast(scopeRecords, episodeRecords, metadata)
+		response.People.Cast = buildEpisodeCast(episodeRecords, metadata)
 	}
 	response.Activity = buildActivity(activityRecords)
 	if q.Scope == ScopeYear {

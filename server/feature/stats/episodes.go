@@ -190,13 +190,8 @@ func (s *Service) enrichEpisodes(records []*watchedRecord, metadata map[string]c
 	}
 }
 
-func buildEpisodeCast(shows, episodes []*watchedRecord, metadata map[string]contentMetadata) []PersonStat {
+func buildEpisodeCast(episodes []*watchedRecord, metadata map[string]contentMetadata) []PersonStat {
 	values := map[int]*personAggregate{}
-	for _, r := range shows {
-		for _, c := range metadata[contentKey(r.content)].cast {
-			addPerson(values, c, r)
-		}
-	}
 	// Episode credits are added by enrichment under episode-specific keys.
 	for _, r := range episodes {
 		if len(r.plays) == 0 {

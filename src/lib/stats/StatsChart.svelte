@@ -12,8 +12,9 @@
 		kind = "bar",
 		color = "#29acf4",
 		height = 180,
-		showData = false,
-		dataLabel = "Explore chart data",
+		showData,
+		dataLabel = "Browse chart titles",
+		valueUnit = "titles",
 		settings,
 		onSelect,
 	}: {
@@ -24,6 +25,7 @@
 		height?: number;
 		showData?: boolean;
 		dataLabel?: string;
+		valueUnit?: "titles" | "watches" | "episodes";
 		settings?: RatingSettings;
 		onSelect?: (point: ChartPoint) => void;
 	} = $props();
@@ -43,6 +45,20 @@
 		),
 	);
 	const lineMaximum = $derived(Math.min(10, Math.ceil(maximum + 0.5)));
+	const browseData = $derived(
+		showData ?? (kind === "bar" || kind === "horizontal"),
+	);
+	const browsePoints = $derived(points.filter((p) => (p.value ?? 0) > 0));
+	function countLabel(p: ChartPoint) {
+		return `${valueLabel(p)} ${p.value === 1 ? valueUnit.slice(0, -1) : valueUnit}`;
+	}
+	function preview(p: ChartPoint) {
+		const items = p.items ?? [];
+		return [
+			...items.slice(0, 3).map((item) => item.title),
+			...(items.length > 3 ? [`+${items.length - 3} more`] : []),
+		].join(" · ");
+	}
 	function valueLabel(p: ChartPoint) {
 		return p.value === null
 			? "Unrated"
@@ -197,20 +213,33 @@
 			/>
 		{/if}
 	{:else}<p class="empty">No recorded data for this chart.</p>{/if}
-	{#if showData}<details>
-			<summary>{dataLabel}</summary>
+	{#if browseData}<details>
+			<summary>{dataLabel} <span>({browsePoints.length})</span></summary>
 			<div class="data-list">
-				{#each points as p (p.label)}<button
+				{#each browsePoints as p (p.label)}
+					<button
 						type="button"
 						class="plain data-row"
-						disabled={!onSelect || !p.value}
+						disabled={!onSelect}
+						aria-haspopup="dialog"
 						onclick={() => onSelect?.(p)}
 					>
-						<span class="data-label"
-							>{p.tooltipLabel ?? p.label}{#if p.detail}<small>{p.detail}</small
-								>{/if}</span
-						><strong>{valueLabel(p)}</strong>
-					</button>{/each}
+						<span class="data-label">
+							<span class="row-heading">{p.tooltipLabel ?? p.label}</span>
+							<small
+								>{p.averageRating
+									? `${averageRating(p.averageRating, settings)} average rating`
+									: "Unrated"}</small
+							>
+							{#if preview(p)}<small class="title-preview">{preview(p)}</small
+								>{/if}
+						</span>
+						<span class="row-action"
+							><strong>{countLabel(p)}</strong><span aria-hidden="true">→</span
+							></span
+						>
+					</button>
+				{:else}<p class="empty">No recorded data to browse.</p>{/each}
 			</div>
 		</details>{/if}
 </div>
@@ -234,41 +263,76 @@
 	summary {
 		cursor: pointer;
 		font-size: 13px;
+		color: var(--stats-accent);
+		margin-top: 12px;
+		padding: 10px 0;
+		min-height: 44px;
+	}
+	summary span {
 		color: var(--stats-muted);
-		margin-top: 8px;
 	}
 	.data-list {
-		max-height: 200px;
+		max-height: 320px;
 		overflow: auto;
-		margin-top: 10px;
+		overscroll-behavior: contain;
+		border: 1px solid var(--stats-border);
+		border-radius: 8px;
 	}
 	.data-row {
 		display: flex;
+		align-items: center;
 		justify-content: space-between;
-		gap: 8px;
+		gap: 12px;
 		width: 100%;
-		padding: 5px 0;
+		min-height: 60px;
+		padding: 12px;
 		text-align: left;
 		font-size: 14px;
-	}
-	.data-row {
 		color: inherit;
+	}
+	.data-row + .data-row {
+		border-top: 1px solid var(--stats-border);
+	}
+	.row-heading {
+		font-weight: 600;
+	}
+	.row-action {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		flex: none;
+		color: var(--stats-accent);
+		font-size: 13px;
+		white-space: nowrap;
 	}
 	.data-row:not(:disabled) {
 		cursor: pointer;
 	}
 	.data-row:not(:disabled):hover {
 		color: var(--stats-accent);
+		background: var(--stats-surface);
+	}
+	.data-row:focus-visible {
+		outline: 2px solid var(--stats-accent);
+		outline-offset: -2px;
 	}
 	.data-label {
 		display: grid;
 		min-width: 0;
+		overflow-wrap: anywhere;
 	}
 	.data-label small {
 		margin-top: 2px;
 		color: var(--stats-muted);
 		font-size: 12px;
 		line-height: 1.4;
+	}
+	.title-preview {
+		display: -webkit-box;
+		-webkit-box-orient: vertical;
+		-webkit-line-clamp: 2;
+		line-clamp: 2;
+		overflow: hidden;
 	}
 	.chart :global(.lc-arc-line:focus) {
 		outline: none;

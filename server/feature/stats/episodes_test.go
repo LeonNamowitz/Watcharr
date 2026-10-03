@@ -19,7 +19,7 @@ func (episodeTMDB) MovieDetails(tmdb.MovieDetailsOptions) (tmdb.MovieDetails, er
 }
 func (episodeTMDB) ShowDetails(tmdb.ShowDetailsOptions) (tmdb.ShowDetails, error) {
 	var d tmdb.ShowDetails
-	err := json.Unmarshal([]byte(`{"first_air_date":"2020-01-01","aggregate_credits":{"cast":[{"id":1,"name":"Regular"}]}}`), &d)
+	err := json.Unmarshal([]byte(`{"first_air_date":"2020-01-01","aggregate_credits":{"cast":[{"id":1,"name":"Regular"},{"id":3,"name":"Show-only actor"}]}}`), &d)
 	return d, err
 }
 func (p episodeTMDB) SeasonDetails(string, string) (tmdb.SeasonDetails, error) {
@@ -100,6 +100,33 @@ func TestEpisodeActivityRatingsAndCast(t *testing.T) {
 	for _, p := range data.People.Cast {
 		if p.Titles != 2 || len(p.TitleKeys) != 2 || p.AverageRating != 8.5 {
 			t.Fatalf("episode credits should be distinct and use episode ratings: %#v", p)
+		}
+	}
+	// Whole-show watches and ratings must not inflate episode cast statistics.
+	if err := db.Model(&w).Update("rating", 2).Error; err != nil {
+		t.Fatal(err)
+	}
+	wholeShowWatch := entity.Activity{UserID: owner.ID, WatchedID: w.ID, Type: entity.STATUS_CHANGED, CountAsPlay: true, Data: `{"status":"FINISHED"}`, CustomDate: dateTime("2025-02-03")}
+	if err := db.Create(&wholeShowWatch).Error; err != nil {
+		t.Fatal(err)
+	}
+	for _, query := range []Query{{Scope: ScopeYear, Year: 2025, Media: "tv"}, {Scope: ScopeLifetime, Media: "tv"}} {
+		withShow, err := NewService(db, episodeTMDB{}).GetStats(owner.ID, query)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if withShow.Summary.Titles != 1 || len(withShow.People.Cast) != 2 {
+			t.Fatalf("cast must exclude whole-show-only credits: %#v", withShow.People.Cast)
+		}
+		for _, person := range withShow.People.Cast {
+			if person.Titles != 2 || len(person.TitleKeys) != 2 || person.AverageRating != 8.5 {
+				t.Fatalf("whole-show records must not change episode counts or averages: %#v", person)
+			}
+			for _, key := range person.TitleKeys {
+				if key == "tv:606" {
+					t.Fatalf("cast drill-down must contain only episodes: %#v", person)
+				}
+			}
 		}
 	}
 	failed, err := NewService(db, episodeTMDB{fail: true}).GetStats(owner.ID, Query{Scope: ScopeYear, Year: 2025, Media: "tv"})
