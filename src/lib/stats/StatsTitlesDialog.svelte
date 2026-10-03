@@ -128,7 +128,12 @@
 		>
 	</header>
 	<div class="body">
-		<StatsPosters items={items.slice(0, count)} {owner} {settings} />
+		<StatsPosters
+			items={items.slice(0, count)}
+			{owner}
+			{settings}
+			leftAligned
+		/>
 		<StatsExpansion
 			{count}
 			step={expansionRows * columns}

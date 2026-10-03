@@ -59,6 +59,9 @@
 	);
 	const browsePoints = $derived(points.filter((p) => (p.value ?? 0) > 0));
 	function countLabel(p: ChartPoint) {
+		if (kind === "line") {
+			return `${averageRating(p.value ?? 0, settings)} average rating`;
+		}
 		return `${valueLabel(p)} ${p.value === 1 ? valueUnit.slice(0, -1) : valueUnit}`;
 	}
 	function preview(p: ChartPoint) {

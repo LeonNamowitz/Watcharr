@@ -46,13 +46,7 @@
 	const activityUnit = $derived(
 		activityKind === "completions" ? "completions" : "progress events",
 	);
-	const rankingColors = [
-		"#29acf4",
-		"#51ad79",
-		"#f5b85a",
-		"#f47983",
-		"#b19bea",
-	];
+	const rankingColors = ["#29acf4", "#51ad79", "#f5b85a", "#f47983", "#b19bea"];
 	function activityAxisLabel(
 		date: Date,
 		compactFormat: Intl.DateTimeFormatOptions,
@@ -76,13 +70,13 @@
 							timeZone: "UTC",
 						});
 					return {
-							label:
-								data.scope === "lifetime"
-									? activityAxisLabel(start, {
-											month: "short",
-											day: "numeric",
-										})
-									: w.start.slice(5),
+						label:
+							data.scope === "lifetime"
+								? activityAxisLabel(start, {
+										month: "short",
+										day: "numeric",
+									})
+								: w.start.slice(5),
 						tooltipLabel: `${format(start)} – ${format(end)}`,
 						value: w.plays,
 						titleCount: w.uniqueTitles,
@@ -92,10 +86,9 @@
 					};
 				})
 			: (activity?.months ?? []).map((m) => ({
-					label: activityAxisLabel(
-						new Date(`${m.month}-01T00:00:00Z`),
-						{ month: "short" },
-					),
+					label: activityAxisLabel(new Date(`${m.month}-01T00:00:00Z`), {
+						month: "short",
+					}),
 					tooltipLabel: new Date(`${m.month}-01T00:00:00Z`).toLocaleDateString(
 						undefined,
 						{ month: "long", year: "numeric", timeZone: "UTC" },
@@ -205,7 +198,8 @@
 			</div>
 			<div class="averages activity-averages">
 				<span
-					><strong>{activity.total.toLocaleString()}</strong> {activityUnit}</span
+					><strong>{activity.total.toLocaleString()}</strong>
+					{activityUnit}</span
 				>
 				{#if data.scope === "year"}<span
 						><strong>{decimal(activity.averagePerWeek)}</strong> / week</span
@@ -217,6 +211,7 @@
 					titleUnit="games"
 					title={`${activityKind === "progress" ? "Recorded progress" : "Completions"} by ${interval}`}
 					points={activityPoints}
+					dataLabel={`Browse ${interval === "week" ? "weekly" : "monthly"} games`}
 					valueUnit={activityUnit}
 					{settings}
 					{onSelect}
@@ -264,35 +259,36 @@
 		</section>
 	{:else if section === "playtime" && playtime && data.scope === "lifetime"}
 		<section class="stats-game-section">
-			<div class="section-heading">
-				<h2 class="norm">Lifetime playtime</h2>
-				<span>Current saved hours</span>
-			</div>
-			<div class="totals">
-				<div>
-					<strong>{playtime.totalHours.toLocaleString()}</strong><span
-						>Total hours</span
-					>
+			<div class="section-heading playtime-heading">
+				<div class="playtime-intro">
+					<h2 class="norm">Lifetime game stats</h2>
 				</div>
-				<div>
+			</div>
+			<div class="totals" role="group" aria-label="Lifetime game playtime">
+				<div class="total-card">
+					<span class="metric-label">Total hours</span>
+					<strong>{playtime.totalHours.toLocaleString()}</strong>
+					<span class="metric-detail">recorded playtime</span>
+				</div>
+				<div class="total-card">
+					<span class="metric-label">Average hours</span>
 					<strong
 						>{playtime.recordedGames
 							? decimal(playtime.averageHours)
 							: "—"}</strong
-					><span>Average hours</span>
+					>
+					<span class="metric-detail">per recorded game</span>
 				</div>
-				<div>
+				<div class="total-card">
+					<span class="metric-label">Median hours</span>
 					<strong
 						>{playtime.recordedGames
 							? decimal(playtime.medianHours)
 							: "—"}</strong
-					><span>Median hours</span>
+					>
+					<span class="metric-detail">per recorded game</span>
 				</div>
 			</div>
-			<p class="muted">
-				Hours recorded for {playtime.recordedGames} of {data.summary.titles} played
-				games. Recorded zero hours are included; missing hours are excluded from averages.
-			</p>
 			<h3 class="norm">Most-played games</h3>
 			<StatsPosters
 				items={playtime.mostPlayed.slice(0, counts.playtime ?? 5)}
@@ -305,10 +301,10 @@
 				total={playtime.mostPlayed.length}
 				onChange={(value) => (counts.playtime = value)}
 			/>
-			<h3 class="norm">Playtime distribution</h3>
+			<h3 class="norm">Games by playtime</h3>
 			<StatsChart
 				titleUnit="games"
-				title="Playtime distribution"
+				title="Games by recorded playtime"
 				points={distributionPoints()}
 				valueUnit="games"
 				{settings}
@@ -331,6 +327,11 @@
 				{settings}
 				{onSelect}
 			/>
+			<p class="muted coverage-note">
+				Saved hours are available for {playtime.recordedGames} of {data.summary
+					.titles}
+				played games.
+			</p>
 		</section>
 	{/if}
 {/if}
@@ -410,25 +411,57 @@
 		gap: 24px;
 	}
 	.totals {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 32px;
+		display: grid;
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+		gap: 12px;
 	}
-	.totals div {
+	.total-card {
 		display: flex;
 		flex-direction: column;
+		gap: 3px;
+		min-width: 0;
+		padding: 14px 16px;
+		border: 1px solid var(--stats-border);
+		border-radius: 10px;
+		background: color-mix(in srgb, var(--stats-text) 3%, transparent);
 	}
-	.totals strong {
+	.playtime-intro h2 {
 		font-size: 28px;
+	}
+	.playtime-intro p {
+		margin: 6px 0 0;
+		max-width: 680px;
+		color: var(--stats-muted);
+		font-size: 15px;
+		line-height: 1.5;
+	}
+	.total-card .metric-label {
+		color: var(--stats-text);
+		font-size: 18px;
+		font-weight: 600;
+	}
+	.total-card strong {
+		font-size: 32px;
+		line-height: 1.2;
 		color: var(--stats-accent);
 	}
-	.totals span {
+	.total-card .metric-detail {
 		font-size: 13px;
 		color: var(--stats-muted);
+	}
+	.coverage-note {
+		margin-top: 18px;
 	}
 	@media (max-width: 600px) {
 		.rankings {
 			grid-template-columns: minmax(0, 1fr);
+		}
+		.totals {
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+			gap: 8px;
+		}
+		.total-card:first-child {
+			grid-column: 1 / -1;
 		}
 	}
 </style>

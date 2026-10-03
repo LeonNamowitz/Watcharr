@@ -422,7 +422,11 @@ func (s *Service) GetStats(userID uint, q Query) (StatsResponse, error) {
 	}
 	response.Milestones = buildMilestones(scopeRecords, metadata)
 	response.Breakdown = buildBreakdown(scopeRecords, records, q, metadata)
-	response.HighsLows = buildHighsLows(scopeRecords, metadata)
+	response.HighsLows = buildHighsLowsWithShowRuntime(
+		scopeRecords,
+		metadata,
+		q.Scope == ScopeLifetime && q.Media == "tv",
+	)
 	response.RatingDifferences = buildRatingDifferences(scopeRecords, metadata)
 	response.Metadata.FailedTitles = uniqueStrings(response.Metadata.FailedTitles)
 	response.Metadata.Partial = len(response.Metadata.FailedTitles) > 0
@@ -1208,6 +1212,14 @@ func buildCrew(records []*watchedRecord, metadata map[string]contentMetadata) []
 }
 
 func buildHighsLows(records []*watchedRecord, metadata map[string]contentMetadata) HighsLows {
+	return buildHighsLowsWithShowRuntime(records, metadata, false)
+}
+
+func buildHighsLowsWithShowRuntime(
+	records []*watchedRecord,
+	metadata map[string]contentMetadata,
+	totalShowRuntime bool,
+) HighsLows {
 	result := HighsLows{}
 	for _, record := range records {
 		card := mediaCard(record, metadata)
@@ -1238,12 +1250,17 @@ func buildHighsLows(records []*watchedRecord, metadata map[string]contentMetadat
 			}
 		}
 		runtime := estimatedRuntime(record.content)
+		if totalShowRuntime {
+			runtime = highLowRuntime(record.content)
+		}
 		if runtime > 0 && (result.Longest == nil || runtime > result.Longest.Runtime) {
 			copyCard := card
+			copyCard.Runtime = runtime
 			result.Longest = &copyCard
 		}
 		if runtime > 0 && (result.Shortest == nil || runtime < result.Shortest.Runtime) {
 			copyCard := card
+			copyCard.Runtime = runtime
 			result.Shortest = &copyCard
 		}
 	}
@@ -1418,6 +1435,17 @@ func estimatedRuntime(content *entity.Content) int {
 		return 0
 	}
 	return int(content.Runtime)
+}
+
+func highLowRuntime(content *entity.Content) int {
+	runtime := estimatedRuntime(content)
+	if content == nil || content.Type != entity.SHOW {
+		return runtime
+	}
+	if content.NumberOfEpisodes == 0 {
+		return 0
+	}
+	return runtime * int(content.NumberOfEpisodes)
 }
 
 func parseCardDate(value string) time.Time {

@@ -167,8 +167,9 @@ func TestGameStatsProgressCompletionsReplayAndHours(t *testing.T) {
 	if lifetime.HighsLows.LeastPlaytime.ID != 102 || *lifetime.HighsLows.LeastPlaytime.PlaytimeHours != 0 {
 		t.Fatal("explicit zero must be retained")
 	}
-	if p.Distribution[0].Count != 1 || p.Distribution[1].Count != 1 {
-		t.Fatal("unknown hours must be separate from zero")
+	if p.Distribution[0].Label != "Unrecorded" || p.Distribution[0].Count != 1 ||
+		p.Distribution[1].Label != "1–9 hours" || p.Distribution[1].Count != 0 {
+		t.Fatal("unrecorded hours must stay separate and zero hours must be omitted")
 	}
 	legacy := getGameStatsForTest(t, service, owner.ID, Query{Scope: ScopeYear, Year: 2024})
 	if legacy.Summary.Titles != 2 || legacy.Summary.Completed != 1 {
@@ -217,7 +218,7 @@ func TestGameProgressStatusesEffectiveDatesAndFallbacks(t *testing.T) {
 }
 
 func TestGamePlaytimeBucketsAndEmptyLibrary(t *testing.T) {
-	hours := []uint{0, 1, 9, 10, 24, 25, 49, 50, 99, 100}
+	hours := []uint{0, 1, 9, 10, 24, 25, 49, 50, 99, 100, 500}
 	records := []*gameRecord{{card: MediaCard{ID: 1, Type: "game"}}}
 	for i := range hours {
 		records = append(records, &gameRecord{card: MediaCard{ID: i + 2, Type: "game", Title: fmt.Sprint(i), PlaytimeHours: &hours[i], Rating: float64(i)}})
@@ -227,7 +228,22 @@ func TestGamePlaytimeBucketsAndEmptyLibrary(t *testing.T) {
 	for _, b := range p.Distribution {
 		counts = append(counts, b.Count)
 	}
-	if !reflect.DeepEqual(counts, []int{1, 1, 2, 2, 2, 2, 1}) || p.RecordedGames != 10 || p.TotalHours != 367 || p.MedianHours != 24.5 {
+	labels := []string{}
+	for _, b := range p.Distribution {
+		labels = append(labels, b.Label)
+	}
+	wantLabels := []string{
+		"Unrecorded",
+		"1–9 hours",
+		"10–24 hours",
+		"25–49 hours",
+		"50–99 hours",
+		"100–499 hours",
+		"500+ hours",
+	}
+	if !reflect.DeepEqual(labels, wantLabels) ||
+		!reflect.DeepEqual(counts, []int{1, 2, 2, 2, 2, 1, 1}) ||
+		p.RecordedGames != 11 || p.TotalHours != 867 || p.MedianHours != 25 {
 		t.Fatalf("playtime buckets/totals: %#v", p)
 	}
 	if p.ByRating[0].Rating != 0 || len(p.ByRating[0].Items) != 1 {

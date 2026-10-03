@@ -62,9 +62,10 @@
 	});
 	let gameActivityKind = $state<"progress" | "completions">("progress");
 	let activityMode = $state<"week" | "month">("week");
-	let backgroundPreview = $state<"panels" | "tonal-wash" | "edge-grid">(
-		"panels",
-	);
+	let activityMetric = $state<"count" | "rating">("count");
+	let backgroundPreview = $state<
+		"panels" | "panels-edge-grid" | "tonal-wash" | "edge-grid"
+	>("panels");
 	let selection = $state<{
 		label: string;
 		items: StatsMediaCard[];
@@ -92,6 +93,7 @@
 			decadeCounts,
 			crewCounts,
 			activityMode,
+			activityMetric,
 			gameCounts,
 			gameActivityKind,
 			backgroundPreview,
@@ -123,6 +125,7 @@
 		decadeCounts = saved.decadeCounts;
 		crewCounts = saved.crewCounts;
 		activityMode = saved.activityMode;
+		activityMetric = saved.activityMetric ?? "count";
 		gameActivityKind = saved.gameActivityKind;
 		backgroundPreview = saved.backgroundPreview;
 		peopleCounts = saved.peopleCounts;
@@ -352,6 +355,18 @@
 					: "No watches",
 		}));
 	}
+	function runtimeDetail(card: StatsMediaCard): string {
+		if (data.media !== "tv" || !lifetime) {
+			return `${card.runtime} min${data.media === "tv" ? " per episode" : ""}`;
+		}
+		const runtime = card.runtime ?? 0;
+		const hours = Math.floor(runtime / 60);
+		const minutes = runtime % 60;
+		if (hours === 0) return `${minutes} min total`;
+		return `${hours} hr${hours === 1 ? "" : "s"}${
+			minutes ? ` ${minutes} min` : ""
+		} total`;
+	}
 	const highCards = $derived([
 		{
 			label: `Highest ${source} rating`,
@@ -406,16 +421,16 @@
 				: []
 			: [
 					{
-						label: "Longest",
+						label:
+							data.media === "tv" && lifetime ? "Longest show" : "Longest",
 						card: data.highsLows.longest,
-						detail: (c: StatsMediaCard) =>
-							`${c.runtime} min${data.media === "tv" ? " per episode" : ""}`,
+						detail: runtimeDetail,
 					},
 					{
-						label: "Shortest",
+						label:
+							data.media === "tv" && lifetime ? "Shortest show" : "Shortest",
 						card: data.highsLows.shortest,
-						detail: (c: StatsMediaCard) =>
-							`${c.runtime} min${data.media === "tv" ? " per episode" : ""}`,
+						detail: runtimeDetail,
 					},
 				]),
 	]);
@@ -613,6 +628,7 @@
 				Background preview
 				<select bind:value={backgroundPreview}>
 					<option value="panels">Section panels</option>
+					<option value="panels-edge-grid">Panels + edge grid</option>
 					<option value="tonal-wash">Soft full-page wash</option>
 					<option value="edge-grid">Edge vignette + grid dots</option>
 				</select>
@@ -784,6 +800,18 @@
 			{#if !lifetime && !isGame}<section>
 					<div class="section-heading activity-heading">
 						<h2 class="norm">Activity</h2>
+						<div class="segmented" aria-label="Activity metric">
+							<button
+								class:active={activityMetric === "count"}
+								aria-pressed={activityMetric === "count"}
+								onclick={() => (activityMetric = "count")}>Count</button
+							>
+							<button
+								class:active={activityMetric === "rating"}
+								aria-pressed={activityMetric === "rating"}
+								onclick={() => (activityMetric = "rating")}>Rating</button
+							>
+						</div>
 						<div class="segmented" aria-label="Activity interval">
 							<button
 								class:active={activityMode === "week"}
@@ -813,16 +841,23 @@
 							><strong>{decimal(data.activity.averagePerMonth)}</strong> / month</span
 						>
 					</div>
-					{#key activityMode}<StatsChart
+					{#key `${activityMode}:${activityMetric}`}<StatsChart
 							titleUnit={isGame ? "games" : "titles"}
-							title={activityMode === "week"
-								? `${data.media === "tv" ? "Episodes" : "Watches"} by week`
-								: `${data.media === "tv" ? "Episodes" : "Watches"} by month`}
+							kind={activityMetric === "rating" ? "line" : "bar"}
+							color={activityMetric === "rating" ? "#f5b85a" : "#29acf4"}
+							title={activityMetric === "rating"
+								? `Average rating by ${activityMode}`
+								: activityMode === "week"
+									? `${data.media === "tv" ? "Episodes" : "Watches"} by week`
+									: `${data.media === "tv" ? "Episodes" : "Watches"} by month`}
 							points={activityMode === "week"
 								? data.activity.weeks.map((w) => ({
 										label: w.start.slice(5),
 										tooltipLabel: weekRange(w.start),
-										value: w.plays,
+										value:
+											activityMetric === "rating"
+												? w.averageRating || null
+												: w.plays,
 										titleCount: w.uniqueTitles,
 										averageRating: w.averageRating,
 										items: w.items ?? [],
@@ -852,7 +887,10 @@
 											year: "numeric",
 											timeZone: "UTC",
 										}),
-										value: m.plays,
+										value:
+											activityMetric === "rating"
+												? m.averageRating || null
+												: m.plays,
 										titleCount: m.items?.length ?? 0,
 										averageRating: m.averageRating,
 										items: m.items ?? [],
@@ -860,7 +898,8 @@
 									}))}
 							{settings}
 							valueUnit={data.media === "tv" ? "episodes" : "watches"}
-							dataLabel={`Browse ${activityMode === "week" ? "weekly" : "monthly"} ${data.media === "tv" ? "episodes" : "titles"}`}
+							showData
+							dataLabel={`Browse ${activityMode === "week" ? "weekly" : "monthly"} ${data.media === "tv" ? "episodes" : "films"}`}
 							onSelect={explorePoint}
 						/>{/key}
 				</section>{/if}
@@ -1137,7 +1176,11 @@
 			<section>
 				<div class="section-heading">
 					<h2 class="norm">Highs and lows</h2>
-					<span>By {source} ratings, votes & release details</span>
+					<span
+						>By {source} ratings, votes, release details{isGame
+							? ""
+							: " & runtime"}</span
+					>
 				</div>
 				<div class="highs-lows">
 					{#each highCards as item (item.label)}<div>
@@ -1276,7 +1319,8 @@
 			color-mix(in srgb, #51ad79 2.5%, var(--bg-color)) 100%
 		);
 	}
-	.stats-page[data-background-style="edge-grid"] {
+	.stats-page[data-background-style="edge-grid"],
+	.stats-page[data-background-style="panels-edge-grid"] {
 		background-image:
 			radial-gradient(
 				circle,
@@ -1297,7 +1341,8 @@
 			100% 100%;
 		background-repeat: repeat, no-repeat;
 	}
-	.stats-page[data-background-style="panels"]
+	.stats-page[data-background-style="panels"] .stats-content > :global(section),
+	.stats-page[data-background-style="panels-edge-grid"]
 		.stats-content
 		> :global(section) {
 		padding: 22px 32px 30px;
@@ -1523,8 +1568,8 @@
 		align-items: center;
 	}
 	.decades h3 span {
-		color: #f5b85a;
-		font-size: 14px;
+		color: var(--stats-accent, #29acf4);
+		font-size: 18px;
 	}
 	.decades p {
 		font-size: 13px;
@@ -1548,12 +1593,18 @@
 	}
 	.milestones {
 		display: grid;
-		grid-template-columns: repeat(2, minmax(0, 1fr));
-		gap: 24px;
-		max-width: 430px;
+		grid-template-columns: repeat(5, minmax(0, 1fr));
+		gap: 12px;
 	}
-	.milestones :global(.posters) {
-		grid-template-columns: minmax(0, 130px);
+	.milestones > :last-child {
+		grid-column: -2 / -1;
+	}
+	.milestones :global(.posters:not(.tiny):not(.wall):not(.episodes)) {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr);
+	}
+	.milestones :global(.posters:not(.tiny):not(.wall):not(.episodes) a) {
+		width: 100%;
 	}
 	.categories {
 		display: grid;
@@ -1662,9 +1713,12 @@
 		grid-template-columns: repeat(4, minmax(0, 1fr));
 		gap: 28px 20px;
 	}
-	.highs-lows :global(.posters) {
+	.highs-lows :global(.posters:not(.tiny):not(.wall):not(.episodes)) {
+		display: grid;
 		grid-template-columns: minmax(0, 1fr);
-		max-width: 135px;
+	}
+	.highs-lows :global(.posters:not(.tiny):not(.wall):not(.episodes) a) {
+		width: 100%;
 	}
 	.coverage {
 		padding: 14px;
@@ -1765,8 +1819,16 @@
 	.crew summary:hover {
 		color: var(--stats-accent);
 	}
+	@media (min-width: 521px) and (max-width: 900px) {
+		.milestones {
+			grid-template-columns: repeat(3, minmax(0, 1fr));
+		}
+	}
 	@media (max-width: 700px) {
 		.stats-page[data-background-style="panels"]
+			.stats-content
+			> :global(section),
+		.stats-page[data-background-style="panels-edge-grid"]
 			.stats-content
 			> :global(section) {
 			margin-inline: -24px;
@@ -1836,6 +1898,9 @@
 		}
 		.stats-page[data-background-style="panels"]
 			.stats-content
+			> :global(section),
+		.stats-page[data-background-style="panels-edge-grid"]
+			.stats-content
 			> :global(section) {
 			margin-inline: -12px;
 			padding-inline: 12px;
@@ -1864,7 +1929,8 @@
 			font-size: 18px;
 		}
 		.milestones {
-			gap: 16px;
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+			gap: 8px;
 		}
 	}
 	@media (prefers-reduced-motion: reduce) {

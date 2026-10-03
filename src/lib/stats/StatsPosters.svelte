@@ -13,6 +13,7 @@
 		wall = false,
 		fivePerRow = false,
 		comparison = false,
+		leftAligned = false,
 		detail,
 	}: {
 		items: StatsMediaCard[];
@@ -22,6 +23,7 @@
 		wall?: boolean;
 		fivePerRow?: boolean;
 		comparison?: boolean;
+		leftAligned?: boolean;
 		detail?: (card: StatsMediaCard) => string;
 	} = $props();
 	function href(c: StatsMediaCard) {
@@ -41,6 +43,7 @@
 
 <div
 	class="posters"
+	class:left-aligned={leftAligned}
 	class:tiny
 	class:wall
 	class:five-per-row={fivePerRow}
@@ -88,6 +91,14 @@
 		grid-template-columns: repeat(5, minmax(0, 1fr));
 		gap: 16px 12px;
 		min-width: 0;
+	}
+	.posters:not(.tiny):not(.wall):not(.episodes):not(.left-aligned) {
+		display: flex;
+		flex-wrap: wrap;
+		justify-content: space-between;
+	}
+	.posters:not(.tiny):not(.wall):not(.episodes):not(.left-aligned) a {
+		width: calc((100% - 48px) / 5);
 	}
 	.posters.episodes {
 		grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -199,6 +210,9 @@
 		.posters:not(.tiny) {
 			grid-template-columns: repeat(3, minmax(0, 1fr));
 		}
+		.posters:not(.tiny):not(.wall):not(.episodes):not(.left-aligned) a {
+			width: calc((100% - 24px) / 3);
+		}
 		.posters.episodes {
 			grid-template-columns: repeat(2, minmax(0, 1fr));
 		}
@@ -207,6 +221,9 @@
 		.posters:not(.tiny) {
 			grid-template-columns: repeat(2, minmax(0, 1fr));
 			gap: 12px 8px;
+		}
+		.posters:not(.tiny):not(.wall):not(.episodes):not(.left-aligned) a {
+			width: calc((100% - 8px) / 2);
 		}
 		.posters.episodes {
 			grid-template-columns: minmax(0, 1fr);

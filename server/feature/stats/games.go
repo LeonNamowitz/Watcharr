@@ -678,6 +678,7 @@ func gamePlaytime(records []*gameRecord) *GamePlaytime {
 	hours := []float64{}
 	for _, r := range records {
 		label := "Unrecorded"
+		includeInDistribution := true
 		if r.card.PlaytimeHours != nil {
 			h := *r.card.PlaytimeHours
 			result.TotalHours += uint64(h)
@@ -686,7 +687,7 @@ func gamePlaytime(records []*gameRecord) *GamePlaytime {
 			result.MostPlayed = append(result.MostPlayed, r.card)
 			switch {
 			case h == 0:
-				label = "0 hours"
+				includeInDistribution = false
 			case h < 10:
 				label = "1–9 hours"
 			case h < 25:
@@ -695,8 +696,10 @@ func gamePlaytime(records []*gameRecord) *GamePlaytime {
 				label = "25–49 hours"
 			case h < 100:
 				label = "50–99 hours"
+			case h < 500:
+				label = "100–499 hours"
 			default:
-				label = "100+ hours"
+				label = "500+ hours"
 			}
 			if ratings[r.card.Rating] == nil {
 				ratings[r.card.Rating] = &PlaytimeRating{Rating: r.card.Rating, Items: []MediaCard{}}
@@ -705,7 +708,9 @@ func gamePlaytime(records []*gameRecord) *GamePlaytime {
 			b.Hours += uint64(h)
 			b.Items = append(b.Items, r.card)
 		}
-		members[label] = append(members[label], gameKey(r))
+		if includeInDistribution {
+			members[label] = append(members[label], gameKey(r))
+		}
 	}
 	result.AverageHours = average(float64(result.TotalHours), result.RecordedGames)
 	sort.Float64s(hours)
@@ -720,7 +725,15 @@ func gamePlaytime(records []*gameRecord) *GamePlaytime {
 		}
 		return *a.PlaytimeHours > *b.PlaytimeHours
 	})
-	for _, label := range []string{"Unrecorded", "0 hours", "1–9 hours", "10–24 hours", "25–49 hours", "50–99 hours", "100+ hours"} {
+	for _, label := range []string{
+		"Unrecorded",
+		"1–9 hours",
+		"10–24 hours",
+		"25–49 hours",
+		"50–99 hours",
+		"100–499 hours",
+		"500+ hours",
+	} {
 		result.Distribution = append(result.Distribution, PieStat{Label: label, Count: len(members[label]), TitleKeys: members[label]})
 	}
 	for _, b := range ratings {
