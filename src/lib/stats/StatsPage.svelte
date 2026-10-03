@@ -1,15 +1,19 @@
 <script lang="ts">
+	import { setContext } from "svelte";
 	import { resolve } from "$app/paths";
 	import StatsChart from "./StatsChart.svelte";
+	import StatsRankedChart from "./StatsRankedChart.svelte";
+	import StatsTitlesDialog from "./StatsTitlesDialog.svelte";
+	import { averageRating, decimal } from "./format";
 	import StatsPosters from "./StatsPosters.svelte";
 	import StatsPeople from "./StatsPeople.svelte";
-	import { toRatingLabel, type RatingSettings } from "@/lib/rating/helpers";
+	import { type RatingSettings } from "@/lib/rating/helpers";
 	import type {
 		StatsResponse,
 		StatsMediaCard,
-		StatsBar,
 		StatsPie,
 		ChartPoint,
+		StatsChartSelection,
 	} from "./types";
 	let {
 		data,
@@ -20,16 +24,47 @@
 		publicOwner?: { id: string; username: string };
 		onSelectionChange: (year: string, media: "movie" | "tv") => void;
 	} = $props();
+	let selectedChart = $state<symbol>();
+	setContext<StatsChartSelection>("watcharr:stats:selection", {
+		current: () => selectedChart,
+		select: (chart) => (selectedChart = chart),
+	});
 	let highestTab = $state<"current" | "older">("current");
 	let peopleMode = $state<"most" | "rating">("most");
-	let rankingCounts = $state<Record<string, number>>({
-		Genres: 10,
-		Countries: 10,
-		Languages: 10,
-	});
-	let higherCount = $state(6);
-	let lowerCount = $state(6);
-	let mostWatchedCount = $state(6);
+	let higherCount = $state(5);
+	let lowerCount = $state(5);
+	let mostWatchedCount = $state(5);
+	let favoriteCount = $state(5);
+	let decadeCounts = $state<Record<number, number>>({});
+	let crewCounts = $state<Record<string, number>>({});
+	let activityMode = $state<"week" | "month">("week");
+	let selection = $state<{
+		label: string;
+		items: StatsMediaCard[];
+		personId?: number;
+	}>();
+	function explore(label: string, keys: string[], personId?: number) {
+		selectedChart = undefined;
+		const membership = new Set(keys);
+		selection = {
+			label,
+			personId,
+			items: data.posters
+				.filter((c) => membership.has(`${c.type}:${c.id}`))
+				.sort((a, b) => a.title.localeCompare(b.title)),
+		};
+	}
+	function weekRange(start: string) {
+		const first = new Date(`${start}T00:00:00Z`);
+		const last = new Date(first.getTime() + 6 * 24 * 60 * 60 * 1000);
+		const formatter = new Intl.DateTimeFormat(undefined, {
+			month: "short",
+			day: "numeric",
+			timeZone: "UTC",
+		});
+		return `${formatter.format(first)} – ${formatter.format(last)}`;
+	}
+
 	const settings: RatingSettings = $derived({
 		ratingSystem: data.owner.ratingSystem,
 		ratingStep: data.owner.ratingStep,
@@ -76,13 +111,6 @@
 		}
 		return points;
 	});
-	function bars(items: StatsBar[]): ChartPoint[] {
-		return items.map((p) => ({
-			label: p.label,
-			value: p.count,
-			detail: `${p.count} distinct titles · Average personal rating ${toRatingLabel(p.averageRating, settings)}`,
-		}));
-	}
 	function pies(items: StatsPie[]): ChartPoint[] {
 		const total = items.reduce((a, b) => a + b.count, 0);
 		return items.map((p) => ({
@@ -90,10 +118,6 @@
 			value: p.count,
 			detail: total ? `${((p.count / total) * 100).toFixed(1)}%` : "No watches",
 		}));
-	}
-	function delta(c: StatsMediaCard) {
-		const n = (c.rating ?? 0) - (c.tmdbRating ?? 0);
-		return `${n > 0 ? "+" : ""}${n.toFixed(1)} · You ${(c.rating ?? 0).toFixed(1)} / TMDB ${(c.tmdbRating ?? 0).toFixed(1)}`;
 	}
 	const highCards = $derived([
 		{
@@ -139,14 +163,6 @@
 				`${c.runtime} min${data.media === "tv" ? " per episode" : ""}`,
 		},
 	]);
-	function personHref(id: number) {
-		return publicOwner
-			? resolve("/(public)/lists/[id]/[username]/person/[personId]", {
-					...publicOwner,
-					personId: String(id),
-				})
-			: resolve("/(app)/person/[id]", { id: String(id) });
-	}
 </script>
 
 <svelte:head
@@ -171,7 +187,7 @@
 				{data.summary.titles.toLocaleString()}
 				{data.media === "movie" ? "films" : "shows"} · {data.summary
 					.averageRating
-					? `${toRatingLabel(data.summary.averageRating, settings)} average rating`
+					? `${averageRating(data.summary.averageRating, settings)} average rating`
 					: "Your story, one watch at a time"}
 			</p>
 		</div>
@@ -228,7 +244,7 @@
 				<span>Movies & TV · unique titles each year</span>
 			</div>
 			<div class="timeline-grid">
-				{#each [{ key: "movies", label: "Films watched", color: "#39cfa2" }, { key: "shows", label: "Shows watched", color: "#6495ed" }, { key: "averageRating", label: "Average rating", color: "#f5b85a" }, ...(data.reviewsVisible ? [{ key: "reviewed", label: "Reviewed", color: "#f47983" }] : [])] as metric (metric.key)}<div
+				{#each [{ key: "movies", label: "Films watched", color: "#29acf4" }, { key: "shows", label: "Shows watched", color: "#6495ed" }, { key: "averageRating", label: "Average rating", color: "#f5b85a" }, ...(data.reviewsVisible ? [{ key: "reviewed", label: "Reviewed", color: "#f47983" }] : [])] as metric (metric.key)}<div
 					>
 						<h3 class="norm">{metric.label}</h3>
 						<StatsChart
@@ -259,15 +275,26 @@
 				{#each data.decades as decade (decade.decade)}<div>
 						<h3 class="norm">
 							{decade.decade}s
-							<span>{toRatingLabel(decade.averageRating, settings)}</span>
+							<span>{averageRating(decade.averageRating, settings)}</span>
 						</h3>
 						<p>{decade.titles} titles watched</p>
 						<StatsPosters
-							items={decade.items}
+							items={decade.items.slice(0, decadeCounts[decade.decade] ?? 5)}
 							owner={publicOwner}
 							{settings}
 							tiny
 						/>
+						{#if !decade.items.length}<p class="muted">
+								No titles rated above 8/10 in this decade.
+							</p>{/if}
+						{#if (decadeCounts[decade.decade] ?? 5) < decade.items.length}<button
+								class="plain more"
+								onclick={() =>
+									(decadeCounts[decade.decade] =
+										(decadeCounts[decade.decade] ?? 5) + 5)}
+								>Show more ({decade.items.length -
+									(decadeCounts[decade.decade] ?? 5)} remaining)</button
+							>{/if}
 					</div>{:else}<p class="muted">
 						Watch and rate a few more titles to discover your favorite decades.
 					</p>{/each}
@@ -289,50 +316,77 @@
 						aria-pressed={highestTab === "older"}
 						onclick={() => (highestTab = "older")}>Older</button
 					>
-				</div>{:else}<span>Your personal favorites</span>{/if}
+				</div>{:else}<span>Your favorites rated above 8/10</span>{/if}
 		</div>
 		<StatsPosters
-			items={lifetime || highestTab === "current"
-				? data.highestRated.current
-				: data.highestRated.older}
+			items={lifetime
+				? data.highestRated.current.slice(0, favoriteCount)
+				: highestTab === "current"
+					? data.highestRated.current
+					: data.highestRated.older}
 			owner={publicOwner}
 			{settings}
 		/>
+		{#if lifetime && favoriteCount < data.highestRated.current.length}<button
+				class="plain more"
+				onclick={() => (favoriteCount += 5)}
+				>Show more ({data.highestRated.current.length - favoriteCount} remaining)</button
+			>{/if}
 	</section>
 
 	{#if !lifetime}<section>
-			<div class="section-heading">
-				<h2 class="norm">By week</h2>
-				<div class="averages">
-					<span
-						><strong>{data.activity.averagePerWeek.toFixed(1)}</strong> / week</span
-					><span
-						><strong>{data.activity.averagePerMonth.toFixed(1)}</strong> / month</span
+			<div class="section-heading activity-heading">
+				<h2 class="norm">Activity</h2>
+				<div class="segmented small" aria-label="Activity interval">
+					<button
+						class:active={activityMode === "week"}
+						aria-pressed={activityMode === "week"}
+						onclick={() => (activityMode = "week")}>Week</button
+					>
+					<button
+						class:active={activityMode === "month"}
+						aria-pressed={activityMode === "month"}
+						onclick={() => (activityMode = "month")}>Month</button
 					>
 				</div>
 			</div>
-			<StatsChart
-				title="Watches by week"
-				points={data.activity.weeks.map((w) => ({
-					label: w.start.slice(5),
-					value: w.plays,
-					detail: `Week of ${w.start} · ${w.uniqueTitles} distinct titles${w.averageRating ? ` · ${toRatingLabel(w.averageRating, settings)} average` : ""}${w.titles.length ? ` · ${w.titles.join(", ")}` : ""}`,
-				}))}
-			/>
-			<details class="monthly">
-				<summary>Monthly overview</summary><StatsChart
-					title="Watches by month"
-					color="#6495ed"
-					points={data.activity.months.map((m) => ({
-						label: new Date(`${m.month}-01T00:00:00Z`).toLocaleDateString(
-							undefined,
-							{ month: "short", timeZone: "UTC" },
-						),
-						value: m.plays,
-						detail: `${m.month} · ${toRatingLabel(m.averageRating, settings)} average`,
-					}))}
-				/>
-			</details>
+			<div class="averages activity-averages">
+				<span
+					><strong>{decimal(data.activity.averagePerWeek)}</strong> / week</span
+				><span
+					><strong>{decimal(data.activity.averagePerMonth)}</strong> / month</span
+				>
+			</div>
+			{#key activityMode}<StatsChart
+					title={activityMode === "week"
+						? "Watches by week"
+						: "Watches by month"}
+					points={activityMode === "week"
+						? data.activity.weeks.map((w) => ({
+								label: w.start.slice(5),
+								tooltipLabel: weekRange(w.start),
+								value: w.plays,
+								detail: [
+									w.averageRating
+										? `${averageRating(w.averageRating, settings)} average`
+										: "",
+									...w.titles,
+								]
+									.filter(Boolean)
+									.join(" · "),
+							}))
+						: data.activity.months.map((m) => ({
+								label: new Date(`${m.month}-01T00:00:00Z`).toLocaleDateString(
+									undefined,
+									{ month: "short", timeZone: "UTC" },
+								),
+								tooltipLabel: m.month,
+								value: m.plays,
+								detail: m.averageRating
+									? `${averageRating(m.averageRating, settings)} average`
+									: undefined,
+							}))}
+				/>{/key}
 		</section>{/if}
 
 	<section>
@@ -363,7 +417,7 @@
 				detail={(c) => `${c.plays} watches`}
 			/>
 			{#if data.milestones.mostWatched.length > mostWatchedCount}
-				<button class="plain more" onclick={() => (mostWatchedCount += 6)}>
+				<button class="plain more" onclick={() => (mostWatchedCount += 5)}>
 					Show more
 				</button>
 			{/if}
@@ -376,33 +430,26 @@
 			<span>The worlds you explored</span>
 		</div>
 		<div class="categories">
-			{#each [{ title: "Genres", items: data.genres, color: "#39cfa2" }, { title: "Countries", items: data.countries, color: "#6495ed" }, { title: "Languages", items: data.languages, color: "#f5b85a" }] as group (group.title)}<div
-				>
-					<h3 class="norm">{group.title}</h3>
-					<div class="horizontal-bars">
-						<div class="bar-labels">
-							{#each group.items.slice(0, rankingCounts[group.title]) as item (item.label)}<span
-									title={item.label}>{item.label}<b>{item.count}</b></span
-								>{/each}
-						</div>
-						<StatsChart
-							title={group.title}
-							kind="horizontal"
-							color={group.color}
-							height={Math.max(
-								120,
-								Math.min(group.items.length, rankingCounts[group.title]) * 26 +
-									30,
-							)}
-							points={bars(group.items.slice(0, rankingCounts[group.title]))}
-						/>
-					</div>
-					{#if rankingCounts[group.title] < group.items.length}<button
-							class="plain more"
-							onclick={() => (rankingCounts[group.title] += 10)}
-							>Show more ({group.items.length - rankingCounts[group.title]} remaining)</button
-						>{/if}
-				</div>{/each}
+			<StatsRankedChart
+				title="Genres"
+				items={data.genres}
+				{settings}
+				onSelect={(item) => explore(item.label, item.titleKeys)}
+			/>
+			<StatsRankedChart
+				title="Countries"
+				items={data.countries}
+				color="#819bdc"
+				{settings}
+				onSelect={(item) => explore(item.label, item.titleKeys)}
+			/>
+			<StatsRankedChart
+				title="Languages"
+				items={data.languages}
+				color="#d9aa64"
+				{settings}
+				onSelect={(item) => explore(item.label, item.titleKeys)}
+			/>
 		</div>
 	</section>
 
@@ -410,6 +457,16 @@
 		<div class="section-heading">
 			<h2 class="norm">Breakdown</h2>
 			<span>Patterns in your viewing</span>
+		</div>
+		<div class="watchlist-summary">
+			<strong>{data.breakdown.watchlistAdditions.toLocaleString()}</strong>
+			<div>
+				<h3 class="norm">Added to watchlist</h3>
+				<p>
+					{lifetime ? "Across your recorded history" : `In ${data.year}`} · distinct
+					titles
+				</p>
+			</div>
 		</div>
 		<div class="pies">
 			{#each [...(!lifetime ? [{ title: "Release years", items: data.breakdown.release }] : []), { title: "Watches & rewatches", items: data.breakdown.plays }, ...(data.reviewsVisible ? [{ title: "Reviews", items: data.breakdown.reviews ?? [] }] : [])] as group (group.title)}<div
@@ -424,20 +481,15 @@
 					/>
 					<div class="pie-legend">
 						{#each pies(group.items) as item, i (item.label)}<span
-								><i style={`background:${i === 0 ? "#39cfa2" : "#6495ed"}`}
+								><i style={`background:${i === 0 ? "#29acf4" : "#6495ed"}`}
 								></i>{item.label}<b>{item.value}</b></span
 							>{/each}
 					</div>
 				</div>{/each}
 		</div>
-		<div class="rating-heading">
-			<h3 class="norm">Your ratings</h3>
-			<span class="watchlist-count"
-				><strong>{data.breakdown.watchlistAdditions}</strong> added to watchlist</span
-			>
-		</div>
+		<div class="rating-heading"><h3 class="norm">Rating distribution</h3></div>
 		<StatsChart
-			title="Personal rating totals"
+			title="Rating distribution"
 			points={ratingPoints}
 			color="#f5b85a"
 		/>
@@ -467,19 +519,19 @@
 				title="Cast"
 				people={data.people.cast}
 				mode={peopleMode}
-				owner={publicOwner}
+				onSelect={(p) => explore(p.name, p.titleKeys, p.id)}
 				{settings}
 			/><StatsPeople
 				title="Directors & creators"
 				people={data.people.directors}
 				mode={peopleMode}
-				owner={publicOwner}
+				onSelect={(p) => explore(p.name, p.titleKeys, p.id)}
 				{settings}
 			/><StatsPeople
 				title="Studios"
 				people={data.studios}
 				mode={peopleMode}
-				owner={publicOwner}
+				onSelect={(p) => explore(p.name, p.titleKeys)}
 				{settings}
 				studios
 			/>
@@ -490,21 +542,40 @@
 					<summary
 						>{department.department}<span>{department.jobs.length} roles</span
 						></summary
-					>{#each department.jobs as job (job.job)}<details class="job">
+					>{#each department.jobs as job (job.job)}{@const remaining =
+							job.people.filter(
+								(p) => peopleMode !== "rating" || p.averageRating > 0,
+							).length -
+							(crewCounts[`${department.department}:${job.job}`] ?? 5)}
+						<details class="job">
 							<summary>{job.job}</summary>
 							<ul>
 								{#each [...job.people]
 									.filter((p) => peopleMode !== "rating" || p.averageRating > 0)
-									.sort( (a, b) => (peopleMode === "rating" ? b.averageRating - a.averageRating : b.titles - a.titles) ) as person (person.id)}<li
+									.sort( (a, b) => (peopleMode === "rating" ? b.averageRating - a.averageRating : b.titles - a.titles) )
+									.slice(0, crewCounts[`${department.department}:${job.job}`] ?? 5) as person (person.id)}<li
 									>
-										<a href={personHref(person.id)}>{person.name}</a><span
-											>{person.titles} titles · {toRatingLabel(
+										<button
+											class="plain crew-person"
+											onclick={() =>
+												explore(person.name, person.titleKeys, person.id)}
+											>{person.name}</button
+										><span
+											>{person.titles} titles · {averageRating(
 												person.averageRating,
 												settings,
 											)}</span
 										>
 									</li>{/each}
 							</ul>
+
+							{#if remaining > 0}<button
+									class="plain more"
+									onclick={() =>
+										(crewCounts[`${department.department}:${job.job}`] =
+											(crewCounts[`${department.department}:${job.job}`] ?? 5) +
+											5)}>Show more ({remaining} remaining)</button
+								>{/if}
 						</details>{/each}
 				</details>{:else}<p class="muted">
 					No recurring crew credits yet.
@@ -532,32 +603,32 @@
 	<section>
 		<div class="section-heading">
 			<h2 class="norm">Rated higher than average</h2>
-			<span>At least +1 point on a 10-point scale</span>
+			<span>You vs TMDB · /10 · At least +1 point</span>
 		</div>
 		<StatsPosters
 			items={higher.slice(0, higherCount)}
 			owner={publicOwner}
 			{settings}
-			detail={delta}
+			comparison
 		/>{#if higherCount < higher.length}<button
 				class="plain more"
-				onclick={() => (higherCount += 6)}
+				onclick={() => (higherCount += 5)}
 				>Show more ({higher.length - higherCount} remaining)</button
 			>{/if}
 	</section>
 	<section>
 		<div class="section-heading">
 			<h2 class="norm">Rated lower than average</h2>
-			<span>At least −1 point on a 10-point scale</span>
+			<span>You vs TMDB · /10 · At least −1 point</span>
 		</div>
 		<StatsPosters
 			items={lower.slice(0, lowerCount)}
 			owner={publicOwner}
 			{settings}
-			detail={delta}
+			comparison
 		/>{#if lowerCount < lower.length}<button
 				class="plain more"
-				onclick={() => (lowerCount += 6)}
+				onclick={() => (lowerCount += 5)}
 				>Show more ({lower.length - lowerCount} remaining)</button
 			>{/if}
 	</section>
@@ -584,6 +655,13 @@
 			detail={(c) => `${c.tmdbRating?.toFixed(1) ?? "—"}/10 on TMDB`}
 		/>
 	</section>
+	{#if selection}{#key selection}<StatsTitlesDialog
+				{...selection}
+				{period}
+				owner={publicOwner}
+				{settings}
+				onClose={() => (selection = undefined)}
+			/>{/key}{/if}
 	<footer>
 		Based on recorded whole-title watches. Past years use current saved ratings{data.reviewsVisible
 			? " and reviews"
@@ -593,11 +671,11 @@
 
 <style>
 	:global(:root.theme-dark) .stats-page {
-		--stats-accent: #39cfa2;
+		--stats-accent: #29acf4;
 		--stats-blue: #6495ed;
 	}
 	.stats-page {
-		--stats-accent: #087d61;
+		--stats-accent: #086fa8;
 		--stats-blue: #3a67b6;
 		max-width: 1050px;
 		width: 100%;
@@ -605,6 +683,13 @@
 		padding: 24px 32px 60px;
 		box-sizing: border-box;
 		min-width: 0;
+		font-size: 15px;
+		line-height: 1.5;
+		color: var(--stats-text);
+		--stats-text: color-mix(in srgb, var(--text-color) 90%, var(--bg-color));
+		--stats-muted: color-mix(in srgb, var(--text-color) 67%, var(--bg-color));
+		--stats-border: color-mix(in srgb, var(--text-color) 14%, var(--bg-color));
+		--stats-surface: color-mix(in srgb, var(--bg-color) 96%, var(--text-color));
 	}
 	header {
 		display: flex;
@@ -617,7 +702,7 @@
 		min-width: 0;
 	}
 	.back {
-		font-size: 12px;
+		font-size: 14px;
 		opacity: 0.7;
 		color: inherit;
 		text-decoration: none;
@@ -625,8 +710,8 @@
 	.eyebrow {
 		text-transform: uppercase;
 		letter-spacing: 0.15em;
-		font-size: 10px;
-		color: var(--stats-accent, #39cfa2);
+		font-size: 13px;
+		color: var(--stats-accent, #29acf4);
 		margin: 22px 0 10px;
 		overflow-wrap: anywhere;
 	}
@@ -640,7 +725,7 @@
 	.intro {
 		margin: 12px 0 0;
 		font-size: 13px;
-		opacity: 0.65;
+		color: var(--stats-muted);
 	}
 	.controls {
 		display: flex;
@@ -648,7 +733,7 @@
 		gap: 12px;
 	}
 	.controls label {
-		font-size: 11px;
+		font-size: 13px;
 		text-transform: uppercase;
 		letter-spacing: 0.08em;
 		display: grid;
@@ -675,16 +760,16 @@
 		border: 0;
 		background: transparent;
 		color: inherit;
-		font-size: 12px;
+		font-size: 14px;
 		border-radius: 4px;
 		box-shadow: none;
 	}
 	.segmented button.active {
-		background: #39cfa225;
-		color: var(--stats-accent, #39cfa2);
+		background: #29acf425;
+		color: var(--stats-accent, #29acf4);
 	}
 	.small button {
-		font-size: 11px;
+		font-size: 13px;
 		padding: 6px 10px;
 	}
 	section {
@@ -706,8 +791,8 @@
 		letter-spacing: -0.02em;
 	}
 	.section-heading > span {
-		font-size: 11px;
-		opacity: 0.6;
+		font-size: 13px;
+		color: var(--stats-muted);
 	}
 	h3 {
 		font-size: 13px;
@@ -735,30 +820,27 @@
 	}
 	.decades h3 span {
 		color: #f5b85a;
-		font-size: 12px;
+		font-size: 14px;
 	}
 	.decades p {
-		font-size: 11px;
-		opacity: 0.6;
+		font-size: 13px;
+		color: var(--stats-muted);
 		margin: 0 0 12px;
 	}
 	.averages {
 		display: flex;
 		gap: 16px;
-		font-size: 11px;
+		font-size: 13px;
 		opacity: 0.8;
 	}
 	.averages strong {
-		color: var(--stats-accent, #39cfa2);
+		color: var(--stats-accent, #29acf4);
 		font-size: 18px;
 		font-weight: 500;
 	}
-	.monthly {
-		margin-top: 18px;
-	}
 	summary {
 		cursor: pointer;
-		font-size: 12px;
+		font-size: 14px;
 	}
 	.milestones {
 		display: grid;
@@ -774,31 +856,6 @@
 		grid-template-columns: repeat(3, minmax(0, 1fr));
 		gap: 24px;
 	}
-	.horizontal-bars {
-		position: relative;
-	}
-	.bar-labels {
-		position: absolute;
-		inset: 4px 10px 26px 0;
-		display: grid;
-		z-index: 1;
-		pointer-events: none;
-	}
-	.bar-labels span {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		font-size: 10px;
-		padding: 0 6px;
-		text-shadow: 0 1px 3px #0008;
-		gap: 10px;
-		overflow: hidden;
-		white-space: nowrap;
-		text-overflow: ellipsis;
-	}
-	.bar-labels b {
-		flex: none;
-	}
 	.pies {
 		display: grid;
 		grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
@@ -810,7 +867,7 @@
 	.pie-legend {
 		display: grid;
 		gap: 6px;
-		font-size: 11px;
+		font-size: 13px;
 		max-width: 220px;
 		margin: 12px auto 0;
 	}
@@ -838,16 +895,9 @@
 	.rating-heading h3 {
 		margin: 0;
 	}
-	.watchlist-count {
-		font-size: 12px;
-		opacity: 0.8;
-	}
-	.watchlist-count strong {
-		color: #6495ed;
-	}
 	.fine-print {
-		font-size: 10px;
-		opacity: 0.55;
+		font-size: 13px;
+		color: var(--stats-muted);
 		margin-top: 10px;
 	}
 	.people-sections {
@@ -871,8 +921,8 @@
 	}
 	.crew summary span {
 		float: right;
-		font-size: 10px;
-		opacity: 0.5;
+		font-size: 13px;
+		color: var(--stats-muted);
 	}
 	.job {
 		margin: 14px 0 0;
@@ -890,15 +940,16 @@
 		flex-wrap: wrap;
 		justify-content: space-between;
 		gap: 4px;
-		font-size: 12px;
+		font-size: 14px;
 	}
-	.crew a {
+	.crew-person {
+		text-align: left;
 		color: inherit;
 		overflow-wrap: anywhere;
 	}
 	.crew li span {
-		font-size: 10px;
-		opacity: 0.6;
+		font-size: 13px;
+		color: var(--stats-muted);
 	}
 	.highs-lows {
 		display: grid;
@@ -910,8 +961,8 @@
 		max-width: 135px;
 	}
 	.more {
-		color: var(--stats-accent, #39cfa2);
-		font-size: 12px;
+		color: var(--stats-accent, #29acf4);
+		font-size: 14px;
 		margin-top: 18px;
 	}
 	.coverage {
@@ -922,7 +973,7 @@
 	}
 	.coverage p,
 	.coverage li {
-		font-size: 12px;
+		font-size: 14px;
 	}
 	.coverage ul {
 		max-height: 160px;
@@ -937,14 +988,59 @@
 	.empty-year p,
 	.muted {
 		font-size: 13px;
-		opacity: 0.65;
+		color: var(--stats-muted);
 	}
 	footer {
 		border-top: 1px solid #8883;
 		padding-top: 20px;
-		font-size: 10px;
-		opacity: 0.5;
+		font-size: 13px;
+		color: var(--stats-muted);
 		line-height: 1.7;
+	}
+	.watchlist-summary {
+		display: flex;
+		align-items: center;
+		gap: 20px;
+		padding: 20px 24px;
+		margin-bottom: 28px;
+		border: 1px solid var(--stats-border);
+		border-radius: 12px;
+		background: color-mix(in srgb, #29acf4 7%, var(--stats-surface));
+	}
+	.watchlist-summary > strong {
+		font-size: 40px;
+		line-height: 1;
+		color: var(--stats-accent);
+	}
+	.watchlist-summary h3 {
+		font-size: 18px;
+		margin: 0 0 4px;
+	}
+	.watchlist-summary p {
+		font-size: 13px;
+		color: var(--stats-muted);
+		margin: 0;
+	}
+	.activity-averages {
+		margin: -4px 0 18px;
+	}
+	.segmented button:hover {
+		background: color-mix(in srgb, #29acf4 12%, transparent);
+	}
+	.more:hover,
+	.back:hover,
+	.crew-person:hover {
+		color: var(--stats-accent);
+		text-decoration: underline;
+	}
+	button:focus-visible,
+	summary:focus-visible,
+	a:focus-visible {
+		outline: 2px solid var(--stats-accent);
+		outline-offset: 3px;
+	}
+	.crew summary:hover {
+		color: var(--stats-accent);
 	}
 	@media (max-width: 700px) {
 		.categories {

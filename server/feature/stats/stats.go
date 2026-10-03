@@ -1,6 +1,7 @@
 package stats
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -140,9 +141,10 @@ type Milestones struct {
 }
 
 type BarStat struct {
-	Label         string  `json:"label"`
-	Count         int     `json:"count"`
-	AverageRating float64 `json:"averageRating"`
+	TitleKeys     []string `json:"titleKeys"`
+	Label         string   `json:"label"`
+	Count         int      `json:"count"`
+	AverageRating float64  `json:"averageRating"`
 }
 
 type PieStat struct {
@@ -164,11 +166,12 @@ type Breakdown struct {
 }
 
 type PersonStat struct {
-	ID            int     `json:"id"`
-	Name          string  `json:"name"`
-	ProfilePath   string  `json:"profilePath,omitempty"`
-	Titles        int     `json:"titles"`
-	AverageRating float64 `json:"averageRating"`
+	TitleKeys     []string `json:"titleKeys"`
+	ID            int      `json:"id"`
+	Name          string   `json:"name"`
+	ProfilePath   string   `json:"profilePath,omitempty"`
+	Titles        int      `json:"titles"`
+	AverageRating float64  `json:"averageRating"`
 }
 
 type PeopleStats struct {
@@ -335,7 +338,7 @@ func (s *Service) GetStats(userID uint, q Query) (StatsResponse, error) {
 		People:         buildPeople(scopeRecords, metadata),
 		Crew:           buildCrew(scopeRecords, metadata),
 		Posters:        uniqueCards(scopeRecords, metadata),
-		Watchlist:      topWatchlist(watchlist, nil),
+		Watchlist:      topWatchlist(watchlist, userID, q),
 		Metadata:       metadataStatus,
 	}
 	response.Summary = buildSummary(scopeRecords)
@@ -693,7 +696,13 @@ func buildDecades(records []*watchedRecord, metadata map[string]contentMetadata)
 		if value.rated < 2 {
 			continue
 		}
-		items := cards(value.records, metadata, 4)
+		favorites := make([]*watchedRecord, 0)
+		for _, record := range value.records {
+			if record.watched.Rating > 8 {
+				favorites = append(favorites, record)
+			}
+		}
+		items := cards(favorites, metadata, len(favorites))
 		result = append(result, DecadeStat{
 			Decade:        decade,
 			Titles:        len(value.records),
@@ -703,6 +712,9 @@ func buildDecades(records []*watchedRecord, metadata map[string]contentMetadata)
 	}
 	sort.SliceStable(result, func(i, j int) bool {
 		if result[i].AverageRating == result[j].AverageRating {
+			if result[i].Titles == result[j].Titles {
+				return result[i].Decade < result[j].Decade
+			}
 			return result[i].Titles > result[j].Titles
 		}
 		return result[i].AverageRating > result[j].AverageRating
@@ -717,7 +729,7 @@ func buildHighestRated(records []*watchedRecord, year int, metadata map[string]c
 	current := make([]*watchedRecord, 0)
 	older := make([]*watchedRecord, 0)
 	for _, record := range records {
-		if record.watched.Rating <= 0 {
+		if record.watched.Rating <= 0 || (year == 0 && record.watched.Rating <= 8) {
 			continue
 		}
 		if year == 0 || releaseYear(record.content) == year {
@@ -736,7 +748,11 @@ func buildHighestRated(records []*watchedRecord, year int, metadata map[string]c
 	}
 	byRating(current)
 	byRating(older)
-	return HighestRated{Current: cards(current, metadata, 6), Older: cards(older, metadata, 6)}
+	limit := 5
+	if year == 0 {
+		limit = len(current)
+	}
+	return HighestRated{Current: cards(current, metadata, limit), Older: cards(older, metadata, 5)}
 }
 
 func buildActivity(records []*watchedRecord) ActivityStats {
@@ -840,6 +856,7 @@ func buildMilestones(records []*watchedRecord, metadata map[string]contentMetada
 
 func buildBars(records []*watchedRecord, metadata map[string]contentMetadata, genres bool) []BarStat {
 	type aggregate struct {
+		keys   map[string]bool
 		count  int
 		rating float64
 		rated  int
@@ -859,9 +876,14 @@ func buildBars(records []*watchedRecord, metadata map[string]contentMetadata, ge
 			seen[label] = true
 			a := values[label]
 			if a == nil {
-				a = &aggregate{}
+				a = &aggregate{keys: map[string]bool{}}
 				values[label] = a
 			}
+			key := contentKey(record.content)
+			if a.keys[key] {
+				continue
+			}
+			a.keys[key] = true
 			a.count++
 			if record.watched.Rating > 0 {
 				a.rating += record.watched.Rating
@@ -871,7 +893,12 @@ func buildBars(records []*watchedRecord, metadata map[string]contentMetadata, ge
 	}
 	result := make([]BarStat, 0, len(values))
 	for label, value := range values {
-		result = append(result, BarStat{Label: label, Count: value.count, AverageRating: average(value.rating, value.rated)})
+		keys := make([]string, 0, len(value.keys))
+		for key := range value.keys {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
+		result = append(result, BarStat{Label: label, Count: value.count, AverageRating: average(value.rating, value.rated), TitleKeys: keys})
 	}
 	sort.SliceStable(result, func(i, j int) bool {
 		if result[i].Count == result[j].Count {
@@ -963,6 +990,7 @@ func buildPeople(records []*watchedRecord, metadata map[string]contentMetadata) 
 }
 
 type personAggregate struct {
+	keys  map[string]bool
 	stat  PersonStat
 	total float64
 	rated int
@@ -971,9 +999,15 @@ type personAggregate struct {
 func addPerson(values map[int]*personAggregate, credit personCredit, record *watchedRecord) {
 	value := values[credit.id]
 	if value == nil {
-		value = &personAggregate{stat: PersonStat{ID: credit.id, Name: credit.name, ProfilePath: credit.profilePath}}
+		value = &personAggregate{keys: map[string]bool{}, stat: PersonStat{ID: credit.id, Name: credit.name, ProfilePath: credit.profilePath, TitleKeys: []string{}}}
 		values[credit.id] = value
 	}
+	key := contentKey(record.content)
+	if value.keys[key] {
+		return
+	}
+	value.keys[key] = true
+	value.stat.TitleKeys = append(value.stat.TitleKeys, key)
 	value.stat.Titles++
 	if record.watched.Rating > 0 {
 		value.total += record.watched.Rating
@@ -992,6 +1026,7 @@ func peopleFromAggregates(values map[int]*personAggregate) []PersonStat {
 	result := make([]PersonStat, 0, len(values))
 	for _, value := range values {
 		if value.stat.Titles >= 2 {
+			sort.Strings(value.stat.TitleKeys)
 			result = append(result, value.stat)
 		}
 	}
@@ -1149,22 +1184,45 @@ func uniqueCards(records []*watchedRecord, metadata map[string]contentMetadata) 
 	return result
 }
 
-func topWatchlist(records []*watchedRecord, metadata map[string]contentMetadata) []MediaCard {
-	all := uniqueCards(records, metadata)
+// Picks are stable for the owner, period and media while eligible watchlist data is unchanged.
+func topWatchlist(records []*watchedRecord, ownerID uint, q Query) []MediaCard {
+	all := uniqueCards(filterWatchlist(records), nil)
 	result := make([]MediaCard, 0, len(all))
 	for _, c := range all {
 		if c.TMDBRating > 0 && c.VoteCount > 0 {
 			result = append(result, c)
 		}
 	}
-	sort.SliceStable(result, func(i, j int) bool {
-		if result[i].TMDBRating == result[j].TMDBRating {
-			return result[i].Title < result[j].Title
+	sort.Slice(result, func(i, j int) bool {
+		if result[i].TMDBRating != result[j].TMDBRating {
+			return result[i].TMDBRating > result[j].TMDBRating
 		}
-		return result[i].TMDBRating > result[j].TMDBRating
+		if result[i].VoteCount != result[j].VoteCount {
+			return result[i].VoteCount > result[j].VoteCount
+		}
+		return result[i].ID < result[j].ID
 	})
-	if len(result) > 6 {
-		result = result[:6]
+	if len(result) > 30 {
+		result = result[:30]
+	}
+	period := strconv.Itoa(q.Year)
+	if q.Scope == ScopeLifetime {
+		period = "all"
+	}
+	scores := make(map[string]string, len(result))
+	for _, c := range result {
+		key := fmt.Sprintf("%s:%d", c.Type, c.ID)
+		scores[key] = fmt.Sprintf("%x", sha256.Sum256([]byte(fmt.Sprintf("%d:%s:%s:%s", ownerID, period, q.Media, key))))
+	}
+	sort.Slice(result, func(i, j int) bool {
+		a, b := fmt.Sprintf("%s:%d", result[i].Type, result[i].ID), fmt.Sprintf("%s:%d", result[j].Type, result[j].ID)
+		if scores[a] == scores[b] {
+			return a < b
+		}
+		return scores[a] < scores[b]
+	})
+	if len(result) > 5 {
+		result = result[:5]
 	}
 	return result
 }

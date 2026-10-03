@@ -14,6 +14,7 @@ export interface StatsMediaCard {
 	date?: string;
 }
 export interface StatsPerson {
+	titleKeys: string[];
 	id: number;
 	name: string;
 	profilePath?: string;
@@ -21,6 +22,7 @@ export interface StatsPerson {
 	averageRating: number;
 }
 export interface StatsBar {
+	titleKeys: string[];
 	label: string;
 	count: number;
 	averageRating: number;
@@ -111,7 +113,13 @@ export interface StatsResponse {
 	metadata: { partial: boolean; failedTitles: string[] };
 }
 export interface ChartPoint {
+	tooltipLabel?: string;
 	label: string;
 	value: number | null;
 	detail?: string;
+}
+
+export interface StatsChartSelection {
+	current: () => symbol | undefined;
+	select: (chart: symbol | undefined) => void;
 }

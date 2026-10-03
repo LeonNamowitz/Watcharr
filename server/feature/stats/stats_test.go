@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -123,8 +124,8 @@ func TestGetStatsUsesEffectiveDatesAndSeparatesRewatches(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(lifetime.HighestRated.Current) != 2 {
-		t.Fatalf("lifetime highest rated = %#v, want two rated titles", lifetime.HighestRated.Current)
+	if len(lifetime.HighestRated.Current) != 1 {
+		t.Fatalf("lifetime highest rated = %#v, want one title rated above 8/10", lifetime.HighestRated.Current)
 	}
 	if len(lifetime.Decades) != 1 {
 		t.Fatalf("lifetime decades = %#v, want one release decade", lifetime.Decades)
@@ -488,7 +489,7 @@ func TestAuthenticatedStatsAndPublicViewerKeepOwnerScope(t *testing.T) {
 	}
 	engine := gin.New()
 	br := appRouter.NewBaseRouter(db, engine.Group("/api"), &config.ServerConfig{JWT_SECRET: "test"})
-	NewRouter(br, NewService(db, nil), watchedFeature.NewService(db, nil, nil, nil, nil)).AddRoutes()
+	NewRouter(br, NewService(db, &successfulTMDB{}), watchedFeature.NewService(db, nil, nil, nil, nil)).AddRoutes()
 	auth, err := jwt.NewWithClaims(jwt.SigningMethodHS256, entity.TokenClaims{UserID: owners[1].ID, RegisteredClaims: jwt.RegisteredClaims{IssuedAt: jwt.NewNumericDate(time.Now()), ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour))}}).SignedString([]byte("test"))
 	if err != nil {
 		t.Fatal(err)
@@ -512,6 +513,14 @@ func TestAuthenticatedStatsAndPublicViewerKeepOwnerScope(t *testing.T) {
 		if r.Code != 200 || len(data.Posters) != 1 || data.Posters[0].Title != expected {
 			t.Fatalf("wrong stats owner: %s", r.Body.String())
 		}
+		expectedKey := "movie:902"
+		if strings.Contains(p, "public") {
+			expectedKey = "movie:901"
+		}
+		if len(data.Genres) != 1 || !reflect.DeepEqual(data.Genres[0].TitleKeys, []string{expectedKey}) {
+			t.Fatalf("membership must belong to requested owner, never viewer: %#v", data.Genres)
+		}
+
 	}
 }
 
@@ -586,5 +595,134 @@ func TestMetadataEnrichmentIsBoundedAndReadOnly(t *testing.T) {
 	db.First(&persisted)
 	if persisted.Runtime != 0 || persisted.VoteAverage != 0 {
 		t.Fatal("stats enrichment must not mutate the database")
+	}
+}
+
+func TestStatsMembershipMatchesDistinctWatchedTitles(t *testing.T) {
+	a := &watchedRecord{content: &entity.Content{TmdbID: 1, Type: entity.MOVIE}, watched: entity.Watched{Rating: 9}, plays: []time.Time{date("2025-01-01"), date("2025-01-02")}}
+	b := &watchedRecord{content: &entity.Content{TmdbID: 2, Type: entity.MOVIE}, watched: entity.Watched{Rating: 7}, plays: []time.Time{date("2024-01-01")}}
+	c := &watchedRecord{content: &entity.Content{TmdbID: 3, Type: entity.SHOW}, watched: entity.Watched{Rating: 5}, plays: []time.Time{date("2025-01-01")}}
+	credit := personCredit{id: 42, name: "Actor", job: "Director", department: "Directing"}
+	metadata := map[string]contentMetadata{}
+	for _, r := range []*watchedRecord{a, b, c} {
+		metadata[contentKey(r.content)] = contentMetadata{genres: []string{"Drama", "Drama"}, countries: []string{"France", "France"}, languages: []string{"French", "French"}, cast: []personCredit{credit, credit}, crew: []personCredit{credit, credit}, studios: []personCredit{credit, credit}}
+	}
+	records := []*watchedRecord{a, b, a, c}
+	movieRecords := filterMedia(records, "movie")
+	want := []string{"movie:1", "movie:2"}
+	people := buildPeople(movieRecords, metadata)
+	for _, list := range [][]PersonStat{people.Cast, people.Directors, buildStudios(movieRecords, metadata), buildCrew(movieRecords, metadata)[0].Jobs[0].People} {
+		if len(list) != 1 || list[0].Titles != 2 || list[0].AverageRating != 8 || !reflect.DeepEqual(list[0].TitleKeys, want) {
+			t.Fatalf("contributor membership duplicates: %#v", list)
+		}
+	}
+	for _, list := range [][]BarStat{buildBars(movieRecords, metadata, true), buildBars(movieRecords, metadata, false), buildLanguageBars(movieRecords, metadata)} {
+		if len(list) != 1 || list[0].Count != 2 || !reflect.DeepEqual(list[0].TitleKeys, want) {
+			t.Fatalf("category membership duplicates: %#v", list)
+		}
+	}
+	scoped := filterRecordsForYear(filterMedia([]*watchedRecord{a, b, c}, "movie"), 2025)
+	genres := buildBars(scoped, metadata, true)
+	if genres[0].Count != 1 || !reflect.DeepEqual(genres[0].TitleKeys, []string{"movie:1"}) {
+		t.Fatalf("year/media membership isolation: %#v", genres)
+	}
+	if len(buildBars(scoped, map[string]contentMetadata{}, true)) != 0 {
+		t.Fatal("failed metadata must not invent category memberships")
+	}
+}
+
+func TestLifetimeFavoritesAndDecadesAreUncappedAboveEight(t *testing.T) {
+	records := make([]*watchedRecord, 16)
+	total := 0.0
+	for i := range records {
+		rating := 8.1
+		if i == 0 {
+			rating = 8
+		}
+		if i == 1 {
+			rating = 0
+		}
+		if i >= 10 {
+			rating = 9
+		}
+		r := &watchedRecord{content: &entity.Content{TmdbID: i + 1, Type: entity.MOVIE, Title: fmt.Sprintf("Title %02d", i), ReleaseDate: dateTime("1999-01-01")}, watched: entity.Watched{Rating: rating}, plays: []time.Time{date("2025-01-01")}}
+		records[i] = r
+		total += rating
+	}
+	favorites := buildHighestRated(records, 0, nil).Current
+	if len(favorites) != 14 {
+		t.Fatalf("expected all 14 above 8/10: %#v", favorites)
+	}
+	for i, c := range favorites {
+		if c.Rating <= 8 {
+			t.Fatal("threshold must be strictly above 8")
+		}
+		if i > 0 && c.Rating == favorites[i-1].Rating && c.Title < favorites[i-1].Title {
+			t.Fatal("unstable tie ordering")
+		}
+	}
+	decades := buildDecades(records, nil)
+	if len(decades) != 1 || len(decades[0].Items) != 14 || decades[0].Titles != 16 || decades[0].AverageRating != total/15 {
+		t.Fatalf("decade ranking/counts must remain independent of poster threshold: %#v", decades)
+	}
+	yearly := buildHighestRated(records, 2025, nil)
+	if len(yearly.Older) != 5 {
+		t.Fatal("yearly highlights should contain five titles")
+	}
+	records[0].watched.Rating = 8
+	records[1].watched.Rating = 7
+	noFavorites := buildDecades(records[:2], nil)
+	if len(noFavorites) != 1 || len(noFavorites[0].Items) != 0 {
+		t.Fatal("eligible decades with no above-eight posters should remain present")
+	}
+}
+
+func TestWatchlistPicksAreStableForOwnerYearAndMedia(t *testing.T) {
+	records := make([]*watchedRecord, 40)
+	for i := range records {
+		records[i] = &watchedRecord{content: &entity.Content{TmdbID: i + 1, Type: entity.MOVIE, Title: fmt.Sprintf("Pick %02d", i), VoteAverage: float32(10 - float64(i)/10), VoteCount: 100}, watched: entity.Watched{Status: entity.PLANNED}}
+		records[i].watched.ID = uint(i + 1)
+	}
+	q := Query{Scope: ScopeYear, Year: 2025, Media: "movie"}
+	first := topWatchlist(records, 42, q)
+	if len(first) != 5 {
+		t.Fatal("expected five picks")
+	}
+	for _, c := range first {
+		if c.ID > 30 {
+			t.Fatal("picks should come from the best 30")
+		}
+	}
+	for i, j := 0, len(records)-1; i < j; i, j = i+1, j-1 {
+		records[i], records[j] = records[j], records[i]
+	}
+	if !reflect.DeepEqual(first, topWatchlist(records, 42, q)) {
+		t.Fatal("reload/order changed the picks")
+	}
+	q.Year = 2024
+	if reflect.DeepEqual(first, topWatchlist(records, 42, q)) {
+		t.Fatal("years should have different deterministic picks")
+	}
+	q.Year = 2025
+	if reflect.DeepEqual(first, topWatchlist(records, 43, q)) {
+		t.Fatal("owner seed should affect picks")
+	}
+	q.Media = "tv"
+	if reflect.DeepEqual(first, topWatchlist(records, 42, q)) {
+		t.Fatal("media seed should affect picks")
+	}
+	records[0].plays = []time.Time{date("2020-01-01")}
+	records[1].content.VoteCount = 0
+	records[2].watched.Status = entity.FINISHED
+	small := topWatchlist(records[:5], 42, q)
+	if len(small) != 2 {
+		t.Fatalf("small pool must exclude seen, unknown rating/votes and non-Planned: %#v", small)
+	}
+	q.Scope = ScopeLifetime
+	q.Year = 0
+	lifetime := topWatchlist(records, 42, q)
+	q.Year = 2025
+	if !reflect.DeepEqual(lifetime, topWatchlist(records, 42, q)) {
+		t.Fatal("lifetime key must use all rather than current year")
 	}
 }

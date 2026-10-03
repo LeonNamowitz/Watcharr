@@ -3,18 +3,21 @@
 	import PosterImage from "@/lib/content/PosterImage.svelte";
 	import { baseURL } from "@/lib/util/api";
 	import { toRatingLabel, type RatingSettings } from "@/lib/rating/helpers";
+	import { decimal } from "./format";
 	import type { StatsMediaCard } from "./types";
 	let {
 		items,
 		owner,
 		settings,
 		tiny = false,
+		comparison = false,
 		detail,
 	}: {
 		items: StatsMediaCard[];
 		owner?: { id: string; username: string };
 		settings?: RatingSettings;
 		tiny?: boolean;
+		comparison?: boolean;
 		detail?: (card: StatsMediaCard) => string;
 	} = $props();
 	function href(c: StatsMediaCard) {
@@ -34,7 +37,7 @@
 	{#each items as c (`${c.type}:${c.id}`)}
 		<a
 			href={href(c)}
-			title={`${c.title}${c.releaseYear ? ` (${c.releaseYear})` : ""} · ${toRatingLabel(c.rating, settings)}${detail ? ` · ${detail(c)}` : ""}`}
+			title={`${c.title}${c.releaseYear ? ` (${c.releaseYear})` : ""}${tiny ? ` · ${toRatingLabel(c.rating, settings)}` : ""}`}
 		>
 			<div class="image">
 				{#if c.posterPath}<PosterImage
@@ -44,9 +47,14 @@
 						loading="lazy"
 					/>{:else}<span>{c.title}</span>{/if}
 			</div>
-			{#if !tiny}<strong>{c.title}</strong><span class="meta"
-					>{detail ? detail(c) : toRatingLabel(c.rating, settings)}</span
-				>{/if}
+			{#if !tiny}<strong>{c.title}</strong>{#if comparison}<span
+						class="comparison"
+						><b>{decimal(c.rating ?? 0)}</b><span>vs</span><b
+							>{decimal(c.tmdbRating ?? 0)}</b
+						></span
+					>{:else}<span class="meta"
+						>{detail ? detail(c) : toRatingLabel(c.rating, settings)}</span
+					>{/if}{/if}
 		</a>
 	{:else}<p class="empty">No titles to show yet.</p>{/each}
 </div>
@@ -54,7 +62,7 @@
 <style>
 	.posters {
 		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+		grid-template-columns: repeat(5, minmax(0, 1fr));
 		gap: 16px 12px;
 		min-width: 0;
 	}
@@ -82,26 +90,34 @@
 		transition: filter 0.15s;
 	}
 	.image span {
-		font-size: 12px;
+		font-size: 14px;
 		padding: 8px;
 		text-align: center;
+	}
+	a:hover .image,
+	a:focus-visible .image {
+		border-color: var(--stats-accent);
+	}
+	a:hover strong,
+	a:focus-visible strong {
+		color: var(--stats-accent);
 	}
 	a:hover :global(img) {
 		filter: brightness(1.12);
 	}
 	a:focus-visible {
-		outline: 2px solid #39cfa2;
+		outline: 2px solid #29acf4;
 		outline-offset: 4px;
 		border-radius: 6px;
 	}
 	strong {
-		font-size: 12px;
+		font-size: 14px;
 		line-height: 1.4;
 		overflow-wrap: anywhere;
 	}
 	.meta {
-		font-size: 11px;
-		color: var(--stats-accent, #39cfa2);
+		font-size: 13px;
+		color: var(--stats-accent, #29acf4);
 		overflow-wrap: anywhere;
 	}
 	.tiny {
@@ -116,9 +132,30 @@
 		opacity: 0.6;
 		grid-column: 1/-1;
 	}
-	@media (max-width: 520px) {
+	.comparison {
+		display: flex;
+		align-items: center;
+		gap: 7px;
+		font-size: 14px;
+	}
+	.comparison b:first-child {
+		color: var(--stats-accent);
+	}
+	.comparison b:last-child {
+		color: var(--stats-muted);
+	}
+	.comparison > span {
+		font-size: 12px;
+		color: var(--stats-muted);
+	}
+	@media (min-width: 521px) and (max-width: 900px) {
 		.posters:not(.tiny) {
 			grid-template-columns: repeat(3, minmax(0, 1fr));
+		}
+	}
+	@media (max-width: 520px) {
+		.posters:not(.tiny) {
+			grid-template-columns: repeat(2, minmax(0, 1fr));
 			gap: 12px 8px;
 		}
 	}
