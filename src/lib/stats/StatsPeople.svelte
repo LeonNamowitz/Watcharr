@@ -90,7 +90,7 @@
 	}
 	.portrait {
 		position: relative;
-		width: min(144px, 100%);
+		width: min(160px, 100%);
 		aspect-ratio: 1;
 		border-radius: 50%;
 		overflow: hidden;
@@ -112,7 +112,7 @@
 		object-fit: cover;
 		/* Vertical crop: 0% keeps the source top and moves the face lower.
            Increase the second percentage to move the photo up. */
-		object-position: 50% 0%;
+		object-position: 50% 30%;
 	}
 	.portrait.studio {
 		border-radius: 8px;
