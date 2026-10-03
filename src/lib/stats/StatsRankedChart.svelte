@@ -78,6 +78,8 @@
 	}
 </script>
 
+<svelte:window onscroll={hideTooltip} onresize={hideTooltip} />
+
 <div
 	class="ranking"
 	role="group"
