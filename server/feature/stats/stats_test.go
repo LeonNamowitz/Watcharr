@@ -201,6 +201,9 @@ func TestTVStatsCountOnlyWholeShowPlays(t *testing.T) {
 	if response.Summary.Shows != 1 || response.Summary.Plays != 1 {
 		t.Fatalf("TV must count whole-show plays, not episode events: %#v", response.Summary)
 	}
+	if response.Summary.Hours == nil || *response.Summary.Hours != 5.6 {
+		t.Fatalf("finished show must include all eight episodes: %#v", response.Summary)
+	}
 	if response.HighsLows.Longest.Runtime != 42 {
 		t.Fatalf("TV runtime must be episode runtime")
 	}

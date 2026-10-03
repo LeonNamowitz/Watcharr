@@ -50,6 +50,7 @@ export interface StatsResponse {
 	reviewsVisible: boolean;
 	availableYears: number[];
 	summary: {
+		hours?: number;
 		titles: number;
 		games?: number;
 		completed?: number;

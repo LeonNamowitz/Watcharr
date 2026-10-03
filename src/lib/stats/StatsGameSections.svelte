@@ -16,7 +16,6 @@
 		onExplore,
 		counts = $bindable<Record<string, number>>({
 			genres: 5,
-			platforms: 5,
 			modes: 5,
 			themes: 5,
 			perspectives: 5,
@@ -47,6 +46,23 @@
 	const activityUnit = $derived(
 		activityKind === "completions" ? "completions" : "progress events",
 	);
+	const rankingColors = [
+		"#29acf4",
+		"#51ad79",
+		"#f5b85a",
+		"#f47983",
+		"#b19bea",
+	];
+	function activityAxisLabel(
+		date: Date,
+		compactFormat: Intl.DateTimeFormatOptions,
+	) {
+		return date.toLocaleDateString(undefined, {
+			...compactFormat,
+			...(data.scope === "lifetime" ? { year: "2-digit" as const } : {}),
+			timeZone: "UTC",
+		});
+	}
 	const activityPoints: ChartPoint[] = $derived(
 		interval === "week"
 			? (activity?.weeks ?? []).map((w) => {
@@ -60,7 +76,13 @@
 							timeZone: "UTC",
 						});
 					return {
-						label: w.start,
+							label:
+								data.scope === "lifetime"
+									? activityAxisLabel(start, {
+											month: "short",
+											day: "numeric",
+										})
+									: w.start.slice(5),
 						tooltipLabel: `${format(start)} – ${format(end)}`,
 						value: w.plays,
 						titleCount: w.uniqueTitles,
@@ -70,7 +92,10 @@
 					};
 				})
 			: (activity?.months ?? []).map((m) => ({
-					label: m.month,
+					label: activityAxisLabel(
+						new Date(`${m.month}-01T00:00:00Z`),
+						{ month: "short" },
+					),
 					tooltipLabel: new Date(`${m.month}-01T00:00:00Z`).toLocaleDateString(
 						undefined,
 						{ month: "long", year: "numeric", timeZone: "UTC" },
@@ -89,26 +114,39 @@
 						key: "developers",
 						title: "Developers",
 						items: games?.developers ?? [],
+						color: rankingColors[0],
 					},
 					{
 						key: "publishers",
 						title: "Publishers",
 						items: games?.publishers ?? [],
+						color: rankingColors[1],
 					},
 				]
 			: [
-					{ key: "genres", title: "Genres", items: data.genres },
 					{
-						key: "platforms",
-						title: "Supported platforms",
-						items: games?.platforms ?? [],
+						key: "genres",
+						title: "Genres",
+						items: data.genres,
+						color: rankingColors[0],
 					},
-					{ key: "modes", title: "Game modes", items: games?.modes ?? [] },
-					{ key: "themes", title: "Themes", items: games?.themes ?? [] },
+					{
+						key: "modes",
+						title: "Game modes",
+						items: games?.modes ?? [],
+						color: rankingColors[1],
+					},
+					{
+						key: "themes",
+						title: "Themes",
+						items: games?.themes ?? [],
+						color: rankingColors[2],
+					},
 					{
 						key: "perspectives",
 						title: "Player perspectives",
 						items: games?.perspectives ?? [],
+						color: rankingColors[3],
 					},
 				],
 	);
@@ -165,13 +203,16 @@
 					>
 				</div>
 			</div>
-			<p class="muted">
-				{activity.total.toLocaleString()}
-				{activityUnit}{#if data.scope === "year"}
-					· {decimal(activity.averagePerWeek)} / week · {decimal(
-						activity.averagePerMonth,
-					)} / month{/if}
-			</p>
+			<div class="averages activity-averages">
+				<span
+					><strong>{activity.total.toLocaleString()}</strong> {activityUnit}</span
+				>
+				{#if data.scope === "year"}<span
+						><strong>{decimal(activity.averagePerWeek)}</strong> / week</span
+					><span
+						><strong>{decimal(activity.averagePerMonth)}</strong> / month</span
+					>{/if}
+			</div>
 			{#key `${interval}:${activityKind}`}<StatsChart
 					titleUnit="games"
 					title={`${activityKind === "progress" ? "Recorded progress" : "Completions"} by ${interval}`}
@@ -191,7 +232,7 @@
 				<h2 class="norm">
 					{section === "companies"
 						? "Developers & publishers"
-						: "Genres, platforms & play styles"}
+						: "Genres & play styles"}
 				</h2>
 				<div class="segmented" aria-label="Sort game rankings">
 					<button
@@ -208,14 +249,11 @@
 					>
 				</div>
 			</div>
-			{#if section === "categories"}<p class="muted">
-					Platforms show where games are available. Your played platform is not
-					recorded. Games can belong to multiple categories.
-				</p>{/if}
 			<div class="rankings">
 				{#each rankings as group (group.key)}<StatsRankedChart
 						title={group.title}
 						items={group.items}
+						color={group.color}
 						unit="played games"
 						{settings}
 						{sortBy}
@@ -318,6 +356,23 @@
 	.section-heading > span {
 		color: var(--stats-muted);
 		font-size: 13px;
+	}
+	.averages {
+		display: flex;
+		gap: 16px;
+		font-size: 13px;
+		opacity: 0.8;
+	}
+	.averages strong {
+		color: var(--stats-accent, #29acf4);
+		font-size: 18px;
+		font-weight: 500;
+	}
+	.activity-averages {
+		align-items: baseline;
+		flex-wrap: wrap;
+		row-gap: 8px;
+		margin: -4px 0 18px;
 	}
 	.segmented {
 		display: flex;

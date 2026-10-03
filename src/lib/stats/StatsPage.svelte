@@ -53,7 +53,6 @@
 	let crewCounts = $state<Record<string, number>>({});
 	let gameCounts = $state<Record<string, number>>({
 		genres: 5,
-		platforms: 5,
 		modes: 5,
 		themes: 5,
 		perspectives: 5,
@@ -222,6 +221,14 @@
 					].map((item) => item.id),
 				).size
 			: data.summary.titles,
+	);
+	const hoursPlayed = $derived(data.summary.hours);
+	const hoursDescription = $derived(
+		isGame
+			? lifetime
+				? "Saved cumulative playtime for games in this view."
+				: "Saved playtime for games first completed in the selected year."
+			: "Estimated from available runtimes, recorded watches, finished shows and finished episodes.",
 	);
 	const years = $derived(
 		[
@@ -547,6 +554,14 @@
 								).toLocaleString()}
 					</dd>
 				</div>
+				<div title={hoursDescription}>
+					<dt>{isGame ? "Recorded hours" : "Estimated hours"}</dt>
+					<dd>
+						{loading || error || hoursPlayed === undefined
+							? "—"
+							: decimal(hoursPlayed)}
+					</dd>
+				</div>
 				<div>
 					<dt>
 						Average {selectedMedia === "game"
@@ -555,7 +570,7 @@
 								? "show"
 								: "film"} rating
 					</dt>
-					<dd class="summary-rating">
+					<dd>
 						{loading || error
 							? "—"
 							: averageRating(data.summary.averageRating, settings)}
@@ -947,29 +962,6 @@
 					<h2 class="norm">Breakdown</h2>
 					<span>Patterns in your {isGame ? "gaming" : "viewing"}</span>
 				</div>
-				<button
-					class="plain watchlist-summary"
-					disabled={!watchlistTitles.length}
-					aria-haspopup="dialog"
-					aria-label={`Show ${data.breakdown.watchlistAdditions} titles added to your ${isGame ? "backlog" : "watchlist"}`}
-					onclick={() =>
-						(selection = {
-							label: isGame ? "Added to backlog" : "Added to watchlist",
-							items: watchlistTitles,
-							description: isGame ? "added to backlog" : "added to watchlist",
-						})}
-				>
-					<strong>{data.breakdown.watchlistAdditions.toLocaleString()}</strong>
-					<span class="watchlist-copy">
-						<span class="watchlist-title"
-							>Added to {isGame ? "backlog" : "watchlist"}</span
-						>
-						<span class="watchlist-period">
-							{lifetime ? "Across your recorded history" : `In ${data.year}`} · distinct
-							titles
-						</span>
-					</span>
-				</button>
 				<div class="pies">
 					{#each [...(!lifetime ? [{ title: "Release years", items: data.breakdown.release }] : []), { title: isGame ? "Completions & replays" : "Watches & rewatches", items: data.breakdown.plays }, ...(data.games ? [{ title: "Current statuses", items: data.games.statuses }, { title: "Completion", items: data.games.completion }] : []), ...(data.reviewsVisible ? [{ title: "Reviews", items: data.breakdown.reviews ?? [] }] : [])] as group (group.title)}<div
 							class="pie"
@@ -995,11 +987,6 @@
 							</div>
 						</div>{/each}
 				</div>
-				{#if data.games}<p class="fine-print">
-						{decimal(data.games.completionPercentage)}% of played games
-						completed {lifetime ? "across your history" : `in ${data.year}`}.
-						Statuses show current saved values.
-					</p>{/if}
 				<div class="rating-heading">
 					<h3 class="norm">Rating distribution</h3>
 				</div>
@@ -1021,10 +1008,29 @@
 					onSelect={explorePoint}
 					color="#f5b85a"
 				/>
-				<p class="fine-print">
-					Each title counts once. Rating bars show exact saved scores on the
-					10-point scale.
-				</p>
+				<button
+					class="plain watchlist-summary"
+					disabled={!watchlistTitles.length}
+					aria-haspopup="dialog"
+					aria-label={`Show ${data.breakdown.watchlistAdditions} titles added to your ${isGame ? "backlog" : "watchlist"}`}
+					onclick={() =>
+						(selection = {
+							label: isGame ? "Added to backlog" : "Added to watchlist",
+							items: watchlistTitles,
+							description: isGame ? "added to backlog" : "added to watchlist",
+						})}
+				>
+					<strong>{data.breakdown.watchlistAdditions.toLocaleString()}</strong>
+					<span class="watchlist-copy">
+						<span class="watchlist-title"
+							>Added to {isGame ? "backlog" : "watchlist"}</span
+						>
+						<span class="watchlist-period">
+							{lifetime ? "Across your recorded history" : `In ${data.year}`} · distinct
+							titles
+						</span>
+					</span>
+				</button>
 			</section>
 
 			{#if isGame}{@render gameSection("companies")}{:else}
@@ -1316,7 +1322,7 @@
 	}
 	.header-summary {
 		display: grid;
-		grid-template-columns: repeat(3, minmax(0, 1fr));
+		grid-template-columns: repeat(4, minmax(0, 1fr));
 		gap: 16px;
 		margin-top: 22px;
 		max-width: 610px;
@@ -1342,9 +1348,6 @@
 		font-weight: 600;
 		letter-spacing: -0.035em;
 		overflow-wrap: anywhere;
-	}
-	.header-summary .summary-rating {
-		font-size: clamp(16px, 2.4vw, 25px);
 	}
 	.load-status {
 		display: flex;
@@ -1702,7 +1705,7 @@
 		align-items: center;
 		gap: 20px;
 		padding: 20px 24px;
-		margin-bottom: 28px;
+		margin-top: 28px;
 		border: 1px solid var(--stats-border);
 		border-radius: 12px;
 		background: color-mix(in srgb, #29acf4 7%, var(--stats-surface));
@@ -1811,6 +1814,9 @@
 			flex-direction: column;
 			align-items: stretch;
 			gap: 18px;
+		}
+		.header-summary {
+			grid-template-columns: repeat(2, minmax(0, 1fr));
 		}
 		.controls {
 			flex-direction: row;

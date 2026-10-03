@@ -185,6 +185,16 @@ func (s *Service) getGameStats(userID uint, q Query) (StatsResponse, error) {
 	}
 	sort.Sort(sort.Reverse(sort.IntSlice(response.AvailableYears)))
 	response.Summary = gameSummary(scoped, q)
+	hours := float64(0)
+	for _, r := range scoped {
+		if q.Scope == ScopeYear && (len(r.allCompletions) == 0 || r.allCompletions[0].Year() != q.Year) {
+			continue
+		}
+		if r.watched.PlaytimeHours != nil {
+			hours += float64(*r.watched.PlaytimeHours)
+		}
+	}
+	response.Summary.Hours = &hours
 	response.HighestRated = gameHighestRated(scoped, q)
 	if q.Scope == ScopeLifetime {
 		response.Decades = gameDecades(scoped)

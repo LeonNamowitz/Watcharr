@@ -86,13 +86,14 @@ type StatsResponse struct {
 }
 
 type Summary struct {
-	Games         int     `json:"games,omitempty"`
-	Completed     int     `json:"completed,omitempty"`
-	Titles        int     `json:"titles"`
-	Movies        int     `json:"movies"`
-	Shows         int     `json:"shows"`
-	Plays         int     `json:"plays"`
-	AverageRating float64 `json:"averageRating"`
+	Hours         *float64 `json:"hours,omitempty"`
+	Games         int      `json:"games,omitempty"`
+	Completed     int      `json:"completed,omitempty"`
+	Titles        int      `json:"titles"`
+	Movies        int      `json:"movies"`
+	Shows         int      `json:"shows"`
+	Plays         int      `json:"plays"`
+	AverageRating float64  `json:"averageRating"`
 }
 
 type HistoryPoint struct {
@@ -366,7 +367,9 @@ func (s *Service) GetStats(userID uint, q Query) (StatsResponse, error) {
 		}
 	}
 	sort.Sort(sort.Reverse(sort.IntSlice(years)))
+	hoursRecords := recordsForHours(records, q)
 	enrichmentRecords := append([]*watchedRecord{}, scopeRecords...)
+	enrichmentRecords = append(enrichmentRecords, hoursRecords...)
 	for _, ep := range episodeRecords {
 		enrichmentRecords = append(enrichmentRecords, ep.parent)
 	}
@@ -412,6 +415,7 @@ func (s *Service) GetStats(userID uint, q Query) (StatsResponse, error) {
 		response.Episodes = uniqueCards(episodeRecords, metadata)
 		response.People.Cast = buildEpisodeCast(episodeRecords, metadata)
 	}
+	response.Summary.Hours = estimatedHours(hoursRecords, episodeRecords)
 	response.Activity = buildActivity(activityRecords)
 	if q.Scope == ScopeYear {
 		response.Activity = fillActivity(response.Activity, activityRecords, q.Year, time.Now().UTC())
@@ -624,6 +628,9 @@ func (s *Service) fetchMetadata(content *entity.Content) (contentMetadata, error
 		}
 		for _, country := range details.ProductionCountries {
 			result.countries = append(result.countries, country.Name)
+		}
+		if details.NumberOfEpisodes > 0 {
+			copyContent.NumberOfEpisodes = details.NumberOfEpisodes
 		}
 		if len(details.EpisodeRunTime) > 0 && details.EpisodeRunTime[0] > 0 {
 			copyContent.Runtime = uint32(details.EpisodeRunTime[0])

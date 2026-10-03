@@ -65,6 +65,38 @@ func getGameStatsForTest(t *testing.T, s *Service, owner uint, q Query) StatsRes
 	return data
 }
 
+func TestYearGameHoursOnlyIncludeFirstCompletions(t *testing.T) {
+	db := testutil.SetupDB(t)
+	owner := entity.User{Username: "first-completion-owner", Password: "password"}
+	if err := db.Create(&owner).Error; err != nil {
+		t.Fatal(err)
+	}
+	newHours, replayHours, playingHours := uint(20), uint(30), uint(10)
+	newGame := createStatsGame(t, db, owner.ID, 201, entity.FINISHED, 8, &newHours)
+	replay := createStatsGame(t, db, owner.ID, 202, entity.FINISHED, 8, &replayHours)
+	playing := createStatsGame(t, db, owner.ID, 203, entity.WATCHING, 8, &playingHours)
+	addGameStatsActivity(t, db, newGame, entity.STATUS_CHANGED, `"FINISHED"`, "2025-01-01", true)
+	addGameStatsActivity(t, db, newGame, entity.STATUS_CHANGED, `"FINISHED"`, "2025-06-01", true)
+	// Insert the replay before the first completion to check chronological ordering.
+	addGameStatsActivity(t, db, replay, entity.STATUS_CHANGED, `"FINISHED"`, "2025-02-01", true)
+	addGameStatsActivity(t, db, replay, entity.IMPORTED_WATCHED, `{"status":"FINISHED"}`, "2024-01-01", true)
+	addGameStatsActivity(t, db, playing, entity.STATUS_CHANGED, `"WATCHING"`, "2025-01-01", false)
+	service := NewService(db, nil)
+	for _, expected := range []struct {
+		query Query
+		hours float64
+	}{
+		{Query{Scope: ScopeYear, Year: 2025}, 20},
+		{Query{Scope: ScopeYear, Year: 2024}, 30},
+		{Query{Scope: ScopeLifetime}, 60},
+	} {
+		data := getGameStatsForTest(t, service, owner.ID, expected.query)
+		if data.Summary.Hours == nil || *data.Summary.Hours != expected.hours {
+			t.Fatalf("query %#v hours: got %v, want %v", expected.query, data.Summary.Hours, expected.hours)
+		}
+	}
+}
+
 func TestGameStatsProgressCompletionsReplayAndHours(t *testing.T) {
 	db := testutil.SetupDB(t)
 	owner := entity.User{Username: "game-owner", Password: "password"}
@@ -91,6 +123,9 @@ func TestGameStatsProgressCompletionsReplayAndHours(t *testing.T) {
 	year := getGameStatsForTest(t, service, owner.ID, Query{Scope: ScopeYear, Year: 2025})
 	if year.Summary.Titles != 2 || year.Summary.Games != 2 || year.Summary.Completed != 1 || year.Summary.Plays != 2 || year.Summary.AverageRating != 9 {
 		t.Fatalf("year summary: %#v", year.Summary)
+	}
+	if year.Summary.Hours == nil || *year.Summary.Hours != 0 {
+		t.Fatalf("year hours must exclude unfinished games and games first completed in another year: %#v", year.Summary)
 	}
 	if year.Activity.Total != 3 || year.Games.Completions.Total != 2 || year.Games.CompletionPercentage != 50 || len(year.Activity.Months) != 12 {
 		t.Fatalf("progress/completion activity: %#v", year.Games)

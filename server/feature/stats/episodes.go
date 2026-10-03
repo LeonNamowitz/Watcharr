@@ -103,6 +103,9 @@ type seasonProvider interface {
 }
 
 func (s *Service) enrichEpisodes(records []*watchedRecord, metadata map[string]contentMetadata, status *MetadataStatus) {
+	for _, r := range records {
+		r.content.Runtime = r.parent.content.Runtime
+	}
 	provider, ok := s.tmdb.(seasonProvider)
 	if !ok {
 		return
@@ -136,6 +139,9 @@ func (s *Service) enrichEpisodes(records []*watchedRecord, metadata map[string]c
 					for _, ep := range details.Episodes {
 						if ep.EpisodeNumber != r.episode.EpisodeNumber {
 							continue
+						}
+						if ep.Runtime > 0 {
+							r.content.Runtime = uint32(ep.Runtime)
 						}
 						r.episodeName = ep.Name
 						r.stillPath = ep.StillPath
