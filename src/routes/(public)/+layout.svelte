@@ -30,13 +30,20 @@
 		type WatchedListStateSnapshot,
 	} from "@/store.svelte";
 	import type { Follow, PrivateUser } from "@/types";
-	import { onMount, untrack } from "svelte";
+	import { onMount, setContext, untrack } from "svelte";
+	import StatsBackgroundToggle from "@/lib/stats/StatsBackgroundToggle.svelte";
+	import {
+		STATS_BACKGROUND_CONTEXT,
+		type StatsBackgroundState,
+	} from "@/lib/stats/backgroundContext";
 
 	interface Props {
 		children?: import("svelte").Snippet;
 	}
 
 	let { children }: Props = $props();
+	const statsBackground = $state<StatsBackgroundState>({ enabled: true });
+	setContext(STATS_BACKGROUND_CONTEXT, statsBackground);
 	const restoreWatchedListState = beginTemporaryWatchedListState();
 	let mainListState: WatchedListStateSnapshot;
 	let activeListState: "main" | "search" | undefined;
@@ -51,6 +58,9 @@
 	let searchTimeout: number;
 	let scroll = 0;
 	let isAuthenticated = $derived(Boolean(store.userInfo));
+	let isStatsPage = $derived(
+		page.route?.id === "/(public)/lists/[id]/[username]/stats",
+	);
 	let detailedMenuShown = $state(false);
 	let sortMenuShown = $state(false);
 	let filterMenuShown = $state(false);
@@ -398,6 +408,7 @@
 			{/if}
 		</div>
 	{/if}
+	{#if isStatsPage}<StatsBackgroundToggle />{/if}
 	<a
 		class="plain-btn other session"
 		href={resolve(isAuthenticated ? "/" : "/login")}

@@ -10,12 +10,23 @@
 	}: {
 		label: string;
 		titleCount: number;
-		titleUnit?: "titles" | "games";
+		titleUnit?: "titles" | "games" | "watches" | "episodes";
 		averageRating: string;
 		detail?: string;
 		id?: string;
 		position?: { left: number; top: number };
 	} = $props();
+	const unitLabel = $derived(
+		titleCount === 1
+			? titleUnit === "watches"
+				? "watch"
+				: titleUnit === "episodes"
+					? "episode"
+					: titleUnit === "games"
+						? "game"
+						: "title"
+			: titleUnit,
+	);
 </script>
 
 <div
@@ -25,10 +36,7 @@
 	{id}
 	style={position ? `left:${position.left}px;top:${position.top}px` : undefined}
 >
-	<strong>{label}</strong><span
-		>{titleCount.toLocaleString()}
-		{titleCount === 1 ? titleUnit.slice(0, -1) : titleUnit}</span
-	>
+	<strong>{label}</strong><span>{titleCount.toLocaleString()} {unitLabel}</span>
 	<p>Average rating: {averageRating}</p>
 	{#if detail}<p>{detail}</p>{/if}
 </div>

@@ -29,13 +29,20 @@
 		Tag,
 		UserSettings,
 	} from "@/types";
-	import { onMount } from "svelte";
+	import { onMount, setContext } from "svelte";
 	import { SvelteURLSearchParams } from "svelte/reactivity";
+	import StatsBackgroundToggle from "@/lib/stats/StatsBackgroundToggle.svelte";
+	import {
+		STATS_BACKGROUND_CONTEXT,
+		type StatsBackgroundState,
+	} from "@/lib/stats/backgroundContext";
 	interface Props {
 		children?: import("svelte").Snippet;
 	}
 
 	let { children }: Props = $props();
+	const statsBackground = $state<StatsBackgroundState>({ enabled: true });
+	setContext(STATS_BACKGROUND_CONTEXT, statsBackground);
 
 	let navEl: HTMLElement | undefined = $state();
 	let mainSearchEl: HTMLInputElement | undefined = $state();
@@ -52,6 +59,7 @@
 	let tagOrderEditMode = $state(false);
 	let scroll = window.scrollY;
 	let isSearchPage = $derived(page.route?.id === "/(app)/search");
+	let isStatsPage = $derived(page.route?.id === "/(app)/profile/stats");
 	let isDetailPage = $derived(
 		["/movie/", "/tv/", "/game/", "/person/"].some((prefix) =>
 			page.url.pathname.startsWith(prefix),
@@ -367,6 +375,7 @@
 	>
 		<Icon i="compass" wh={26} />
 	</button>
+	{#if isStatsPage}<StatsBackgroundToggle />{/if}
 	<button class="plain face" onclick={handleProfileClick}>:)</button>
 	{#if subMenuShown}
 		<FaceMenu />

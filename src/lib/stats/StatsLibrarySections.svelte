@@ -1,9 +1,18 @@
 <script lang="ts">
 	import StatsChart from "./StatsChart.svelte";
+	import StatsBrowseList from "./StatsBrowseList.svelte";
 	import StatsPosters from "./StatsPosters.svelte";
 	import StatsExpansion from "./StatsExpansion.svelte";
-	import type { StatsResponse, StatsSelection, StatsMediaCard } from "./types";
+	import StatsTooltip from "./StatsTooltip.svelte";
+	import { averageRating } from "./format";
+	import { statsTooltipPosition } from "./tooltipPosition";
 	import type { RatingSettings } from "@/lib/rating/helpers";
+	import type {
+		ChartPoint,
+		StatsMediaCard,
+		StatsResponse,
+		StatsSelection,
+	} from "./types";
 	let {
 		data,
 		owner,
@@ -61,6 +70,67 @@
 			]) ?? [],
 		),
 	);
+	const statusPoints = $derived(
+		statuses.map((group) => ({
+			label: lifetime ? group.label : `${group.label} in ${data.year}`,
+			value: group.count,
+			titleCount: group.count,
+			averageRating: bucketRating(group.items),
+			items: group.items,
+		})),
+	);
+	const momentumBrowsePoints: ChartPoint[] = $derived(
+		(library?.momentum ?? []).flatMap((point) =>
+			(["planned", "watched"] as const).flatMap((kind) => {
+				const items = kind === "planned" ? point.planned : point.watched;
+				if (!items.length) return [];
+				const label = `${kind === "planned" ? "First planned" : "First watched from watchlist"} · ${point.period}`;
+				return [
+					{
+						label,
+						value: items.length,
+						titleCount: items.length,
+						averageRating: bucketRating(items),
+						items,
+						detail:
+							kind === "planned"
+								? "first planned"
+								: "first watched from watchlist",
+					},
+				];
+			}),
+		),
+	);
+	type HoverTooltip = {
+		label: string;
+		titleCount: number;
+		averageRating: string;
+		detail: string;
+	};
+	let hoveredTooltip = $state<HoverTooltip>();
+	let tooltipLeft = $state(0);
+	let tooltipTop = $state(0);
+	function showTooltip(
+		label: string,
+		items: StatsMediaCard[],
+		detail: string,
+		event: PointerEvent | FocusEvent,
+	) {
+		const element = event.currentTarget;
+		if (!(element instanceof HTMLElement)) return;
+		const position = statsTooltipPosition(event, element);
+		tooltipLeft = position.left;
+		tooltipTop = position.top;
+		hoveredTooltip = {
+			label,
+			titleCount: items.length,
+			averageRating: averageRating(bucketRating(items), settings),
+			detail,
+		};
+	}
+	function hideTooltip() {
+		hoveredTooltip = undefined;
+	}
 </script>
 
 {#if library}
@@ -73,10 +143,6 @@
 					: `Titles entering each status in ${data.year}`}</span
 			>
 		</div>
-		{#if !lifetime}<p class="note">
-				A title can enter several statuses in a year. Each title counts once per
-				status.
-			</p>{/if}
 		<div
 			class="status-bars"
 			role="group"
@@ -90,7 +156,35 @@
 					: `${group.label} in ${data.year}`}
 				<button
 					class="plain status-row"
-					onclick={() =>
+					onpointerenter={(event) =>
+						showTooltip(
+							label,
+							group.items,
+							lifetime ? "current library status" : "recorded status changes",
+							event,
+						)}
+					onpointermove={(event) =>
+						showTooltip(
+							label,
+							group.items,
+							lifetime ? "current library status" : "recorded status changes",
+							event,
+						)}
+					onpointerleave={hideTooltip}
+					onfocus={(event) =>
+						showTooltip(
+							label,
+							group.items,
+							lifetime ? "current library status" : "recorded status changes",
+							event,
+						)}
+					onblur={hideTooltip}
+					onkeydown={(event) => event.key === "Escape" && hideTooltip()}
+					aria-describedby={hoveredTooltip?.label === label
+						? "stats-library-tooltip"
+						: undefined}
+					onclick={() => {
+						hideTooltip();
 						onSelect({
 							label,
 							items: group.items,
@@ -98,7 +192,8 @@
 								? `currently ${group.label.toLowerCase()}`
 								: `recorded as ${group.label.toLowerCase()}`,
 							period: lifetime ? "Current library" : String(data.year),
-						})}
+						});
+					}}
 					aria-label={`Browse ${group.count} titles: ${label}`}
 				>
 					<span class="status-label">{label}</span>
@@ -116,6 +211,19 @@
 						: "recorded status changes in this year"}.
 				</p>{/each}
 		</div>
+		<StatsBrowseList
+			points={statusPoints}
+			{settings}
+			onSelect={(point) =>
+				onSelect({
+					label: point.label,
+					items: point.items ?? [],
+					description: lifetime
+						? `currently ${point.label.toLowerCase()}`
+						: `recorded as ${point.label.toLowerCase().replace(` in ${data.year}`, "")}`,
+					period: lifetime ? "Current library" : String(data.year),
+				})}
+		/>
 	</section>
 	<section class="library-section">
 		<div class="section-heading">
@@ -125,16 +233,9 @@
 			>
 		</div>
 		<div class="totals">
-			<span
-				><strong>{library.planned.toLocaleString()}</strong> added</span
-			><span
-				><strong>{library.watched.toLocaleString()}</strong> watched</span
-			>
+			<span><strong>{library.planned.toLocaleString()}</strong> added</span
+			><span><strong>{library.watched.toLocaleString()}</strong> watched</span>
 		</div>
-		<p class="note">
-			First watches can come from earlier watchlist additions. Rewatches and
-			replanning are excluded.
-		</p>
 		<div class="legend">
 			<span><i class="planned"></i>First added</span><span
 				><i class="watched"></i>First watched</span
@@ -153,61 +254,58 @@
 							{#each ["planned", "watched"] as kind (kind)}
 								{@const items =
 									kind === "planned" ? point.planned : point.watched}
-								{@const label = `${kind === "planned" ? "First planned" : "First watched from watchlist"} · ${point.period}`}
+								{@const detail =
+									kind === "planned"
+										? ""
+										: ""}
+								{@const label = `${kind === "planned" ? "First planned" : "First watched"} · ${point.period}`}
 								<button
 									class="plain momentum-bar"
 									class:planned={kind === "planned"}
 									class:watched={kind === "watched"}
 									style:height={`${items.length ? Math.max(8, (items.length / momentumMaximum) * 110) : 0}px`}
 									disabled={!items.length}
-									title={`${label}: ${items.length}`}
+									onpointerenter={(event) =>
+										showTooltip(label, items, detail, event)}
+									onpointermove={(event) =>
+										showTooltip(label, items, detail, event)}
+									onpointerleave={hideTooltip}
+									onfocus={(event) => showTooltip(label, items, detail, event)}
+									onblur={hideTooltip}
+									onkeydown={(event) => event.key === "Escape" && hideTooltip()}
+									aria-describedby={hoveredTooltip?.label === label
+										? "stats-library-tooltip"
+										: undefined}
 									aria-label={`Browse ${items.length} titles: ${label}`}
-									onclick={() =>
+									onclick={() => {
+										hideTooltip();
 										onSelect({
 											label,
 											items,
-											description:
-												kind === "planned"
-													? "first planned"
-													: "first watched from watchlist",
+											description: detail,
 											period: point.period,
-										})}><span>{items.length || ""}</span></button
+										});
+									}}
 								>
+									<span>{items.length || ""}</span>
+								</button>
 							{/each}
 						</div>
 						<span class="period-label">{periodLabel(point.period)}</span>
 					</div>
 				{/each}
 			</div>
-			<details>
-				<summary
-					>Browse watchlist titles by {lifetime ? "year" : "month"}</summary
-				>
-				<div class="browse-list">
-					{#each library.momentum as point (point.period)}{#each ["planned", "watched"] as kind (kind)}
-							{@const items =
-								kind === "planned" ? point.planned : point.watched}
-							{#if items.length}<button
-									class="plain browse-row"
-									onclick={() =>
-										onSelect({
-											label: `${kind === "planned" ? "First planned" : "First watched from watchlist"} · ${point.period}`,
-											items,
-											description:
-												kind === "planned"
-													? "first planned"
-													: "first watched from watchlist",
-											period: point.period,
-										})}
-									><span
-										>{point.period} · {kind === "planned"
-											? "First planned"
-											: "First watched"}</span
-									><strong>{items.length}</strong></button
-								>{/if}
-						{/each}{/each}
-				</div>
-			</details>
+			<StatsBrowseList
+				points={momentumBrowsePoints}
+				{settings}
+				onSelect={(point) =>
+					onSelect({
+						label: point.label,
+						items: point.items ?? [],
+						description: point.detail,
+						period: point.label.slice(point.label.lastIndexOf(" · ") + 3),
+					})}
+			/>
 		{:else}<p class="note">
 				No qualifying watchlist additions or first watches in this period.
 			</p>{/if}
@@ -215,7 +313,7 @@
 	<section class="library-section">
 		<div class="section-heading">
 			<h2 class="norm">Time on your watchlist</h2>
-			<span>Before the first recorded watch</span>
+			<span>Time before the first recorded watch</span>
 		</div>
 		<div class="totals">
 			<span
@@ -225,13 +323,11 @@
 						: library.waiting.medianDays.toLocaleString()}</strong
 				> median days waiting</span
 			><span
-				><strong>{library.watched.toLocaleString()}</strong> titles with planning
-				history</span
+				><strong>{library.watched.toLocaleString()}</strong> titles previously planned</span
 			>
 		</div>
 		{#if library.waiting.excluded}<p class="note">
-				{library.waiting.excluded.toLocaleString()} first-watched titles excluded:
-				planning history is missing or follows their first watch.
+				{library.waiting.excluded.toLocaleString()} first-watched titles excluded.
 			</p>{/if}
 		<StatsChart
 			title="Watchlist waiting time"
@@ -270,6 +366,16 @@
 		{/if}
 	</section>
 {/if}
+{#if hoveredTooltip}
+	<StatsTooltip
+		label={hoveredTooltip.label}
+		titleCount={hoveredTooltip.titleCount}
+		averageRating={hoveredTooltip.averageRating}
+		detail={hoveredTooltip.detail}
+		id="stats-library-tooltip"
+		position={{ left: tooltipLeft, top: tooltipTop }}
+	/>
+{/if}
 
 <style>
 	.library-section {
@@ -293,8 +399,7 @@
 		margin: 22px 0 14px;
 	}
 	.section-heading > span,
-	.note,
-	summary {
+	.note {
 		color: var(--stats-muted);
 		font-size: 13px;
 	}
@@ -409,33 +514,13 @@
 		margin-top: 7px;
 		color: var(--stats-muted);
 	}
-	summary {
-		margin-top: 18px;
-		cursor: pointer;
-	}
-	.browse-list {
-		max-height: 240px;
-		overflow: auto;
-		margin-top: 10px;
-	}
-	.browse-row {
-		display: flex;
-		justify-content: space-between;
-		gap: 10px;
-		width: 100%;
-		padding: 8px 0;
-		color: inherit;
-		text-align: left;
-		font-size: 13px;
-	}
 	button:not(:disabled) {
 		cursor: pointer;
 	}
 	button:not(:disabled):hover {
 		filter: brightness(1.15);
 	}
-	button:focus-visible,
-	summary:focus-visible {
+	button:focus-visible {
 		outline: 2px solid var(--stats-accent);
 		outline-offset: 3px;
 	}

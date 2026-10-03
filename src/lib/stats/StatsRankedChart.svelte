@@ -7,6 +7,7 @@
 	import type { RatingSettings } from "@/lib/rating/helpers";
 	import { RatingSystem } from "@/types";
 	import type { StatsBar } from "./types";
+	import { statsTooltipPosition } from "./tooltipPosition";
 	let {
 		title,
 		items,
@@ -27,29 +28,17 @@
 		count?: number;
 	} = $props();
 	let hovered = $state<StatsBar>();
-	let tooltipAnchor: HTMLElement | undefined;
 	let tooltipLeft = $state(0);
 	let tooltipTop = $state(0);
-	function showTooltip(item: StatsBar, element: EventTarget | null) {
+	function showTooltip(item: StatsBar, event: PointerEvent | FocusEvent) {
+		const element = event.currentTarget;
 		if (!(element instanceof HTMLElement)) return;
-		tooltipAnchor = element;
-		const rect = element.getBoundingClientRect();
-		tooltipLeft = Math.max(16, Math.min(rect.left, window.innerWidth - 296));
-		tooltipTop =
-			rect.bottom + 8 + 116 < window.innerHeight
-				? rect.bottom + 8
-				: Math.max(16, rect.top - 116);
+		const position = statsTooltipPosition(event, element);
+		tooltipLeft = position.left;
+		tooltipTop = position.top;
 		hovered = item;
 	}
-	function repositionTooltip() {
-		if (hovered && tooltipAnchor) {
-			const rect = tooltipAnchor.getBoundingClientRect();
-			if (rect.bottom < 0 || rect.top > window.innerHeight) hideTooltip();
-			else showTooltip(hovered, tooltipAnchor);
-		}
-	}
 	function hideTooltip() {
-		tooltipAnchor = undefined;
 		hovered = undefined;
 	}
 
@@ -89,8 +78,6 @@
 	}
 </script>
 
-<svelte:window onscroll={repositionTooltip} onresize={repositionTooltip} />
-
 <div
 	class="ranking"
 	role="group"
@@ -108,10 +95,10 @@
 					hideTooltip();
 					onSelect(item);
 				}}
-				onpointerenter={(event) => showTooltip(item, event.currentTarget)}
-				onpointermove={(event) => showTooltip(item, event.currentTarget)}
+				onpointerenter={(event) => showTooltip(item, event)}
+				onpointermove={(event) => showTooltip(item, event)}
 				onpointerleave={hideTooltip}
-				onfocus={(event) => showTooltip(item, event.currentTarget)}
+				onfocus={(event) => showTooltip(item, event)}
 				onblur={hideTooltip}
 				onkeydown={(event) => {
 					if (event.key === "Escape") hideTooltip();

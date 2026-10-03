@@ -211,7 +211,6 @@
 					titleUnit="games"
 					title={`${activityKind === "progress" ? "Recorded progress" : "Completions"} by ${interval}`}
 					points={activityPoints}
-					dataLabel={`Browse ${interval === "week" ? "weekly" : "monthly"} games`}
 					valueUnit={activityUnit}
 					{settings}
 					{onSelect}

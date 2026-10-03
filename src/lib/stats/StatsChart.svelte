@@ -1,8 +1,9 @@
 <script lang="ts">
 	import StatsTooltip from "./StatsTooltip.svelte";
+	import StatsBrowseList from "./StatsBrowseList.svelte";
 	import { Bar, BarChart, LineChart, PieChart } from "layerchart/svg";
 	import { Tooltip } from "layerchart/svg";
-	import { averageRating, decimal } from "./format";
+	import { averageRating } from "./format";
 	import { type ComponentProps } from "svelte";
 	import type { RatingSettings } from "@/lib/rating/helpers";
 	import type { ChartPoint } from "./types";
@@ -13,7 +14,6 @@
 		color = "#29acf4",
 		height = 180,
 		showData,
-		dataLabel = "Browse chart titles",
 		valueUnit = "titles",
 		titleUnit = "titles",
 		settings,
@@ -25,7 +25,6 @@
 		color?: string;
 		height?: number;
 		showData?: boolean;
-		dataLabel?: string;
 		titleUnit?: "titles" | "games";
 		valueUnit?:
 			| "titles"
@@ -58,26 +57,6 @@
 		showData ?? (kind === "bar" || kind === "horizontal"),
 	);
 	const browsePoints = $derived(points.filter((p) => (p.value ?? 0) > 0));
-	function countLabel(p: ChartPoint) {
-		if (kind === "line") {
-			return `${averageRating(p.value ?? 0, settings)} average rating`;
-		}
-		return `${valueLabel(p)} ${p.value === 1 ? valueUnit.slice(0, -1) : valueUnit}`;
-	}
-	function preview(p: ChartPoint) {
-		const items = p.items ?? [];
-		return [
-			...items.slice(0, 3).map((item) => item.title),
-			...(items.length > 3 ? [`+${items.length - 3} more`] : []),
-		].join(" · ");
-	}
-	function valueLabel(p: ChartPoint) {
-		return p.value === null
-			? "Unrated"
-			: kind === "line"
-				? decimal(p.value)
-				: p.value.toLocaleString(undefined, { maximumFractionDigits: 0 });
-	}
 	const series = $derived([
 		{ key: "value", label: title, value: "value", color },
 	]);
@@ -226,35 +205,9 @@
 			/>
 		{/if}
 	{:else}<p class="empty">No recorded data for this chart.</p>{/if}
-	{#if browseData}<details>
-			<summary>{dataLabel} <span>({browsePoints.length})</span></summary>
-			<div class="data-list">
-				{#each browsePoints as p (p.label)}
-					<button
-						type="button"
-						class="plain data-row"
-						disabled={!onSelect}
-						aria-haspopup="dialog"
-						onclick={() => onSelect?.(p)}
-					>
-						<span class="data-label">
-							<span class="row-heading">{p.tooltipLabel ?? p.label}</span>
-							<small
-								>{p.averageRating
-									? `${averageRating(p.averageRating, settings)} average rating`
-									: "Unrated"}</small
-							>
-							{#if preview(p)}<small class="title-preview">{preview(p)}</small
-								>{/if}
-						</span>
-						<span class="row-action"
-							><strong>{countLabel(p)}</strong><span aria-hidden="true">→</span
-							></span
-						>
-					</button>
-				{:else}<p class="empty">No recorded data to browse.</p>{/each}
-			</div>
-		</details>{/if}
+	{#if browseData}
+		<StatsBrowseList points={browsePoints} {settings} {valueUnit} {onSelect} />
+	{/if}
 </div>
 
 <style>
@@ -273,80 +226,6 @@
 		fill: var(--stats-muted);
 		font-size: 12px;
 	}
-	summary {
-		cursor: pointer;
-		font-size: 13px;
-		color: var(--stats-accent);
-		margin-top: 12px;
-		padding: 10px 0;
-		min-height: 44px;
-	}
-	summary span {
-		color: var(--stats-muted);
-	}
-	.data-list {
-		max-height: 320px;
-		overflow: auto;
-		overscroll-behavior: contain;
-		border: 1px solid var(--stats-border);
-		border-radius: 8px;
-	}
-	.data-row {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 12px;
-		width: 100%;
-		min-height: 60px;
-		padding: 12px;
-		text-align: left;
-		font-size: 14px;
-		color: inherit;
-	}
-	.data-row + .data-row {
-		border-top: 1px solid var(--stats-border);
-	}
-	.row-heading {
-		font-weight: 600;
-	}
-	.row-action {
-		display: flex;
-		align-items: center;
-		gap: 8px;
-		flex: none;
-		color: var(--stats-accent);
-		font-size: 13px;
-		white-space: nowrap;
-	}
-	.data-row:not(:disabled) {
-		cursor: pointer;
-	}
-	.data-row:not(:disabled):hover {
-		color: var(--stats-accent);
-		background: var(--stats-surface);
-	}
-	.data-row:focus-visible {
-		outline: 2px solid var(--stats-accent);
-		outline-offset: -2px;
-	}
-	.data-label {
-		display: grid;
-		min-width: 0;
-		overflow-wrap: anywhere;
-	}
-	.data-label small {
-		margin-top: 2px;
-		color: var(--stats-muted);
-		font-size: 12px;
-		line-height: 1.4;
-	}
-	.title-preview {
-		display: -webkit-box;
-		-webkit-box-orient: vertical;
-		-webkit-line-clamp: 2;
-		line-clamp: 2;
-		overflow: hidden;
-	}
 	.chart :global(.lc-arc-line:focus) {
 		outline: none;
 	}
@@ -359,13 +238,6 @@
 	}
 	.chart :global(svg circle:hover) {
 		filter: brightness(1.15);
-	}
-	summary:hover {
-		color: var(--stats-accent);
-	}
-	summary:focus-visible {
-		outline: 2px solid var(--stats-accent);
-		outline-offset: 3px;
 	}
 	.empty {
 		color: var(--stats-muted);

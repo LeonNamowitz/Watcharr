@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { tick } from "svelte";
+	import { getContext, tick } from "svelte";
 	import Error from "@/lib/Error.svelte";
 	import StatsExpansion from "./StatsExpansion.svelte";
 	import { resolve } from "$app/paths";
@@ -13,6 +13,10 @@
 	import StatsLibrarySections from "./StatsLibrarySections.svelte";
 	import StatsCalendar from "./StatsCalendar.svelte";
 	import { type RatingSettings } from "@/lib/rating/helpers";
+	import {
+		STATS_BACKGROUND_CONTEXT,
+		type StatsBackgroundState,
+	} from "./backgroundContext";
 	import type {
 		StatsResponse,
 		StatsMedia,
@@ -38,6 +42,9 @@
 		publicOwner?: { id: string; username: string };
 		onSelectionChange: (year: string, media: StatsMedia) => void;
 	} = $props();
+	const statsBackground = getContext<StatsBackgroundState>(
+		STATS_BACKGROUND_CONTEXT,
+	);
 	let episodeCount = $state(5);
 	let episodeTab = $state<"current" | "older">("current");
 	let highestTab = $state<"current" | "older">("current");
@@ -66,9 +73,6 @@
 	let gameActivityKind = $state<"progress" | "completions">("progress");
 	let activityMode = $state<"week" | "month">("week");
 	let activityMetric = $state<"count" | "rating">("count");
-	let backgroundPreview = $state<
-		"panels" | "panels-edge-grid" | "tonal-wash" | "edge-grid"
-	>("panels");
 	let calendarYear = $state<number>();
 	let waitingCount = $state(5);
 	let selection = $state<{
@@ -104,7 +108,6 @@
 			waitingCount,
 			gameCounts,
 			gameActivityKind,
-			backgroundPreview,
 			peopleCounts,
 			categoryCounts,
 			selection,
@@ -137,7 +140,6 @@
 		activityMode = saved.activityMode;
 		activityMetric = saved.activityMetric ?? "count";
 		gameActivityKind = saved.gameActivityKind;
-		backgroundPreview = saved.backgroundPreview;
 		peopleCounts = saved.peopleCounts;
 		await tick();
 		// Ranked charts reset their expansion when sorting changes.
@@ -515,7 +517,7 @@
 <div
 	bind:this={root}
 	class="stats-page"
-	data-background-style={backgroundPreview}
+	class:background-off={!statsBackground.enabled}
 >
 	<header>
 		<div class="heading">
@@ -639,15 +641,6 @@
 					onclick={() => onSelectionChange(selectedYear, "game")}>Games</button
 				>
 			</div>
-			<label class="preview-control">
-				Background preview
-				<select bind:value={backgroundPreview}>
-					<option value="panels">Section panels</option>
-					<option value="panels-edge-grid">Panels + edge grid</option>
-					<option value="tonal-wash">Soft full-page wash</option>
-					<option value="edge-grid">Edge vignette + grid dots</option>
-				</select>
-			</label>
 		</div>
 	</header>
 	{#if loading}<div class="load-status" role="status">
@@ -713,7 +706,6 @@
 								<StatsChart
 									titleUnit={isGame ? "games" : "titles"}
 									title={metric.label}
-									dataLabel={`Browse ${metric.label.toLowerCase()} by year`}
 									kind={metric.key === "averageRating" ? "line" : "bar"}
 									color={metric.color}
 									points={data.history.map((p) => ({
@@ -921,7 +913,6 @@
 							{settings}
 							valueUnit={data.media === "tv" ? "episodes" : "watches"}
 							showData
-							dataLabel={`Browse ${activityMode === "week" ? "weekly" : "monthly"} ${data.media === "tv" ? "episodes" : "films"}`}
 							onSelect={explorePoint}
 						/>{/key}
 				</section>{/if}
@@ -1060,7 +1051,6 @@
 				<StatsChart
 					titleUnit={isGame ? "games" : "titles"}
 					title="Rating distribution"
-					dataLabel="Browse titles by rating"
 					points={ratingPoints.map((p) => ({
 						...p,
 						tooltipLabel:
@@ -1332,23 +1322,6 @@
 		--stats-muted: color-mix(in srgb, var(--text-color) 67%, var(--bg-color));
 		--stats-border: color-mix(in srgb, var(--text-color) 14%, var(--bg-color));
 		--stats-surface: color-mix(in srgb, var(--bg-color) 96%, var(--text-color));
-	}
-	.stats-page > :is(header, .stats-content, .load-status) {
-		max-width: 1050px;
-		width: 100%;
-		margin-right: auto;
-		margin-left: auto;
-	}
-	.stats-page[data-background-style="tonal-wash"] {
-		background-image: linear-gradient(
-			175deg,
-			color-mix(in srgb, var(--stats-accent) 5%, var(--bg-color)) 0%,
-			var(--bg-color) 48%,
-			color-mix(in srgb, #51ad79 2.5%, var(--bg-color)) 100%
-		);
-	}
-	.stats-page[data-background-style="edge-grid"],
-	.stats-page[data-background-style="panels-edge-grid"] {
 		background-image:
 			radial-gradient(
 				circle,
@@ -1369,10 +1342,16 @@
 			100% 100%;
 		background-repeat: repeat, no-repeat;
 	}
-	.stats-page[data-background-style="panels"] .stats-content > :global(section),
-	.stats-page[data-background-style="panels-edge-grid"]
-		.stats-content
-		> :global(section) {
+	.stats-page.background-off {
+		background-image: none;
+	}
+	.stats-page > :is(header, .stats-content, .load-status) {
+		max-width: 1050px;
+		width: 100%;
+		margin-right: auto;
+		margin-left: auto;
+	}
+	.stats-page .stats-content > :global(section) {
 		padding: 22px 32px 30px;
 		margin-inline: -32px;
 		margin-top: 14px;
@@ -1473,9 +1452,6 @@
 		letter-spacing: 0.08em;
 		display: grid;
 		gap: 6px;
-	}
-	.preview-control {
-		min-width: 200px;
 	}
 	select {
 		min-width: 160px;
@@ -1853,12 +1829,7 @@
 		}
 	}
 	@media (max-width: 700px) {
-		.stats-page[data-background-style="panels"]
-			.stats-content
-			> :global(section),
-		.stats-page[data-background-style="panels-edge-grid"]
-			.stats-content
-			> :global(section) {
+		.stats-page .stats-content > :global(section) {
 			margin-inline: -24px;
 			padding-inline: 24px;
 		}
@@ -1875,9 +1846,6 @@
 		.controls label {
 			flex: 1;
 			min-width: 0;
-		}
-		.controls .preview-control {
-			flex: 0 0 100%;
 		}
 		.header-summary {
 			max-width: none;
@@ -1918,18 +1886,10 @@
 			flex: 1;
 			min-width: 0;
 		}
-		.controls .preview-control {
-			flex: 0 0 100%;
-		}
 		select {
 			min-width: 0;
 		}
-		.stats-page[data-background-style="panels"]
-			.stats-content
-			> :global(section),
-		.stats-page[data-background-style="panels-edge-grid"]
-			.stats-content
-			> :global(section) {
+		.stats-page .stats-content > :global(section) {
 			margin-inline: -12px;
 			padding-inline: 12px;
 		}

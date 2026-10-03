@@ -1,5 +1,8 @@
 <script lang="ts">
-	import type { StatsResponse, StatsSelection } from "./types";
+	import type { StatsDay, StatsResponse, StatsSelection } from "./types";
+	import StatsTooltip from "./StatsTooltip.svelte";
+	import { averageRating } from "./format";
+	import { statsTooltipPosition } from "./tooltipPosition";
 	let {
 		data,
 		onSelect,
@@ -26,8 +29,16 @@
 		(data.calendar ?? []).filter((d) => Number(d.date.slice(0, 4)) === year),
 	);
 	const byDate = $derived(new Map(days.map((d) => [d.date, d])));
-	const maximum = $derived(Math.max(1, ...days.map((d) => d.plays)));
 	const unit = $derived(data.media === "tv" ? "episodes" : "watches");
+	type CalendarTooltip = {
+		label: string;
+		plays: number;
+		averageRating: string;
+		detail: string;
+	};
+	let hoveredDay = $state<CalendarTooltip>();
+	let tooltipLeft = $state(0);
+	let tooltipTop = $state(0);
 	const summary = $derived.by(() => {
 		let streak = 0,
 			longest = 0,
@@ -99,6 +110,29 @@
 				period: `${day.plays} ${unit}`,
 			});
 	}
+	function showTooltip(day: StatsDay, event: PointerEvent | FocusEvent) {
+		const element = event.currentTarget;
+		if (!(element instanceof HTMLElement)) return;
+		const position = statsTooltipPosition(event, element);
+		tooltipLeft = position.left;
+		tooltipTop = position.top;
+		const ratings = day.items
+			.map((item) => item.rating ?? 0)
+			.filter((rating) => rating > 0);
+		hoveredDay = {
+			label: prettyDate(day.date),
+			plays: day.plays,
+			averageRating: averageRating(
+				ratings.length
+					? ratings.reduce((sum, rating) => sum + rating, 0) / ratings.length
+					: 0,
+			),
+			detail: `${day.items.length} unique ${day.items.length === 1 ? "title" : "titles"}`,
+		};
+	}
+	function hideTooltip() {
+		hoveredDay = undefined;
+	}
 </script>
 
 <section class="calendar-section">
@@ -129,12 +163,9 @@
 				)}</button
 			>{/if}
 	</div>
-	<div class="legend">
-		<span>Fewer</span>{#each [0, 1, 2, 3, 4] as level (level)}<i
-				style:background={level
-					? `color-mix(in srgb, var(--stats-accent) ${20 + level * 20}%, var(--stats-surface))`
-					: "var(--stats-border)"}
-			></i>{/each}<span>More {unit}</span>
+	<div class="legend" role="img" aria-label={`Daily ${unit}: 0, 1, 2 or 3+`}>
+		<span>0</span><i class="level-one"></i><span>1</span><i class="level-two"
+		></i><span>2</span><i class="level-three"></i><span>3+</span>
 	</div>
 	{#if !days.length}<p class="note">
 			No recorded {unit} for this calendar year.
@@ -157,13 +188,33 @@
 						<button
 							class="plain day"
 							class:active={count > 0}
+							class:level-one={count === 1}
+							class:level-two={count === 2}
+							class:level-three={count >= 3}
 							disabled={!count}
-							style:background={count
-								? `color-mix(in srgb, var(--stats-accent) ${20 + Math.ceil((count / maximum) * 4) * 20}%, var(--stats-surface))`
-								: "var(--stats-border)"}
-							title={`${prettyDate(date)}: ${countLabel(count)}`}
 							aria-label={`${prettyDate(date)}: ${countLabel(count)}${count ? ". Browse recorded titles" : ""}`}
-							onclick={() => explore(date)}>{day}</button
+							aria-describedby={hoveredDay?.label === prettyDate(date)
+								? "stats-calendar-tooltip"
+								: undefined}
+							onpointerenter={(event) => {
+								const dayData = byDate.get(date);
+								if (dayData) showTooltip(dayData, event);
+							}}
+							onpointermove={(event) => {
+								const dayData = byDate.get(date);
+								if (dayData) showTooltip(dayData, event);
+							}}
+							onpointerleave={hideTooltip}
+							onfocus={(event) => {
+								const dayData = byDate.get(date);
+								if (dayData) showTooltip(dayData, event);
+							}}
+							onblur={hideTooltip}
+							onkeydown={(event) => event.key === "Escape" && hideTooltip()}
+							onclick={() => {
+								hideTooltip();
+								explore(date);
+							}}>{day}</button
 						>
 					{/each}
 				</div>
@@ -177,6 +228,17 @@
 		to browse. Streaks are measured within the displayed year.
 	</p>
 </section>
+{#if hoveredDay}
+	<StatsTooltip
+		label={hoveredDay.label}
+		titleCount={hoveredDay.plays}
+		titleUnit={unit}
+		averageRating={hoveredDay.averageRating}
+		detail={hoveredDay.detail}
+		id="stats-calendar-tooltip"
+		position={{ left: tooltipLeft, top: tooltipTop }}
+	/>
+{/if}
 
 <style>
 	.calendar-section {
@@ -244,6 +306,23 @@
 		height: 12px;
 		border-radius: 2px;
 	}
+	.legend .level-one {
+		background: color-mix(
+			in srgb,
+			var(--stats-accent) 32%,
+			var(--stats-surface)
+		);
+	}
+	.legend .level-two {
+		background: color-mix(
+			in srgb,
+			var(--stats-accent) 66%,
+			var(--stats-surface)
+		);
+	}
+	.legend .level-three {
+		background: var(--stats-accent);
+	}
 	.months {
 		display: grid;
 		grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -267,6 +346,24 @@
 		color: var(--stats-muted);
 		font-size: 12px;
 		padding: 0;
+		background: var(--stats-border);
+	}
+	.day.level-one {
+		background: color-mix(
+			in srgb,
+			var(--stats-accent) 32%,
+			var(--stats-surface)
+		);
+	}
+	.day.level-two {
+		background: color-mix(
+			in srgb,
+			var(--stats-accent) 66%,
+			var(--stats-surface)
+		);
+	}
+	.day.level-three {
+		background: var(--stats-accent);
 	}
 	.day.active {
 		color: var(--stats-text);
