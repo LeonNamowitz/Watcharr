@@ -11,8 +11,8 @@
 	import { page } from "$app/state";
 	import { tick } from "svelte";
 	import { req, noAuthReq } from "@/lib/util/api";
-	import Spinner from "@/lib/Spinner.svelte";
-	import Error from "@/lib/Error.svelte";
+	import { store } from "@/store.svelte";
+	import { loadingStats } from "./loadingData";
 	import StatsPage from "./StatsPage.svelte";
 	import type { StatsResponse, StatsMedia } from "./types";
 	import type { StatsSectionId } from "./sectionOrder";
@@ -42,6 +42,19 @@
 	);
 	const requestKey = $derived(
 		`${publicOwner?.id ?? "private"}:${publicOwner?.username ?? ""}:${year}:${media}`,
+	);
+	const initialLoading = $derived(!data || loadedOwnerKey !== ownerKey);
+	const displayedData = $derived(
+		!initialLoading && data
+			? data
+			: loadingStats(
+					{
+						id: publicOwner ? Number(publicOwner.id) : 0,
+						username: publicOwner?.username ?? store.userInfo?.username ?? "",
+					},
+					year,
+					media,
+				),
 	);
 
 	export function capture() {
@@ -168,10 +181,10 @@
 	}
 </script>
 
-{#if data && loadedOwnerKey === ownerKey}
-	<StatsPage
+{#key ownerKey}<StatsPage
 		bind:this={statsPage}
-		{data}
+		data={displayedData}
+		{initialLoading}
 		{publicOwner}
 		{loading}
 		{error}
@@ -179,25 +192,4 @@
 		requestedMedia={media}
 		onSelectionChange={changeSelection}
 		onSaveLayout={saveLayout}
-	/>
-{:else if loading}<div class="loading" role="status">
-		<Spinner />
-		<p>Gathering your stats…</p>
-	</div>{:else if error}<div class="error">
-		<Error {error} pretty="Unable to load these stats." />
-	</div>{/if}
-
-<style>
-	.loading,
-	.error {
-		max-width: 1000px;
-		margin: 40px auto;
-		padding: 24px;
-		text-align: center;
-	}
-	.loading p {
-		font-size: 13px;
-		opacity: 0.6;
-		margin-top: 15px;
-	}
-</style>
+	/>{/key}

@@ -36,11 +36,13 @@
 		onSelectionChange,
 		onSaveLayout,
 		loading = false,
+		initialLoading = false,
 		error,
 		requestedYear,
 		requestedMedia,
 	}: {
 		loading?: boolean;
+		initialLoading?: boolean;
 		error?: unknown;
 		requestedYear?: string;
 		requestedMedia?: StatsMedia;
@@ -1298,7 +1300,9 @@
 {/snippet}
 
 <svelte:head
-	><title>{data.owner.username} · {period} stats · Watcharr</title></svelte:head
+	><title
+		>{data.owner.username ? `${data.owner.username} · ` : ""}{period} stats · Watcharr</title
+	></svelte:head
 >
 
 <svelte:window bind:scrollY bind:innerHeight={viewportHeight} />
@@ -1325,13 +1329,19 @@
 				<div class="heading-copy">
 					<a
 						class="back"
-						aria-label={`Back to ${data.owner.username}'s library`}
+						aria-label={data.owner.username
+							? `Back to ${data.owner.username}'s library`
+							: "Back to your library"}
 						href={publicOwner
 							? resolve("/(public)/lists/[id]/[username]", publicOwner)
 							: resolve("/")}
 					>
 						<span class="back-arrow" aria-hidden="true">←</span>
-						<span class="library-label">{data.owner.username}'s list</span></a
+						<span class="library-label"
+							>{data.owner.username
+								? `${data.owner.username}'s list`
+								: "Your list"}</span
+						></a
 					>
 				</div>
 				<h1 class="norm" class:lifetime-heading={selectedYear === "all"}>
@@ -1475,7 +1485,7 @@
 		</div>
 	{/if}
 	{#if loading}<div class="load-status" role="status">
-			<span>Updating stats…</span>
+			<span>{initialLoading ? "Loading stats…" : "Updating stats…"}</span>
 		</div>
 	{:else if error}<div class="load-status">
 			<Error {error} pretty="Unable to load these stats." />
@@ -1503,7 +1513,9 @@
 					</ul>
 				</details>{/if}
 
-			{#if !data.summary.titles && !data.activity.total}<div class="empty-year">
+			{#if !initialLoading && !data.summary.titles && !data.activity.total}<div
+					class="empty-year"
+				>
 					<h2 class="norm">A fresh page in your journal</h2>
 					<p>
 						No recorded {isGame
