@@ -25,3 +25,9 @@
 		align-items: flex-start;
 	}
 }
+
+.stats-page [data-stats-jump]:focus-visible {
+	outline: 2px solid var(--stats-accent);
+	outline-offset: 6px;
+	border-radius: 3px;
+}

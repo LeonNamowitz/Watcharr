@@ -173,7 +173,9 @@
 
 <section class="calendar-section">
 	<div class="section-heading">
-		<h2 class="norm">{isGame ? "Gaming" : "Viewing"} calendar</h2>
+		<h2 class="norm" data-stats-jump="calendar" tabindex="-1">
+			{isGame ? "Gaming" : "Viewing"} calendar
+		</h2>
 		{#if isGame}
 			<StatsSegmentedControl label="Gaming calendar metric">
 				<button

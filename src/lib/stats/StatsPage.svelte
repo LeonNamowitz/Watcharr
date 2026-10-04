@@ -254,6 +254,77 @@
 				: "Saved playtime for games first completed in the selected year."
 			: "Estimated from available runtimes, recorded watches, finished shows and finished episodes.",
 	);
+	// MOD: tile jumps: change target (section) and label (tooltip) below.
+	// Targets: titles = poster wall; activity = activity; calendar = calendar;
+	// ratings = rating distribution; runtimes = highs/lows; plays = rewatches/replays;
+	// history = through the years (Lifetime); playtime = game playtime (Lifetime).
+	// Search data-stats-jump in src/lib/stats to find or add section targets.
+	const summaryDestinations = $derived({
+		titles: {
+			target: "titles",
+			label: `Jump to ${mediaLabel.toLowerCase()} ${isGame ? "played" : "watched"}`,
+		},
+		plays: {
+			target: isGame
+				? data.games
+					? "activity"
+					: "plays"
+				: lifetime
+					? data.library
+						? "calendar"
+						: "history"
+					: "activity",
+			label: isGame
+				? "Jump to completion activity"
+				: lifetime
+					? data.library
+						? "Jump to viewing calendar"
+						: "Jump to watches through the years"
+					: "Jump to viewing activity",
+		},
+		hours: {
+			target: isGame
+				? lifetime
+					? data.games?.playtime
+						? "playtime"
+						: "titles"
+					: data.games
+						? "activity"
+						: "plays"
+				: "runtimes",
+			label: isGame
+				? lifetime
+					? data.games?.playtime
+						? "Jump to game playtime"
+						: "Jump to games played"
+					: "Jump to completions behind recorded hours"
+				: "Jump to longest and shortest runtimes",
+		},
+		rating: { target: "ratings", label: "Jump to rating distribution" },
+	});
+	async function jumpToSummary(metric: keyof typeof summaryDestinations) {
+		if (loading || error) return;
+		// MOD this too if redirecting plays/hours away from Activity: these select chart tabs.
+		if (isGame && (metric === "plays" || (metric === "hours" && !lifetime)))
+			gameActivityKind = "completions";
+		else if (!isGame && metric === "plays") activityMetric = "count";
+		await tick();
+		const target = root.querySelector<HTMLElement>(
+			`[data-stats-jump="${summaryDestinations[metric].target}"]`,
+		);
+		if (!target) return;
+		const navHeight =
+			document.querySelector("nav")?.getBoundingClientRect().height ?? 0;
+		target.style.scrollMarginTop = `${navHeight + 16}px`;
+		target.focus({ preventScroll: true });
+		target.scrollIntoView({
+			block: "start",
+			behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+				? "instant"
+				: "smooth",
+		});
+	}
+
 	const years = $derived(
 		[
 			...new Set([
@@ -524,57 +595,31 @@
 >
 	<header>
 		<div class="heading">
-			<a
-				class="back"
-				href={publicOwner
-					? resolve("/(public)/lists/[id]/[username]", publicOwner)
-					: resolve("/")}
-				>← {publicOwner ? "Back to library" : "Back to library"}</a
-			>
 			<div class="heading-top">
 				<div class="heading-copy">
-					<p class="eyebrow">
-						{data.owner.username +
-							"'s " +
-							(selectedYear === "all"
-								? "all-time stats"
-								: selectedMedia === "tv"
-									? "year in television"
-									: selectedMedia === "game"
-										? "year in games"
-										: "year in film")}
-					</p>
-					<h1 class="norm">
-						{selectedYear === "all"
-							? "A Life in " +
-								(selectedMedia === "game"
-									? "Games"
-									: selectedMedia === "tv"
-										? "Shows"
-										: "Film")
-							: selectedYear}
-					</h1>
-					<p class="intro">
-						{selectedYear === "all"
-							? "Across your recorded history"
-							: selectedMedia === "game"
-								? "Your gaming journal"
-								: `Your ${selectedMedia === "tv" ? "television" : "film"} viewing journal`}
-					</p>
-				</div>
-				<div class="controls">
-					<label
-						>Period<select
-							data-stats-control="period"
-							value={selectedYear}
-							onchange={(e) =>
-								onSelectionChange(e.currentTarget.value, selectedMedia)}
-							><option value="all">Lifetime</option
-							>{#each years as y (y)}<option value={String(y)}>{y}</option
-								>{/each}</select
-						></label
+					<a
+						class="back"
+						aria-label={`Back to ${data.owner.username}'s library`}
+						href={publicOwner
+							? resolve("/(public)/lists/[id]/[username]", publicOwner)
+							: resolve("/")}
 					>
-					<StatsSegmentedControl label="Media">
+						<span class="back-arrow" aria-hidden="true">←</span>
+						<span class="library-label">{data.owner.username}'s list</span></a
+					>
+				</div>
+				<h1 class="norm" class:lifetime-heading={selectedYear === "all"}>
+					{selectedYear === "all" ? "Lifetime" : selectedYear}
+					<span
+						>{selectedMedia === "game"
+							? "Games"
+							: selectedMedia === "tv"
+								? "Television"
+								: "Film"}</span
+					>
+				</h1>
+				<div class="controls">
+					<StatsSegmentedControl label="Media" role="group">
 						<button
 							data-stats-control="movie"
 							class:active={selectedMedia === "movie"}
@@ -594,28 +639,58 @@
 							>Games</button
 						>
 					</StatsSegmentedControl>
+					<label
+						><span class="control-label">Period</span><select
+							data-stats-control="period"
+							value={selectedYear}
+							onchange={(e) =>
+								onSelectionChange(e.currentTarget.value, selectedMedia)}
+							><option value="all">Lifetime</option
+							>{#each years as y (y)}<option value={String(y)}>{y}</option
+								>{/each}</select
+						></label
+					>
 				</div>
 			</div>
-			<dl class="header-summary" aria-label="Media summary" aria-busy={loading}>
-				<div>
-					<dt>
+			<div
+				class="header-summary"
+				role="group"
+				aria-label="Media summary"
+				aria-busy={loading}
+			>
+				<button
+					type="button"
+					class="plain summary-tile"
+					title={summaryDestinations.titles.label}
+					disabled={loading || !!error}
+					onclick={() => jumpToSummary("titles")}
+				>
+					<span class="summary-label">
 						Distinct {selectedMedia === "game"
 							? "games"
 							: selectedMedia === "tv"
 								? "shows"
 								: "films"}
-					</dt>
-					<dd>{loading || error ? "—" : distinctTitles.toLocaleString()}</dd>
-				</div>
-				<div>
-					<dt class="single-line-label">
+					</span>
+					<span class="summary-value"
+						>{loading || error ? "—" : distinctTitles.toLocaleString()}</span
+					>
+				</button>
+				<button
+					type="button"
+					class="plain summary-tile"
+					title={summaryDestinations.plays.label}
+					disabled={loading || !!error}
+					onclick={() => jumpToSummary("plays")}
+				>
+					<span class="summary-label">
 						{selectedMedia === "game"
 							? "Games completed"
 							: selectedMedia === "tv"
 								? "Episodes watched"
 								: "Movies watched"}
-					</dt>
-					<dd>
+					</span>
+					<span class="summary-value">
 						{loading || error
 							? "—"
 							: (isGame
@@ -624,29 +699,39 @@
 										? data.activity.total
 										: data.summary.plays
 								).toLocaleString()}
-					</dd>
-				</div>
-				<div title={hoursDescription}>
-					<dt>{isGame ? "Recorded hours" : "Estimated hours"}</dt>
-					<dd>
+					</span>
+				</button>
+				<button
+					type="button"
+					class="plain summary-tile"
+					title={`${hoursDescription} ${summaryDestinations.hours.label}`}
+					disabled={loading || !!error}
+					onclick={() => jumpToSummary("hours")}
+				>
+					<span class="summary-label"
+						>{isGame ? "Recorded hours" : "Estimated hours"}</span
+					>
+					<span class="summary-value">
 						{loading || error || hoursPlayed === undefined
 							? "—"
 							: decimal(hoursPlayed)}
-					</dd>
-				</div>
-				<div>
-					<dt class="single-line-label">Average rating</dt>
-					<dd>
+					</span>
+				</button>
+				<button
+					type="button"
+					class="plain summary-tile"
+					title={summaryDestinations.rating.label}
+					disabled={loading || !!error}
+					onclick={() => jumpToSummary("rating")}
+				>
+					<span class="summary-label">Average rating</span>
+					<span class="summary-value">
 						{loading || error
 							? "—"
 							: averageRating(data.summary.averageRating, settings)}
-					</dd>
-				</div>
-				<div class="placeholder-card">
-					<dt>More insights</dt>
-					<dd>Coming soon</dd>
-				</div>
-			</dl>
+					</span>
+				</button>
+			</div>
 		</div>
 	</header>
 	{#if loading}<div class="load-status" role="status">
@@ -700,7 +785,9 @@
 			{#if lifetime}
 				<section>
 					<div class="section-heading">
-						<h2 class="norm">Through the years</h2>
+						<h2 class="norm" data-stats-jump="history" tabindex="-1">
+							Through the years
+						</h2>
 						<span
 							>{isGame ? "Games" : "Movies & TV"} · unique titles each year</span
 						>
@@ -829,7 +916,9 @@
 
 			{#if !lifetime && !isGame}<section>
 					<div class="section-heading activity-heading">
-						<h2 class="norm">Activity</h2>
+						<h2 class="norm" data-stats-jump="activity" tabindex="-1">
+							Activity
+						</h2>
 						<StatsSegmentedControl label="Activity metric">
 							<button
 								class:active={activityMetric === "count"}
@@ -1040,7 +1129,16 @@
 					{#each [...(!lifetime ? [{ title: "Release years", items: data.breakdown.release }] : []), { title: isGame ? "Completions & replays" : "Watches & rewatches", items: data.breakdown.plays }, ...(data.games ? [{ title: "Current statuses", items: data.games.statuses }, { title: "Completion", items: data.games.completion }] : []), ...(data.reviewsVisible ? [{ title: "Reviews", items: data.breakdown.reviews ?? [] }] : [])] as group (group.title)}<div
 							class="pie"
 						>
-							<h3 class="norm">{group.title}</h3>
+							<h3
+								class="norm"
+								data-stats-jump={group.title === "Completions & replays" ||
+								group.title === "Watches & rewatches"
+									? "plays"
+									: undefined}
+								tabindex="-1"
+							>
+								{group.title}
+							</h3>
 							<StatsChart
 								titleUnit={isGame ? "games" : "titles"}
 								title={group.title}
@@ -1062,7 +1160,9 @@
 						</div>{/each}
 				</div>
 				<div class="rating-heading">
-					<h3 class="norm">Rating distribution</h3>
+					<h3 class="norm" data-stats-jump="ratings" tabindex="-1">
+						Rating distribution
+					</h3>
 				</div>
 				<StatsChart
 					titleUnit={isGame ? "games" : "titles"}
@@ -1209,7 +1309,9 @@
 
 			<section>
 				<div class="section-heading">
-					<h2 class="norm">Highs and lows</h2>
+					<h2 class="norm" data-stats-jump="runtimes" tabindex="-1">
+						Highs and lows
+					</h2>
 					<span
 						>By {source} ratings, votes, release details{isGame
 							? ""
@@ -1262,7 +1364,7 @@
 			</section>
 			<section>
 				<div class="section-heading">
-					<h2 class="norm">
+					<h2 class="norm" data-stats-jump="titles" tabindex="-1">
 						{mediaLabel}
 						{isGame ? "played" : "watched"}
 						{lifetime ? "so far" : `in ${data.year}`}
@@ -1382,7 +1484,7 @@
 		justify-content: space-between;
 		gap: 24px;
 		align-items: center;
-		padding-bottom: 28px;
+		padding-bottom: 16px;
 	}
 	.heading {
 		min-width: 0;
@@ -1390,53 +1492,62 @@
 	}
 	.heading-top {
 		display: grid;
-		grid-template-columns: minmax(0, 1fr) auto;
+		grid-template-columns: minmax(0, 1fr) minmax(0, auto) minmax(0, 1fr);
 		align-items: center;
-		gap: 24px;
-		margin-top: 22px;
+		gap: 16px;
 	}
 	.heading-copy {
+		max-width: 180px;
 		min-width: 0;
 	}
 	.header-summary {
 		display: grid;
-		grid-template-columns: repeat(5, minmax(0, 1fr));
-		gap: 12px;
-		margin-top: 22px;
+		grid-template-columns: repeat(4, minmax(0, 1fr));
+		gap: 10px;
+		margin: 16px 0 0;
 		width: 100%;
 		max-width: none;
 	}
-	.header-summary > div {
+	.header-summary > button {
 		display: flex;
-		flex-direction: column;
-		gap: 3px;
+		flex-direction: column-reverse;
+		justify-content: end;
+		gap: 4px;
 		min-width: 0;
-		padding: 14px 16px;
+		padding: 12px 16px;
 		border: 1px solid var(--stats-border);
 		border-radius: 10px;
 		background: var(--stats-surface);
+		text-align: left;
+		font: inherit;
+		width: 100%;
+		box-shadow: none;
 	}
-	.header-summary dt {
-		color: var(--stats-text);
-		font-size: 18px;
-		font-weight: 600;
+	.header-summary > button:not(:disabled):hover {
+		border-color: var(--stats-accent);
+		background: color-mix(
+			in srgb,
+			var(--stats-accent) 6%,
+			var(--stats-surface)
+		);
 	}
-	.header-summary .single-line-label {
-		font-size: clamp(12px, 3.5vw, 16px);
-		white-space: nowrap;
+	.header-summary > button:disabled {
+		cursor: default;
 	}
-	.header-summary .placeholder-card dd {
+	.header-summary .summary-label {
 		color: var(--stats-muted);
-		font-size: clamp(13px, 1.6vw, 18px);
-		font-weight: 600;
+		font-size: 13px;
+		line-height: 1.3;
+		font-weight: 500;
 	}
-	.header-summary dd {
+	.header-summary .summary-value {
 		margin: 0;
 		color: var(--stats-accent);
-		font-size: clamp(20px, 3vw, 32px);
-		line-height: 1.2;
+		font-size: clamp(22px, 3vw, 30px);
+		line-height: 1.1;
 		font-weight: 700;
-		white-space: nowrap;
+		font-variant-numeric: tabular-nums;
+		overflow-wrap: anywhere;
 	}
 	.load-status {
 		display: flex;
@@ -1453,49 +1564,76 @@
 		display: none;
 	}
 	.back {
-		font-size: 14px;
-		opacity: 0.7;
-		color: inherit;
+		display: inline-flex;
+		align-items: start;
+		gap: 6px;
+		font-size: 16px;
+		line-height: 1.35;
+		font-weight: 600;
+		color: var(--stats-text);
 		text-decoration: none;
-	}
-	.eyebrow {
-		text-transform: uppercase;
-		letter-spacing: 0.15em;
-		font-size: 13px;
-		color: var(--stats-accent, #29acf4);
-		margin: 0 0 10px;
 		overflow-wrap: anywhere;
 	}
+	:global(:root.theme-dark) .back {
+		color: #fff;
+	}
+	.back-arrow {
+		flex-shrink: 0;
+	}
+	.library-label {
+		min-width: 0;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
 	h1 {
-		font-size: clamp(28px, 5vw, 42px);
-		line-height: 1.15;
+		font-size: clamp(32px, 4vw, 44px);
+		text-align: center;
+		line-height: 1.2;
 		margin: 0;
 		font-weight: 700;
 		letter-spacing: -0.035em;
+		overflow-wrap: anywhere;
 	}
-	.intro {
-		margin: 12px 0 0;
-		font-size: 13px;
+	h1 span {
 		color: var(--stats-muted);
+		font-weight: 500;
+		letter-spacing: -0.02em;
 	}
 	.controls {
-		display: flex;
-		flex-direction: column;
-		align-items: stretch;
-		gap: 12px;
-		flex-shrink: 0;
-		width: max-content;
-		max-width: 100%;
+		display: contents;
 	}
 	.controls label {
-		font-size: 13px;
-		text-transform: uppercase;
-		letter-spacing: 0.08em;
-		display: grid;
-		gap: 6px;
+		width: 116px;
+		grid-column: 3;
+		grid-row: 1;
+		justify-self: end;
+	}
+	.control-label {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		padding: 0;
+		margin: -1px;
+		overflow: hidden;
+		clip-path: inset(50%);
+		white-space: nowrap;
+	}
+	.controls > :global(.segmented) {
+		min-width: 0;
+		grid-column: 1 / -1;
+		grid-row: 2;
+		width: 100%;
+	}
+	.controls :global(button) {
+		flex: 1 1 auto;
+		min-width: 0;
+		min-height: 44px;
+		padding: 8px 12px;
 	}
 	select {
-		min-width: 160px;
+		min-width: 0;
+		min-height: 44px;
 		padding: 9px 36px 9px 12px;
 		font-size: 14px;
 		width: 100%;
@@ -1821,27 +1959,6 @@
 			grid-template-columns: repeat(3, minmax(0, 1fr));
 		}
 	}
-	@media (min-width: 701px) and (max-width: 900px) {
-		.header-summary {
-			grid-template-columns: repeat(4, minmax(0, 1fr));
-		}
-	}
-	@media (max-width: 900px) {
-		.header-summary > .placeholder-card {
-			grid-column: 1 / -1;
-			flex-direction: row;
-			align-items: center;
-			justify-content: space-between;
-			gap: 12px;
-			padding: 10px 16px;
-		}
-		.header-summary .placeholder-card dt {
-			font-size: 16px;
-		}
-		.header-summary .placeholder-card dd {
-			font-size: 14px;
-		}
-	}
 	@media (max-width: 700px) {
 		.stats-page .stats-content > :global(section) {
 			margin-inline: -24px;
@@ -1853,25 +1970,46 @@
 			gap: 20px;
 		}
 		.heading-top {
-			grid-template-columns: minmax(0, 1fr) 120px;
-			gap: 16px 12px;
+			grid-template-columns: 80px minmax(0, 1fr) 104px;
+			gap: 12px 6px;
 		}
-		.controls {
-			display: contents;
+		.library-label {
+			white-space: normal;
+			overflow: visible;
+		}
+		h1 {
+			font-size: clamp(32px, 8.7vw, 34px);
+			text-align: center;
+		}
+		h1.lifetime-heading {
+			font-size: clamp(20px, 6vw, 28px);
+		}
+		h1 span {
+			display: block;
+			font-size: 18px;
+			letter-spacing: 0;
 		}
 		.controls label {
-			grid-column: 2;
-			grid-row: 1;
-		}
-		.controls > :global(.segmented) {
-			grid-column: 1 / -1;
-			justify-self: end;
+			width: 104px;
 		}
 		select {
-			min-width: 0;
+			padding-inline: 10px 28px;
+			background-position: right 8px center;
+		}
+		.controls :global(button) {
+			padding-inline: 8px;
+			font-size: 13px;
 		}
 		.header-summary {
 			grid-template-columns: repeat(2, minmax(0, 1fr));
+			gap: 8px;
+			margin-top: 12px;
+		}
+		.header-summary > button {
+			padding: 10px 12px;
+		}
+		.header-summary .summary-label {
+			font-size: 12px;
 		}
 		.category-controls {
 			justify-content: start;

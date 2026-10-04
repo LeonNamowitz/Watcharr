@@ -166,7 +166,7 @@
 	{#if section === "activity" && activity}
 		<section class="stats-game-section">
 			<div class="section-heading">
-				<h2 class="norm">Activity</h2>
+				<h2 class="norm" data-stats-jump="activity" tabindex="-1">Activity</h2>
 				<StatsSegmentedControl label="Activity metric" wrap>
 					<button
 						class="plain"
@@ -260,7 +260,9 @@
 		<section class="stats-game-section">
 			<div class="section-heading playtime-heading">
 				<div class="playtime-intro">
-					<h2 class="norm">Lifetime game stats</h2>
+					<h2 class="norm" data-stats-jump="playtime" tabindex="-1">
+						Lifetime game stats
+					</h2>
 				</div>
 			</div>
 			<div class="totals" role="group" aria-label="Lifetime game playtime">
