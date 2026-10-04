@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { StatsDay, StatsResponse, StatsSelection } from "./types";
 	import StatsSegmentedControl from "./StatsSegmentedControl.svelte";
+	import StatsExpansion from "./StatsExpansion.svelte";
 	import StatsTooltip from "./StatsTooltip.svelte";
 	import { averageRating, meanRating, statsUnitLabel } from "./format";
 	import type { RatingSettings } from "@/lib/rating/helpers";
@@ -11,13 +12,17 @@
 		onSelect,
 		calendarYear = $bindable<number | undefined>(),
 		activityKind = $bindable<"progress" | "completions">("progress"),
+		monthsExpanded = $bindable(false),
 	}: {
 		data: StatsResponse;
 		settings: RatingSettings;
 		onSelect: (selection: StatsSelection) => void;
 		calendarYear?: number;
 		activityKind?: "progress" | "completions";
+		monthsExpanded?: boolean;
 	} = $props();
+	const monthsPerYear = 12;
+	const mobileMonthLimit = 3;
 	const isGame = $derived(data.media === "game");
 	const calendarDays = $derived(
 		isGame && activityKind === "completions"
@@ -181,12 +186,18 @@
 				<button
 					class:active={activityKind === "progress"}
 					aria-pressed={activityKind === "progress"}
-					onclick={() => (activityKind = "progress")}>Progress</button
+					onclick={() => {
+						activityKind = "progress";
+						monthsExpanded = false;
+					}}>Progress</button
 				>
 				<button
 					class:active={activityKind === "completions"}
 					aria-pressed={activityKind === "completions"}
-					onclick={() => (activityKind = "completions")}>Completions</button
+					onclick={() => {
+						activityKind = "completions";
+						monthsExpanded = false;
+					}}>Completions</button
 				>
 			</StatsSegmentedControl>
 		{/if}
@@ -194,8 +205,10 @@
 				>Calendar year <select
 					aria-label="Calendar year"
 					value={year}
-					onchange={(event) =>
-						(calendarYear = Number(event.currentTarget.value))}
+					onchange={(event) => {
+						calendarYear = Number(event.currentTarget.value);
+						monthsExpanded = false;
+					}}
 					>{#each years as y (y)}<option value={y}>{y}</option>{/each}</select
 				></label
 			>{:else}<span>{year} · dates in UTC</span>{/if}
@@ -223,8 +236,8 @@
 	{#if !days.length}<p class="note">
 			No recorded {unit} for this calendar year.
 		</p>{/if}
-	<div class="months">
-		{#each Array.from({ length: 12 }, (_, i) => i) as month (month)}
+	<div class="months" class:mobile-collapsed={!monthsExpanded}>
+		{#each Array.from({ length: monthsPerYear }, (_, i) => i) as month (month)}
 			{@const info = monthInfo(month)}
 			<div class="month" role="group" aria-label={`${info.label} ${year}`}>
 				<h3 class="norm">{info.label}</h3>
@@ -277,6 +290,21 @@
 				</div>
 			</div>
 		{/each}
+	</div>
+	<div class="calendar-expansion">
+		<span class="expansion-hint" aria-live="polite">
+			{monthsExpanded
+				? `Showing all ${monthsPerYear} months`
+				: `Showing ${mobileMonthLimit} of ${monthsPerYear} months`}
+		</span>
+		<StatsExpansion
+			count={monthsExpanded ? monthsPerYear : mobileMonthLimit}
+			total={monthsPerYear}
+			expandAll
+			collapseTo={mobileMonthLimit}
+			prominent
+			onChange={(count) => (monthsExpanded = count >= monthsPerYear)}
+		/>
 	</div>
 	<p class="note">
 		{isGame
@@ -377,6 +405,9 @@
 		grid-template-columns: repeat(3, minmax(0, 1fr));
 		gap: 24px;
 	}
+	.calendar-expansion {
+		display: none;
+	}
 	.month-grid {
 		display: grid;
 		grid-template-columns: repeat(7, minmax(0, 1fr));
@@ -442,9 +473,32 @@
 			gap: 20px;
 		}
 	}
-	@media (max-width: 500px) {
+	@media (max-width: 520px) {
 		.months {
 			grid-template-columns: minmax(0, 1fr);
+		}
+		.months.mobile-collapsed > .month:nth-child(n + 4) {
+			display: none;
+		}
+		.calendar-expansion {
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			flex-wrap: wrap;
+			gap: 8px 14px;
+			padding: 10px 12px;
+			margin-top: 14px;
+			border: 1px solid var(--stats-border);
+			border-radius: 8px;
+			background: color-mix(
+				in srgb,
+				var(--stats-accent) 5%,
+				var(--stats-surface)
+			);
+		}
+		.expansion-hint {
+			font-size: 13px;
+			color: var(--stats-muted);
 		}
 		.day {
 			max-height: 40px;

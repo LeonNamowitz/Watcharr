@@ -17,6 +17,8 @@
 		valueUnit = "titles",
 		titleUnit = "titles",
 		settings,
+		xAxisTicks,
+		alignFirstXAxisTick = false,
 		onSelect,
 	}: {
 		title: string;
@@ -28,6 +30,8 @@
 		titleUnit?: "titles" | "games";
 		valueUnit?: StatsUnit;
 		settings?: RatingSettings;
+		xAxisTicks?: string[];
+		alignFirstXAxisTick?: boolean;
 		onSelect?: (point: ChartPoint) => void;
 	} = $props();
 	type ChartContext = NonNullable<ComponentProps<typeof BarChart>["context"]>;
@@ -65,7 +69,12 @@
 		highlight: false,
 		padding: { left: 32, right: 10, top: 10, bottom: 26 },
 		props: {
-			xAxis: { tickSpacing: 70, tickOcclusion: true, tickMarks: false },
+			xAxis: {
+				tickSpacing: 70,
+				tickOcclusion: true,
+				tickMarks: false,
+				...(xAxisTicks ? { ticks: xAxisTicks } : {}),
+			},
 			yAxis: { ticks: 3, tickMarks: false },
 			bars: {
 				radius: 3,
@@ -119,7 +128,12 @@
 	</Tooltip.Root>
 {/snippet}
 
-<div class="chart" role="group" aria-label={title}>
+<div
+	class="chart"
+	class:align-first-x-tick={alignFirstXAxisTick || xAxisTicks?.length}
+	role="group"
+	aria-label={title}
+>
 	{#if points.length && points.some((p) => (p.value ?? 0) > 0)}
 		{#if kind === "pie"}
 			<PieChart
@@ -218,6 +232,11 @@
 	.chart :global(svg text) {
 		fill: var(--stats-muted);
 		font-size: 12px;
+	}
+	.chart.align-first-x-tick :global(
+			.lc-axis.placement-bottom .lc-axis-tick-group:first-child .lc-axis-tick-label
+		) {
+		text-anchor: start;
 	}
 	.chart :global(.lc-arc-line:focus) {
 		outline: none;

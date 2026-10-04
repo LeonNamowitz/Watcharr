@@ -213,6 +213,7 @@
 					points={activityPoints}
 					valueUnit={activityUnit}
 					{settings}
+					alignFirstXAxisTick={true}
 					{onSelect}
 				/>{/key}
 			<p class="muted">

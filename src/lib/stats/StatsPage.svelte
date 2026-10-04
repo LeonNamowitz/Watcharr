@@ -72,6 +72,7 @@
 	const peopleExpansionRows = 3;
 	// MOD: Rows added per click in the title list popup.
 	const titleDialogExpansionRows = 2;
+	let calendarMonthsExpanded = $state(false);
 	let peopleMode = $state<"most" | "rating">("most");
 	let categorySort = $state<"count" | "rating">("count");
 	let higherCount = $state(5);
@@ -134,6 +135,7 @@
 			crewCounts,
 			activityMode,
 			activityMetric,
+			calendarMonthsExpanded,
 			calendarYear,
 			gameCalendarKind,
 			waitingCount,
@@ -175,6 +177,8 @@
 		activityMetric = saved.activityMetric ?? "count";
 		gameActivityKind = saved.gameActivityKind;
 		peopleCounts = saved.peopleCounts;
+		await tick();
+		calendarMonthsExpanded = saved.calendarMonthsExpanded ?? false;
 		await tick();
 		// Ranked charts reset their expansion when sorting changes.
 		categoryCounts = saved.categoryCounts;
@@ -411,6 +415,7 @@
 					? "unknown"
 					: "current";
 			yearlyFavoriteCount = 5;
+			calendarMonthsExpanded = false;
 			favoriteCount = 5;
 			highestTab = "current";
 			categorySort = "count";
@@ -918,6 +923,7 @@
 								detail: `${m.plays} ${data.media === "tv" ? "episodes" : "films"}`,
 							}))}
 					{settings}
+					alignFirstXAxisTick={true}
 					valueUnit={data.media === "tv" ? "episodes" : "watches"}
 					showData
 					onSelect={explorePoint}
@@ -932,6 +938,7 @@
 			onSelect={exploreSelection}
 			bind:calendarYear
 			bind:activityKind={gameCalendarKind}
+			bind:monthsExpanded={calendarMonthsExpanded}
 		/>{/if}
 {/snippet}
 
@@ -945,7 +952,7 @@
 			>
 		</div>
 		<div class="milestones" class:with-reviews={hasReviews}>
-			{#each [{ label: isGame ? "First recorded progress" : "First watch", card: data.milestones.first, wordCount: undefined }, ...(hasReviews ? [{ label: "Shortest review", card: reviews?.shortest?.item, wordCount: reviews?.shortest?.wordCount }, { label: "Longest review", card: reviews?.longest?.item, wordCount: reviews?.longest?.wordCount }] : []), { label: isGame ? "Last recorded progress" : "Last watch", card: data.milestones.last, wordCount: undefined }] as milestone (milestone.label)}<div
+			{#each [{ label: isGame ? "First recorded progress" : "First watch", card: data.milestones.first, wordCount: undefined }, { label: isGame ? "Last recorded progress" : "Last watch", card: data.milestones.last, wordCount: undefined }, ...(hasReviews ? [{ label: "Shortest review", card: reviews?.shortest?.item, wordCount: reviews?.shortest?.wordCount }, { label: "Longest review", card: reviews?.longest?.item, wordCount: reviews?.longest?.wordCount }] : [])] as milestone (milestone.label)}<div
 				>
 					<h3 class="norm">{milestone.label}</h3>
 					<StatsPosters
@@ -1097,6 +1104,7 @@
 				),
 			}))}
 			{settings}
+			xAxisTicks={["Unrated", "1", "2", "3", "4", "5", "6", "7", "8", "9"]}
 			onSelect={explorePoint}
 			color="#f5b85a"
 		/>

@@ -82,7 +82,6 @@
 	<StatsExpansion
 		{count}
 		step={expansionRows ? expansionRows * columns : 5}
-		separateCollapse={expansionRows > 0}
 		total={sorted.length}
 		onChange={(value) => (count = value)}
 	/>
