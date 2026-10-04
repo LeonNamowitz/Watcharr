@@ -40,7 +40,7 @@
 	const sensors = [
 		PointerSensor.configure({
 			activationConstraints: [
-				new PointerActivationConstraints.Delay({ value: 150, tolerance: 8 }),
+				new PointerActivationConstraints.Distance({ value: 5 }),
 			],
 		}),
 		KeyboardSensor,

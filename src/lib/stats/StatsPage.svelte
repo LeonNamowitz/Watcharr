@@ -265,15 +265,18 @@
 	const yearValue = $derived(lifetime ? "all" : String(data.year));
 	const selectedYear = $derived(requestedYear ?? yearValue);
 	const selectedMedia = $derived(requestedMedia ?? data.media);
-	const distinctTitles = $derived(
-		data.media === "tv"
-			? new Set(
-					[
-						...data.posters,
-						...(data.episodes ?? []).filter((item) => (item.plays ?? 0) > 0),
-					].map((item) => item.id),
-				).size
-			: data.summary.titles,
+	const primarySummaryCount = $derived(
+		data.media === "movie"
+			? data.summary.plays
+			: data.media === "tv"
+				? data.summary.shows
+				: (data.summary.games ?? 0),
+	);
+	const newReleaseCount = $derived(
+		lifetime
+			? undefined
+			: (data.breakdown.release.find((item) => item.label === "Selected year")
+					?.count ?? 0),
 	);
 	const hoursPlayed = $derived(data.summary.hours);
 	const hoursDescription = $derived(
@@ -283,60 +286,67 @@
 				: "Saved playtime for games first completed in the selected year."
 			: "Estimated from available runtimes, recorded watches, finished shows and finished episodes.",
 	);
-	// MOD: tile jumps: change target (section) and label (tooltip) below.
-	// Targets: titles = poster wall; activity = activity; calendar = calendar;
-	// ratings = rating distribution; runtimes = highs/lows; plays = rewatches/replays;
-	// history = through the years (Lifetime); playtime = game playtime (Lifetime).
+	// Summary tile targets and their tooltips.
 	// Search data-stats-jump in src/lib/stats to find or add section targets.
 	const summaryDestinations = $derived({
 		titles: {
 			target: "titles",
-			label: `Jump to ${mediaLabel.toLowerCase()} ${isGame ? "played" : "watched"}`,
-		},
-		plays: {
-			target: isGame
-				? data.games
-					? "activity"
-					: "plays"
-				: lifetime
-					? data.library
-						? "calendar"
-						: "history"
-					: "activity",
 			label: isGame
-				? "Jump to completion activity"
-				: lifetime
-					? data.library
-						? "Jump to viewing calendar"
-						: "Jump to watches through the years"
-					: "Jump to viewing activity",
+				? "Jump to all games"
+				: data.media === "tv"
+					? "Jump to all shows"
+					: "Jump to all movies",
+		},
+		secondary: {
+			target: isGame
+				? "completion"
+				: data.media === "movie"
+					? lifetime
+						? "breakdown"
+						: "release"
+					: lifetime
+						? data.library
+							? "calendar"
+							: "history"
+						: "activity",
+			label: isGame
+				? "Jump to game completion chart"
+				: data.media === "movie"
+					? lifetime
+						? "Jump to breakdown charts"
+						: "Jump to release breakdown chart"
+					: lifetime
+						? data.library
+							? "Jump to viewing calendar"
+							: "Jump to watches through the years"
+						: "Jump to viewing activity",
 		},
 		hours: {
-			target: isGame
-				? lifetime
-					? data.games?.playtime
-						? "playtime"
-						: "titles"
-					: data.games
-						? "activity"
-						: "plays"
-				: "runtimes",
-			label: isGame
-				? lifetime
-					? data.games?.playtime
-						? "Jump to game playtime"
-						: "Jump to games played"
-					: "Jump to completions behind recorded hours"
-				: "Jump to longest and shortest runtimes",
+			target: "calendar",
+			label: isGame ? "Jump to gaming calendar" : "Jump to viewing calendar",
 		},
-		rating: { target: "ratings", label: "Jump to rating distribution" },
+		rating: {
+			target: "rated-higher",
+			label: "Jump to rated higher than average",
+		},
 	});
 	async function jumpToSummary(metric: keyof typeof summaryDestinations) {
 		if (loading || error) return;
-		// MOD this too if redirecting plays/hours away from Activity: these select chart tabs.
-		if (isGame && (metric === "plays" || (metric === "hours" && !lifetime)))
+		// Select a chart tab only when the summary tile targets that chart.
+		if (isGame && metric === "hours" && !lifetime)
+			gameCalendarKind = "completions";
+		else if (
+			isGame &&
+			metric === "secondary" &&
+			summaryDestinations.secondary.target === "activity"
+		)
 			gameActivityKind = "completions";
-		else if (!isGame && metric === "plays") activityMetric = "count";
+		else if (
+			!isGame &&
+			metric === "secondary" &&
+			summaryDestinations.secondary.target === "activity"
+		)
+			activityMetric = "count";
 		await tick();
 		const target = root.querySelector<HTMLElement>(
 			`[data-stats-jump="${summaryDestinations[metric].target}"]`,
@@ -481,6 +491,30 @@
 					? "No games"
 					: "No watches",
 		}));
+	}
+	const statusBreakdownTitle = $derived(
+		lifetime ? "Current library" : "Status activity",
+	);
+	const statusBreakdownPoints: ChartPoint[] = $derived(
+		(data.library?.statuses ?? [])
+			.filter((group) => group.count > 0)
+			.map((group) => ({
+				label: group.label,
+				value: group.count,
+				titleCount: group.count,
+				items: group.items,
+				averageRating: meanRating(group.items.map((item) => item.rating ?? 0)),
+			})),
+	);
+	function exploreStatusPoint(point: ChartPoint) {
+		exploreSelection({
+			label: point.label,
+			items: point.items ?? [],
+			description: lifetime
+				? `currently ${point.label.toLowerCase()}`
+				: `recorded as ${point.label.toLowerCase()}`,
+			period: lifetime ? "Current library" : String(data.year),
+		});
 	}
 	function runtimeDetail(card: StatsMediaCard): string {
 		if (data.media !== "tv" || !lifetime) {
@@ -627,17 +661,6 @@
 			/>
 		</section>
 	{/if}
-{/snippet}
-
-{#snippet library_statusSection()}
-	{#if data.library}<StatsLibrarySections
-			{data}
-			section="library-status"
-			owner={publicOwner}
-			{settings}
-			onSelect={exploreSelection}
-			bind:waitingCount
-		/>{/if}
 {/snippet}
 
 {#snippet library_momentumSection()}
@@ -1011,11 +1034,11 @@
 {#snippet breakdownSection()}
 	<section data-stats-section="breakdown">
 		<div class="section-heading">
-			<h2 class="norm">Breakdown</h2>
+			<h2 class="norm" data-stats-jump="breakdown" tabindex="-1">Breakdown</h2>
 			<span>Patterns in your {isGame ? "gaming" : "viewing"}</span>
 		</div>
 		<div class="pies">
-			{#each [...(!lifetime ? [{ title: "Release years", items: data.breakdown.release }] : []), { title: isGame ? "Completions & replays" : "Watches & rewatches", items: data.breakdown.plays }, ...(data.games ? [{ title: "Current statuses", items: data.games.statuses }, { title: "Completion", items: data.games.completion }] : []), ...(data.reviewsVisible ? [{ title: "Reviews", items: data.breakdown.reviews ?? [] }] : [])] as group (group.title)}<div
+			{#each [...(!lifetime ? [{ title: "Release years", points: pies(data.breakdown.release) }] : []), { title: isGame ? "Completions & replays" : "Watches & rewatches", points: pies(data.breakdown.plays) }, ...(data.library ? [{ title: statusBreakdownTitle, points: statusBreakdownPoints }] : []), ...(data.games ? [{ title: "Completion", points: pies(data.games.completion) }] : []), ...(data.reviewsVisible ? [{ title: "Reviews", points: pies(data.breakdown.reviews ?? []) }] : [])] as group (group.title)}<div
 					class="pie"
 				>
 					<h3
@@ -1023,7 +1046,11 @@
 						data-stats-jump={group.title === "Completions & replays" ||
 						group.title === "Watches & rewatches"
 							? "plays"
-							: undefined}
+							: group.title === "Release years"
+								? "release"
+								: group.title === "Completion"
+									? "completion"
+									: undefined}
 						tabindex="-1"
 					>
 						{group.title}
@@ -1033,14 +1060,19 @@
 						title={group.title}
 						kind="pie"
 						height={150}
-						points={pies(group.items)}
+						points={group.points}
 						{settings}
-						onSelect={explorePoint}
+						onSelect={group.title === statusBreakdownTitle
+							? exploreStatusPoint
+							: explorePoint}
 					/>
 					<div class="pie-legend">
-						{#each pies(group.items) as item, i (item.label)}<button
+						{#each group.points as item, i (item.label)}<button
 								class="plain"
-								onclick={() => explorePoint(item)}
+								onclick={() =>
+									group.title === statusBreakdownTitle
+										? exploreStatusPoint(item)
+										: explorePoint(item)}
 								><i
 									style={`background:${["#29acf4", "#f5b85a", "#f47983", "#51ad79", "#b19bea"][i % 5]}`}
 								></i>{item.label}<b>{item.value}</b></button
@@ -1123,7 +1155,9 @@
 {#snippet rated_higherSection()}
 	<section data-stats-section="rated-higher">
 		<div class="section-heading">
-			<h2 class="norm">Rated higher than average</h2>
+			<h2 class="norm" data-stats-jump="rated-higher" tabindex="-1">
+				Rated higher than average
+			</h2>
 			<span>You vs {source} · /10 · At least +1 point</span>
 		</div>
 		<StatsPosters
@@ -1406,39 +1440,47 @@
 					onclick={() => jumpToSummary("titles")}
 				>
 					<span class="summary-label">
-						Distinct {selectedMedia === "game"
-							? "games"
+						{selectedMedia === "game"
+							? "Games played"
 							: selectedMedia === "tv"
-								? "shows"
-								: "films"}
+								? "Shows watched"
+								: "Movies watched"}
 					</span>
 					<span class="summary-value"
-						>{loading || error ? "—" : distinctTitles.toLocaleString()}</span
+						>{loading || error
+							? "—"
+							: primarySummaryCount.toLocaleString()}</span
 					>
 				</button>
 				<button
 					type="button"
 					class="plain summary-tile"
-					title={summaryDestinations.plays.label}
-					disabled={loading || !!error}
-					onclick={() => jumpToSummary("plays")}
+					title={selectedMedia === "movie" && selectedYear === "all"
+						? "Select a year to see new releases."
+						: summaryDestinations.secondary.label}
+					disabled={loading ||
+						!!error ||
+						(selectedMedia === "movie" && selectedYear === "all")}
+					onclick={() => jumpToSummary("secondary")}
 				>
 					<span class="summary-label">
 						{selectedMedia === "game"
 							? "Games completed"
 							: selectedMedia === "tv"
 								? "Episodes watched"
-								: "Movies watched"}
+								: "New releases"}
 					</span>
 					<span class="summary-value">
 						{loading || error
 							? "—"
-							: (isGame
-									? (data.summary.completed ?? 0)
-									: data.media === "tv"
-										? data.activity.total
-										: data.summary.plays
-								).toLocaleString()}
+							: selectedMedia === "movie"
+								? (newReleaseCount?.toLocaleString() ?? "—")
+								: (isGame
+										? (data.summary.completed ?? 0)
+										: data.media === "tv"
+											? data.activity.total
+											: data.summary.plays
+									).toLocaleString()}
 					</span>
 				</button>
 				<button
@@ -1529,9 +1571,7 @@
 				</div>{/if}
 
 			{#each orderedSections as sectionId (sectionId)}
-				{#if sectionId === "library-status"}
-					{@render library_statusSection()}
-				{:else if sectionId === "library-momentum"}
+				{#if sectionId === "library-momentum"}
 					{@render library_momentumSection()}
 				{:else if sectionId === "library-waiting"}
 					{@render library_waitingSection()}

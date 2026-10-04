@@ -22,7 +22,7 @@
 		waitingCount = $bindable(5),
 	}: {
 		data: StatsResponse;
-		section: "library-status" | "library-momentum" | "library-waiting";
+		section: "library-momentum" | "library-waiting";
 		owner?: { id: string; username: string };
 		settings: RatingSettings;
 		onSelect: (selection: StatsSelection) => void;
@@ -36,8 +36,6 @@
 		isGame ? "first completed from backlog" : "first watched from watchlist",
 	);
 	const lifetime = $derived(data.scope === "lifetime");
-	const statuses = $derived(library?.statuses.filter((s) => s.count > 0) ?? []);
-	const statusMaximum = $derived(Math.max(1, ...statuses.map((s) => s.count)));
 	const momentumMaximum = $derived(
 		Math.max(
 			1,
@@ -47,13 +45,6 @@
 			]) ?? []),
 		),
 	);
-	const colors: Record<string, string> = {
-		FINISHED: "#51ad79",
-		WATCHING: "#29acf4",
-		PLANNED: "#f5b85a",
-		HOLD: "#b19bea",
-		DROPPED: "#f47983",
-	};
 	function bucketRating(items: StatsMediaCard[]) {
 		return meanRating(items.map((item) => item.rating ?? 0));
 	}
@@ -72,15 +63,6 @@
 				w.days,
 			]) ?? [],
 		),
-	);
-	const statusPoints = $derived(
-		statuses.map((group) => ({
-			label: lifetime ? group.label : `${group.label} in ${data.year}`,
-			value: group.count,
-			titleCount: group.count,
-			averageRating: bucketRating(group.items),
-			items: group.items,
-		})),
 	);
 	const momentumBrowsePoints: ChartPoint[] = $derived(
 		(library?.momentum ?? []).flatMap((point) =>
@@ -137,105 +119,6 @@
 <svelte:window onscrollcapture={hideTooltip} onresize={hideTooltip} />
 
 {#if library}
-	{#if section === "library-status"}<section
-			class="library-section"
-			data-stats-section={section}
-		>
-			<div class="section-heading">
-				<h2 class="norm">{lifetime ? "Current library" : "Status activity"}</h2>
-				<span
-					>{lifetime
-						? "Current saved statuses"
-						: `${isGame ? "Games" : "Titles"} entering each status in ${data.year}`}</span
-				>
-			</div>
-			<div
-				class="status-bars"
-				role="group"
-				aria-label={lifetime
-					? "Current library statuses"
-					: `Status activity in ${data.year}`}
-			>
-				{#each statuses as group (group.status)}
-					{@const label = lifetime
-						? group.label
-						: `${group.label} in ${data.year}`}
-					<button
-						class="plain status-row"
-						onpointerenter={(event) =>
-							showTooltip(
-								label,
-								group.items,
-								lifetime ? "current library status" : "",
-								event,
-							)}
-						onpointermove={(event) =>
-							showTooltip(
-								label,
-								group.items,
-								lifetime ? "current library status" : "",
-								event,
-							)}
-						onpointerleave={hideTooltip}
-						onpointerup={(event) => {
-							if (event.pointerType !== "mouse") hideTooltip();
-						}}
-						onpointercancel={hideTooltip}
-						onfocus={(event) =>
-							showTooltip(
-								label,
-								group.items,
-								lifetime ? "current library status" : "",
-								event,
-							)}
-						onblur={hideTooltip}
-						onkeydown={(event) => event.key === "Escape" && hideTooltip()}
-						aria-describedby={hoveredTooltip?.label === label
-							? "stats-library-tooltip"
-							: undefined}
-						onclick={() => {
-							hideTooltip();
-							onSelect({
-								label,
-								items: group.items,
-								description: lifetime
-									? `currently ${group.label.toLowerCase()}`
-									: `recorded as ${group.label.toLowerCase()}`,
-								period: lifetime ? "Current library" : String(data.year),
-							});
-						}}
-						aria-label={`Browse ${group.count} ${titleUnit}: ${label}`}
-					>
-						<span class="status-label">{label}</span>
-						<span class="track"
-							><span
-								style:width={`${(group.count / statusMaximum) * 100}%`}
-								style:background={colors[group.status]}
-							></span></span
-						>
-						<strong>{group.count.toLocaleString()}</strong>
-					</button>
-				{:else}<p class="note">
-						No {lifetime
-							? `saved ${titleUnit}`
-							: "recorded status changes in this year"}.
-					</p>{/each}
-			</div>
-			<StatsBrowseList
-				valueUnit={titleUnit}
-				points={statusPoints}
-				{settings}
-				onSelect={(point) =>
-					onSelect({
-						label: point.label,
-						items: point.items ?? [],
-						description: lifetime
-							? `currently ${point.label.toLowerCase()}`
-							: `recorded as ${point.label.toLowerCase().replace(` in ${data.year}`, "")}`,
-						period: lifetime ? "Current library" : String(data.year),
-					})}
-			/>
-		</section>{/if}
 	{#if section === "library-momentum"}<section
 			class="library-section"
 			data-stats-section={section}
@@ -431,35 +314,6 @@
 	.note {
 		margin: 10px 0 18px;
 	}
-	.status-bars {
-		display: grid;
-		gap: 12px;
-	}
-	.status-row {
-		display: grid;
-		grid-template-columns: minmax(120px, 180px) minmax(0, 1fr) 45px;
-		gap: 14px;
-		align-items: center;
-		width: 100%;
-		text-align: left;
-		color: inherit;
-		padding: 6px 0;
-	}
-	.track {
-		display: block;
-		height: 15px;
-		background: var(--stats-border);
-		border-radius: 4px;
-		overflow: hidden;
-	}
-	.track > span {
-		display: block;
-		height: 100%;
-		border-radius: inherit;
-	}
-	.status-row > strong {
-		text-align: right;
-	}
 	.totals {
 		display: flex;
 		flex-wrap: wrap;
@@ -553,11 +407,6 @@
 		.momentum {
 			grid-template-columns: repeat(6, minmax(0, 1fr));
 			gap: 18px 8px;
-		}
-		.status-row {
-			grid-template-columns: minmax(90px, 125px) minmax(0, 1fr) 32px;
-			gap: 8px;
-			font-size: 13px;
 		}
 	}
 </style>

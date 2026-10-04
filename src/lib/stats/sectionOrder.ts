@@ -1,7 +1,6 @@
 import type { StatsMedia, StatsResponse } from "./types";
 
 export const statsSections = [
-	{ id: "library-status", label: "Current library / Status activity" },
 	{ id: "library-momentum", label: "Watchlist momentum" },
 	{ id: "library-waiting", label: "Time on your watchlist" },
 	{ id: "history", label: "Through the years", scope: "lifetime" },
@@ -60,8 +59,6 @@ export function normalizeSectionOrder(
 export function sectionLabel(id: StatsSectionId, data: StatsResponse) {
 	const game = data.media === "game";
 	const labels: Partial<Record<StatsSectionId, string>> = {
-		"library-status":
-			data.scope === "lifetime" ? "Current library" : "Status activity",
 		"library-momentum": `${game ? "Backlog" : "Watchlist"} momentum`,
 		"library-waiting": `Time ${game ? "in your backlog" : "on your watchlist"}`,
 		"highest-rated": `Highest rated ${game ? "games" : data.media === "tv" ? "shows" : "films"}`,
