@@ -47,8 +47,23 @@ func TestTMDBRequestsTimeOutStalledConnections(t *testing.T) {
 		})
 		started := time.Now()
 		_, err := NewTMDB("test").apiRequest("/movie/10", nil)
-		if err == nil || time.Since(started) != 15*time.Second {
+		if err == nil || time.Since(started) != 20*time.Second {
 			t.Fatalf("stalled request: elapsed=%s err=%v", time.Since(started), err)
+		}
+	})
+}
+
+func TestTMDBRequestsAllowSlowResponsesWithinTimeout(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		mockTMDBRequests(t, func(r *http.Request) (*http.Response, error) {
+			time.Sleep(18 * time.Second)
+			if err := r.Context().Err(); err != nil {
+				return nil, err
+			}
+			return tmdbResponse(http.StatusOK, "", `{}`), nil
+		})
+		if _, err := NewTMDB("test").apiRequest("/movie/10", nil); err != nil {
+			t.Fatalf("slow response within the timeout should succeed: %v", err)
 		}
 	})
 }
