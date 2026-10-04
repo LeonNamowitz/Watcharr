@@ -33,6 +33,8 @@
 	function showTooltip(item: StatsBar, event: PointerEvent | FocusEvent) {
 		const element = event.currentTarget;
 		if (!(element instanceof HTMLElement)) return;
+		// Dialogs restore focus to their trigger, including after touch selection.
+		if (event.type === "focus" && !element.matches(":focus-visible")) return;
 		const position = statsTooltipPosition(event, element);
 		tooltipLeft = position.left;
 		tooltipTop = position.top;
@@ -78,7 +80,7 @@
 	}
 </script>
 
-<svelte:window onscroll={hideTooltip} onresize={hideTooltip} />
+<svelte:window onscrollcapture={hideTooltip} onresize={hideTooltip} />
 
 <div
 	class="ranking"
@@ -100,6 +102,10 @@
 				onpointerenter={(event) => showTooltip(item, event)}
 				onpointermove={(event) => showTooltip(item, event)}
 				onpointerleave={hideTooltip}
+				onpointerup={(event) => {
+					if (event.pointerType !== "mouse") hideTooltip();
+				}}
+				onpointercancel={hideTooltip}
 				onfocus={(event) => showTooltip(item, event)}
 				onblur={hideTooltip}
 				onkeydown={(event) => {
