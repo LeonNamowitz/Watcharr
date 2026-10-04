@@ -143,7 +143,7 @@ func TestGameStatsProgressCompletionsReplayAndHours(t *testing.T) {
 		t.Fatal("saved categories must be deduplicated")
 	}
 	body, _ := json.Marshal(year)
-	for _, forbidden := range []string{"playtimeHours", "totalHours", "averageHours", "medianHours", "mostPlaytime", "leastPlaytime", "\"playtime\""} {
+	for _, forbidden := range []string{"playtimeHours", "totalHours", "averageHours", "medianHours", "mostPlaytime", "leastPlaytime", "\"playtime\":"} {
 		if strings.Contains(string(body), forbidden) {
 			t.Fatalf("year response leaked hours: %s", forbidden)
 		}

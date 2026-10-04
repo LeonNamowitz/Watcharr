@@ -15,6 +15,7 @@
 	import Error from "@/lib/Error.svelte";
 	import StatsPage from "./StatsPage.svelte";
 	import type { StatsResponse, StatsMedia } from "./types";
+	import type { StatsSectionId } from "./sectionOrder";
 	let { publicOwner }: { publicOwner?: { id: string; username: string } } =
 		$props();
 	let data = $state<StatsResponse>();
@@ -128,6 +129,27 @@
 			active = false;
 		};
 	});
+	async function saveLayout(sectionOrder: StatsSectionId[]) {
+		if (publicOwner || loading || !data)
+			throw new globalThis.Error("Stats layout is unavailable.");
+		const current = data;
+		const result = await req.put<{ sectionOrder: string[] }>("/stats/layout", {
+			media: current.media,
+			sectionOrder,
+		});
+		if (data === current) data.sectionOrder = result.sectionOrder;
+		// Back navigation must not restore an order from before the save.
+		for (const [token, response] of savedResponses) {
+			if (
+				response.owner.id === current.owner.id &&
+				response.media === current.media
+			)
+				savedResponses.set(token, {
+					...response,
+					sectionOrder: result.sectionOrder,
+				});
+		}
+	}
 	function changeSelection(nextYear: string, nextMedia: StatsMedia) {
 		focusAfterLoad =
 			document.activeElement instanceof HTMLElement
@@ -156,6 +178,7 @@
 		requestedYear={year}
 		requestedMedia={media}
 		onSelectionChange={changeSelection}
+		onSaveLayout={saveLayout}
 	/>
 {:else if loading}<div class="loading" role="status">
 		<Spinner />

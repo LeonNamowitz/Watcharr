@@ -171,7 +171,7 @@
 
 <svelte:window onscrollcapture={hideTooltip} onresize={hideTooltip} />
 
-<section class="calendar-section">
+<section class="calendar-section" data-stats-section="calendar">
 	<div class="section-heading">
 		<h2 class="norm" data-stats-jump="calendar" tabindex="-1">
 			{isGame ? "Gaming" : "Viewing"} calendar

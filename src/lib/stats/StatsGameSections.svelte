@@ -164,7 +164,7 @@
 
 {#if games}
 	{#if section === "activity" && activity}
-		<section class="stats-game-section">
+		<section class="stats-game-section" data-stats-section={section}>
 			<div class="section-heading">
 				<h2 class="norm" data-stats-jump="activity" tabindex="-1">Activity</h2>
 				<StatsSegmentedControl label="Activity metric" wrap>
@@ -221,7 +221,7 @@
 			</p>
 		</section>
 	{:else if section === "categories" || section === "companies"}
-		<section class="stats-game-section">
+		<section class="stats-game-section" data-stats-section={section}>
 			<div class="section-heading">
 				<h2 class="norm">
 					{section === "companies"
@@ -257,7 +257,7 @@
 			</div>
 		</section>
 	{:else if section === "playtime" && playtime && data.scope === "lifetime"}
-		<section class="stats-game-section">
+		<section class="stats-game-section" data-stats-section={section}>
 			<div class="section-heading playtime-heading">
 				<div class="playtime-intro">
 					<h2 class="norm" data-stats-jump="playtime" tabindex="-1">

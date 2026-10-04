@@ -42,6 +42,7 @@ export interface StatsPie {
 	count: number;
 }
 export interface StatsResponse {
+	sectionOrder?: string[];
 	library?: StatsLibrary;
 	calendar?: StatsDay[];
 	games?: StatsGames;

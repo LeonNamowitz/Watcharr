@@ -13,6 +13,8 @@ type User struct {
 	AvatarID uint   `json:"-"`
 	Avatar   Image  `json:"avatar"`
 	Bio      string `json:"bio"`
+	// Optional JSON orders for movie, TV and game stats sections.
+	StatsLayout *string `gorm:"type:text" json:"-"`
 	// The type of user/which auth service they originate from.
 	// Empty if from Watcharr, or the name of the service (eg. jellyfin)
 	Type UserType `gorm:"uniqueIndex:usr_name_to_type;not null;default:0" json:"type"`

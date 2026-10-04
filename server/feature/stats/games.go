@@ -188,7 +188,7 @@ func (s *Service) getGameStats(userID uint, q Query) (StatsResponse, error) {
 		clone.card.Plays = len(clone.completions)
 		scoped[i] = &clone
 	}
-	response := StatsResponse{Scope: q.Scope, Year: q.Year, Media: "game", Owner: owner.GetSafe(), ReviewsVisible: !q.HideReviews,
+	response := StatsResponse{SectionOrder: sectionOrderForOwner(owner, "game"), Scope: q.Scope, Year: q.Year, Media: "game", Owner: owner.GetSafe(), ReviewsVisible: !q.HideReviews,
 		Library: &library, Calendar: buildMediaCalendar(progress),
 		History: history, Posters: gameCards(scoped), Watchlist: gameBacklogPicks(backlog, userID, q),
 		Genres: gameBars(scoped, "genres"), Countries: []BarStat{}, Languages: []BarStat{}, Studios: []PersonStat{},

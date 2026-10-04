@@ -56,6 +56,7 @@ func NewService(db *gorm.DB, provider TMDBProvider, games ...IGDBProvider) *Serv
 }
 
 type StatsResponse struct {
+	SectionOrder         []string          `json:"sectionOrder"`
 	Library              *LibraryStats     `json:"library,omitempty"`
 	Calendar             []DailyStat       `json:"calendar,omitempty"`
 	Games                *GameStats        `json:"games,omitempty"`
@@ -407,8 +408,9 @@ func (s *Service) GetStats(userID uint, q Query) (StatsResponse, error) {
 		decades = buildDecades(scopeRecords, metadata)
 	}
 	response := StatsResponse{
-		Scope: q.Scope,
-		Media: q.Media, Owner: owner.GetSafe(), ReviewsVisible: !q.HideReviews,
+		SectionOrder: sectionOrderForOwner(owner, q.Media),
+		Scope:        q.Scope,
+		Media:        q.Media, Owner: owner.GetSafe(), ReviewsVisible: !q.HideReviews,
 		Languages:      buildLanguageBars(scopeRecords, metadata),
 		Studios:        buildStudios(scopeRecords, metadata),
 		Year:           q.Year,

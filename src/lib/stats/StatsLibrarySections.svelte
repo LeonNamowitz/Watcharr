@@ -15,12 +15,14 @@
 	} from "./types";
 	let {
 		data,
+		section,
 		owner,
 		settings,
 		onSelect,
 		waitingCount = $bindable(5),
 	}: {
 		data: StatsResponse;
+		section: "library-status" | "library-momentum" | "library-waiting";
 		owner?: { id: string; username: string };
 		settings: RatingSettings;
 		onSelect: (selection: StatsSelection) => void;
@@ -135,256 +137,270 @@
 <svelte:window onscrollcapture={hideTooltip} onresize={hideTooltip} />
 
 {#if library}
-	<section class="library-section">
-		<div class="section-heading">
-			<h2 class="norm">{lifetime ? "Current library" : "Status activity"}</h2>
-			<span
-				>{lifetime
-					? "Current saved statuses"
-					: `${isGame ? "Games" : "Titles"} entering each status in ${data.year}`}</span
-			>
-		</div>
-		<div
-			class="status-bars"
-			role="group"
-			aria-label={lifetime
-				? "Current library statuses"
-				: `Status activity in ${data.year}`}
+	{#if section === "library-status"}<section
+			class="library-section"
+			data-stats-section={section}
 		>
-			{#each statuses as group (group.status)}
-				{@const label = lifetime
-					? group.label
-					: `${group.label} in ${data.year}`}
-				<button
-					class="plain status-row"
-					onpointerenter={(event) =>
-						showTooltip(
-							label,
-							group.items,
-							lifetime ? "current library status" : "",
-							event,
-						)}
-					onpointermove={(event) =>
-						showTooltip(
-							label,
-							group.items,
-							lifetime ? "current library status" : "",
-							event,
-						)}
-					onpointerleave={hideTooltip}
-					onpointerup={(event) => {
-						if (event.pointerType !== "mouse") hideTooltip();
-					}}
-					onpointercancel={hideTooltip}
-					onfocus={(event) =>
-						showTooltip(
-							label,
-							group.items,
-							lifetime ? "current library status" : "",
-							event,
-						)}
-					onblur={hideTooltip}
-					onkeydown={(event) => event.key === "Escape" && hideTooltip()}
-					aria-describedby={hoveredTooltip?.label === label
-						? "stats-library-tooltip"
-						: undefined}
-					onclick={() => {
-						hideTooltip();
-						onSelect({
-							label,
-							items: group.items,
-							description: lifetime
-								? `currently ${group.label.toLowerCase()}`
-								: `recorded as ${group.label.toLowerCase()}`,
-							period: lifetime ? "Current library" : String(data.year),
-						});
-					}}
-					aria-label={`Browse ${group.count} ${titleUnit}: ${label}`}
+			<div class="section-heading">
+				<h2 class="norm">{lifetime ? "Current library" : "Status activity"}</h2>
+				<span
+					>{lifetime
+						? "Current saved statuses"
+						: `${isGame ? "Games" : "Titles"} entering each status in ${data.year}`}</span
 				>
-					<span class="status-label">{label}</span>
-					<span class="track"
-						><span
-							style:width={`${(group.count / statusMaximum) * 100}%`}
-							style:background={colors[group.status]}
-						></span></span
-					>
-					<strong>{group.count.toLocaleString()}</strong>
-				</button>
-			{:else}<p class="note">
-					No {lifetime
-						? `saved ${titleUnit}`
-						: "recorded status changes in this year"}.
-				</p>{/each}
-		</div>
-		<StatsBrowseList
-			valueUnit={titleUnit}
-			points={statusPoints}
-			{settings}
-			onSelect={(point) =>
-				onSelect({
-					label: point.label,
-					items: point.items ?? [],
-					description: lifetime
-						? `currently ${point.label.toLowerCase()}`
-						: `recorded as ${point.label.toLowerCase().replace(` in ${data.year}`, "")}`,
-					period: lifetime ? "Current library" : String(data.year),
-				})}
-		/>
-	</section>
-	<section class="library-section">
-		<div class="section-heading">
-			<h2 class="norm">{isGame ? "Backlog" : "Watchlist"} momentum</h2>
-			<span
-				>{lifetime ? "Through the years" : data.year} · first-time {titleUnit}</span
-			>
-		</div>
-		<div class="totals">
-			<span><strong>{library.planned.toLocaleString()}</strong> added</span
-			><span
-				><strong>{library.watched.toLocaleString()}</strong> {conversion}</span
-			>
-		</div>
-		<div class="legend">
-			<span><i class="planned"></i>First added</span><span
-				><i class="watched"></i>First {conversion}</span
-			>
-		</div>
-		{#if library.planned || library.watched}
+			</div>
 			<div
-				class="momentum"
-				class:annual={lifetime}
+				class="status-bars"
 				role="group"
-				aria-label={`First planned versus first ${conversion}`}
+				aria-label={lifetime
+					? "Current library statuses"
+					: `Status activity in ${data.year}`}
 			>
-				{#each library.momentum as point (point.period)}
-					<div class="momentum-period">
-						<div class="pair">
-							{#each ["planned", "watched"] as kind (kind)}
-								{@const items =
-									kind === "planned" ? point.planned : point.watched}
-								{@const detail = kind === "planned" ? "" : ""}
-								{@const label = `${kind === "planned" ? "First planned" : `First ${conversion}`} · ${point.period}`}
-								<button
-									class="plain momentum-bar"
-									class:planned={kind === "planned"}
-									class:watched={kind === "watched"}
-									style:height={`${items.length ? Math.max(8, (items.length / momentumMaximum) * 110) : 0}px`}
-									disabled={!items.length}
-									onpointerenter={(event) =>
-										showTooltip(label, items, detail, event)}
-									onpointermove={(event) =>
-										showTooltip(label, items, detail, event)}
-									onpointerleave={hideTooltip}
-									onpointerup={(event) => {
-										if (event.pointerType !== "mouse") hideTooltip();
-									}}
-									onpointercancel={hideTooltip}
-									onfocus={(event) => showTooltip(label, items, detail, event)}
-									onblur={hideTooltip}
-									onkeydown={(event) => event.key === "Escape" && hideTooltip()}
-									aria-describedby={hoveredTooltip?.label === label
-										? "stats-library-tooltip"
-										: undefined}
-									aria-label={`Browse ${items.length} ${titleUnit}: ${label}`}
-									onclick={() => {
-										hideTooltip();
-										onSelect({
-											label,
-											items,
-											description: detail,
-											period: point.period,
-										});
-									}}
-								>
-									<span>{items.length || ""}</span>
-								</button>
-							{/each}
-						</div>
-						<span class="period-label">{periodLabel(point.period)}</span>
-					</div>
-				{/each}
+				{#each statuses as group (group.status)}
+					{@const label = lifetime
+						? group.label
+						: `${group.label} in ${data.year}`}
+					<button
+						class="plain status-row"
+						onpointerenter={(event) =>
+							showTooltip(
+								label,
+								group.items,
+								lifetime ? "current library status" : "",
+								event,
+							)}
+						onpointermove={(event) =>
+							showTooltip(
+								label,
+								group.items,
+								lifetime ? "current library status" : "",
+								event,
+							)}
+						onpointerleave={hideTooltip}
+						onpointerup={(event) => {
+							if (event.pointerType !== "mouse") hideTooltip();
+						}}
+						onpointercancel={hideTooltip}
+						onfocus={(event) =>
+							showTooltip(
+								label,
+								group.items,
+								lifetime ? "current library status" : "",
+								event,
+							)}
+						onblur={hideTooltip}
+						onkeydown={(event) => event.key === "Escape" && hideTooltip()}
+						aria-describedby={hoveredTooltip?.label === label
+							? "stats-library-tooltip"
+							: undefined}
+						onclick={() => {
+							hideTooltip();
+							onSelect({
+								label,
+								items: group.items,
+								description: lifetime
+									? `currently ${group.label.toLowerCase()}`
+									: `recorded as ${group.label.toLowerCase()}`,
+								period: lifetime ? "Current library" : String(data.year),
+							});
+						}}
+						aria-label={`Browse ${group.count} ${titleUnit}: ${label}`}
+					>
+						<span class="status-label">{label}</span>
+						<span class="track"
+							><span
+								style:width={`${(group.count / statusMaximum) * 100}%`}
+								style:background={colors[group.status]}
+							></span></span
+						>
+						<strong>{group.count.toLocaleString()}</strong>
+					</button>
+				{:else}<p class="note">
+						No {lifetime
+							? `saved ${titleUnit}`
+							: "recorded status changes in this year"}.
+					</p>{/each}
 			</div>
 			<StatsBrowseList
 				valueUnit={titleUnit}
-				points={momentumBrowsePoints}
+				points={statusPoints}
 				{settings}
 				onSelect={(point) =>
 					onSelect({
 						label: point.label,
 						items: point.items ?? [],
-						description: point.detail,
-						period: point.label.slice(point.label.lastIndexOf(" · ") + 3),
+						description: lifetime
+							? `currently ${point.label.toLowerCase()}`
+							: `recorded as ${point.label.toLowerCase().replace(` in ${data.year}`, "")}`,
+						period: lifetime ? "Current library" : String(data.year),
 					})}
 			/>
-		{:else}<p class="note">
-				No qualifying {isGame ? "backlog" : "watchlist"} additions or first {isGame
-					? "completions"
-					: "watches"} in this period.
-			</p>{/if}
-	</section>
-	<section class="library-section">
-		<div class="section-heading">
-			<h2 class="norm">
-				{isGame ? "Time in your backlog" : "Time on your watchlist"}
-			</h2>
-			<span
-				>Time before the first recorded {isGame ? "completion" : "watch"}</span
-			>
-		</div>
-		<div class="totals">
-			<span
-				><strong
-					>{library.waiting.medianDays === null
-						? "—"
-						: library.waiting.medianDays.toLocaleString()}</strong
-				> median days waiting</span
-			><span
-				><strong>{library.watched.toLocaleString()}</strong>
-				{titleUnit} previously planned</span
-			>
-		</div>
-		<StatsChart
-			title={`${isGame ? "Backlog" : "Watchlist"} waiting time`}
-			valueUnit={titleUnit}
-			{titleUnit}
-			points={library.waiting.buckets.map((bucket) => ({
-				label: bucket.label,
-				value: bucket.items.length,
-				titleCount: bucket.items.length,
-				averageRating: bucketRating(bucket.items),
-				items: bucket.items,
-			}))}
-			{settings}
-			onSelect={(point) =>
-				onSelect({
-					label: `Waited ${point.label.toLowerCase()}`,
-					items: point.items ?? [],
-					description: convertedFromList,
-				})}
-		/>
-		{#if library.waiting.excluded}<p class="note">
-				{library.waiting.excluded.toLocaleString()} first-{conversion}
-				{titleUnit} excluded.
-			</p>{/if}
-		{#if library.waiting.longest.length}
-			<h3 class="norm">The longest waits</h3>
-			<StatsPosters
-				items={library.waiting.longest
-					.slice(0, waitingCount)
-					.map((w) => w.item)}
-				{owner}
+		</section>{/if}
+	{#if section === "library-momentum"}<section
+			class="library-section"
+			data-stats-section={section}
+		>
+			<div class="section-heading">
+				<h2 class="norm">{isGame ? "Backlog" : "Watchlist"} momentum</h2>
+				<span
+					>{lifetime ? "Through the years" : data.year} · first-time {titleUnit}</span
+				>
+			</div>
+			<div class="totals">
+				<span><strong>{library.planned.toLocaleString()}</strong> added</span
+				><span
+					><strong>{library.watched.toLocaleString()}</strong>
+					{conversion}</span
+				>
+			</div>
+			<div class="legend">
+				<span><i class="planned"></i>First added</span><span
+					><i class="watched"></i>First {conversion}</span
+				>
+			</div>
+			{#if library.planned || library.watched}
+				<div
+					class="momentum"
+					class:annual={lifetime}
+					role="group"
+					aria-label={`First planned versus first ${conversion}`}
+				>
+					{#each library.momentum as point (point.period)}
+						<div class="momentum-period">
+							<div class="pair">
+								{#each ["planned", "watched"] as kind (kind)}
+									{@const items =
+										kind === "planned" ? point.planned : point.watched}
+									{@const detail = kind === "planned" ? "" : ""}
+									{@const label = `${kind === "planned" ? "First planned" : `First ${conversion}`} · ${point.period}`}
+									<button
+										class="plain momentum-bar"
+										class:planned={kind === "planned"}
+										class:watched={kind === "watched"}
+										style:height={`${items.length ? Math.max(8, (items.length / momentumMaximum) * 110) : 0}px`}
+										disabled={!items.length}
+										onpointerenter={(event) =>
+											showTooltip(label, items, detail, event)}
+										onpointermove={(event) =>
+											showTooltip(label, items, detail, event)}
+										onpointerleave={hideTooltip}
+										onpointerup={(event) => {
+											if (event.pointerType !== "mouse") hideTooltip();
+										}}
+										onpointercancel={hideTooltip}
+										onfocus={(event) =>
+											showTooltip(label, items, detail, event)}
+										onblur={hideTooltip}
+										onkeydown={(event) =>
+											event.key === "Escape" && hideTooltip()}
+										aria-describedby={hoveredTooltip?.label === label
+											? "stats-library-tooltip"
+											: undefined}
+										aria-label={`Browse ${items.length} ${titleUnit}: ${label}`}
+										onclick={() => {
+											hideTooltip();
+											onSelect({
+												label,
+												items,
+												description: detail,
+												period: point.period,
+											});
+										}}
+									>
+										<span>{items.length || ""}</span>
+									</button>
+								{/each}
+							</div>
+							<span class="period-label">{periodLabel(point.period)}</span>
+						</div>
+					{/each}
+				</div>
+				<StatsBrowseList
+					valueUnit={titleUnit}
+					points={momentumBrowsePoints}
+					{settings}
+					onSelect={(point) =>
+						onSelect({
+							label: point.label,
+							items: point.items ?? [],
+							description: point.detail,
+							period: point.label.slice(point.label.lastIndexOf(" · ") + 3),
+						})}
+				/>
+			{:else}<p class="note">
+					No qualifying {isGame ? "backlog" : "watchlist"} additions or first {isGame
+						? "completions"
+						: "watches"} in this period.
+				</p>{/if}
+		</section>{/if}
+	{#if section === "library-waiting"}<section
+			class="library-section"
+			data-stats-section={section}
+		>
+			<div class="section-heading">
+				<h2 class="norm">
+					{isGame ? "Time in your backlog" : "Time on your watchlist"}
+				</h2>
+				<span
+					>Time before the first recorded {isGame
+						? "completion"
+						: "watch"}</span
+				>
+			</div>
+			<div class="totals">
+				<span
+					><strong
+						>{library.waiting.medianDays === null
+							? "—"
+							: library.waiting.medianDays.toLocaleString()}</strong
+					> median days waiting</span
+				><span
+					><strong>{library.watched.toLocaleString()}</strong>
+					{titleUnit} previously planned</span
+				>
+			</div>
+			<StatsChart
+				title={`${isGame ? "Backlog" : "Watchlist"} waiting time`}
+				valueUnit={titleUnit}
+				{titleUnit}
+				points={library.waiting.buckets.map((bucket) => ({
+					label: bucket.label,
+					value: bucket.items.length,
+					titleCount: bucket.items.length,
+					averageRating: bucketRating(bucket.items),
+					items: bucket.items,
+				}))}
 				{settings}
-				leftAligned
-				detail={(c) =>
-					`${waitingDays.get(`${c.type}:${c.id}`)} days before first ${isGame ? "completion" : "watch"}`}
+				onSelect={(point) =>
+					onSelect({
+						label: `Waited ${point.label.toLowerCase()}`,
+						items: point.items ?? [],
+						description: convertedFromList,
+					})}
 			/>
-			<StatsExpansion
-				count={waitingCount}
-				total={library.waiting.longest.length}
-				onChange={(count) => (waitingCount = count)}
-			/>
-		{/if}
-	</section>
+			{#if library.waiting.excluded}<p class="note">
+					{library.waiting.excluded.toLocaleString()} first-{conversion}
+					{titleUnit} excluded.
+				</p>{/if}
+			{#if library.waiting.longest.length}
+				<h3 class="norm">The longest waits</h3>
+				<StatsPosters
+					items={library.waiting.longest
+						.slice(0, waitingCount)
+						.map((w) => w.item)}
+					{owner}
+					{settings}
+					leftAligned
+					detail={(c) =>
+						`${waitingDays.get(`${c.type}:${c.id}`)} days before first ${isGame ? "completion" : "watch"}`}
+				/>
+				<StatsExpansion
+					count={waitingCount}
+					total={library.waiting.longest.length}
+					onChange={(count) => (waitingCount = count)}
+				/>
+			{/if}
+		</section>{/if}
 {/if}
 {#if hoveredTooltip}
 	<StatsTooltip

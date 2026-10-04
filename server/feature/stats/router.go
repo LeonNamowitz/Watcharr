@@ -22,8 +22,31 @@ func NewRouter(br *router.BaseRouter, service *Service, validator PublicOwnerVal
 	return &Router{br, service, validator}
 }
 func (r *Router) AddRoutes() {
-	r.br.Router.Group("/stats").Use(authmiddleware.AuthRequired(nil, r.br.Cfg)).GET("", r.GetPrivateStats)
+	private := r.br.Router.Group("/stats").Use(authmiddleware.AuthRequired(nil, r.br.Cfg))
+	private.GET("", r.GetPrivateStats)
+	private.PUT("/layout", r.UpdateLayout)
 	r.br.Router.GET("/public/users/:id/:username/stats", r.GetPublicStats)
+}
+
+func (r *Router) UpdateLayout(c *gin.Context) {
+	var input struct {
+		Media        string   `json:"media" binding:"required,oneof=movie tv game"`
+		SectionOrder []string `json:"sectionOrder" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, router.ErrorResponse{Error: "invalid stats layout"})
+		return
+	}
+	order, err := validateSectionOrder(input.Media, input.SectionOrder)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, router.ErrorResponse{Error: err.Error()})
+		return
+	}
+	if err := r.service.saveSectionOrder(c.MustGet("userId").(uint), input.Media, order); err != nil {
+		c.JSON(http.StatusInternalServerError, router.ErrorResponse{Error: "unable to save stats layout"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"sectionOrder": order})
 }
 func (r *Router) GetPrivateStats(c *gin.Context) { r.respond(c, c.MustGet("userId").(uint), false) }
 func (r *Router) GetPublicStats(c *gin.Context) {
