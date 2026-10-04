@@ -156,6 +156,9 @@ export interface StatsResponse {
 	metadata: { partial: boolean; failedTitles: string[] };
 }
 export interface ChartPoint {
+	group?: string;
+	seriesKey?: string;
+	period?: string;
 	browseValue?: number;
 	titleKeys?: string[];
 	items?: StatsMediaCard[];

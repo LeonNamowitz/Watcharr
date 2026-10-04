@@ -27,7 +27,15 @@
 	{id}
 	style={position ? `left:${position.left}px;top:${position.top}px` : undefined}
 >
-	<strong>{label}</strong><span>{titleCount.toLocaleString()} {unitLabel}</span>
+	<div class="heading">
+		<strong>
+			{#each label.split(/(\d{4}-\d{2}(?:-\d{2})?)/) as part, index (index)}
+				{#if /^\d{4}-\d{2}/.test(part)}<span class="date">{part}</span
+					>{:else}{part}{/if}
+			{/each}
+		</strong>
+		<span>{titleCount.toLocaleString()} {unitLabel}</span>
+	</div>
 	<p>Average rating: {averageRating}</p>
 	{#if detail}<p>{detail}</p>{/if}
 </div>
@@ -51,11 +59,20 @@
 		z-index: 60;
 		pointer-events: none;
 	}
-	.tooltip span {
-		margin-left: 12px;
+	.heading {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: baseline;
+		gap: 6px 12px;
+	}
+	.heading > span {
+		white-space: nowrap;
 		color: #086fa8;
 	}
-	:global(:root.theme-dark) .tooltip span {
+	.date {
+		white-space: nowrap;
+	}
+	:global(:root.theme-dark) .heading > span {
 		color: #29acf4;
 	}
 	.tooltip p {

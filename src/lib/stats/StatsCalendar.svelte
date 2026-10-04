@@ -6,6 +6,7 @@
 	import { averageRating, meanRating, statsUnitLabel } from "./format";
 	import type { RatingSettings } from "@/lib/rating/helpers";
 	import { statsTooltipPosition } from "./tooltipPosition";
+	import { holdTooltip } from "./holdTooltip.svelte";
 	let {
 		data,
 		settings,
@@ -73,6 +74,13 @@
 		detail: string;
 	};
 	let hoveredDay = $state<CalendarTooltip>();
+	const touchTooltip = holdTooltip({
+		target: ".day:enabled",
+		canPin: () => !!hoveredDay,
+		onDismiss: () => {
+			hoveredDay = undefined;
+		},
+	});
 	let tooltipLeft = $state(0);
 	let tooltipTop = $state(0);
 	const summary = $derived.by(() => {
@@ -153,6 +161,7 @@
 			});
 	}
 	function showTooltip(day: StatsDay, event: PointerEvent | FocusEvent) {
+		if (touchTooltip.pinned) return;
 		const element = event.currentTarget;
 		if (!(element instanceof HTMLElement)) return;
 		if (event.type === "focus" && !element.matches(":focus-visible")) return;
@@ -170,13 +179,18 @@
 		};
 	}
 	function hideTooltip() {
+		if (touchTooltip.pinned) return;
 		hoveredDay = undefined;
 	}
 </script>
 
 <svelte:window onscrollcapture={hideTooltip} onresize={hideTooltip} />
 
-<section class="calendar-section" data-stats-section="calendar">
+<section
+	{@attach touchTooltip.attach}
+	class="calendar-section"
+	data-stats-section="calendar"
+>
 	<div class="section-heading">
 		<h2 class="norm" data-stats-jump="calendar" tabindex="-1">
 			{isGame ? "Gaming" : "Viewing"} calendar

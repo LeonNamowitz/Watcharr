@@ -1,11 +1,8 @@
 <script lang="ts">
 	import StatsChart from "./StatsChart.svelte";
-	import StatsBrowseList from "./StatsBrowseList.svelte";
 	import StatsPosters from "./StatsPosters.svelte";
 	import StatsExpansion from "./StatsExpansion.svelte";
-	import StatsTooltip from "./StatsTooltip.svelte";
-	import { averageRating, meanRating } from "./format";
-	import { statsTooltipPosition } from "./tooltipPosition";
+	import { meanRating } from "./format";
 	import type { RatingSettings } from "@/lib/rating/helpers";
 	import type {
 		ChartPoint,
@@ -36,15 +33,6 @@
 		isGame ? "first completed from backlog" : "first watched from watchlist",
 	);
 	const lifetime = $derived(data.scope === "lifetime");
-	const momentumMaximum = $derived(
-		Math.max(
-			1,
-			...(library?.momentum.flatMap((p) => [
-				p.planned.length,
-				p.watched.length,
-			]) ?? []),
-		),
-	);
 	function bucketRating(items: StatsMediaCard[]) {
 		return meanRating(items.map((item) => item.rating ?? 0));
 	}
@@ -64,15 +52,17 @@
 			]) ?? [],
 		),
 	);
-	const momentumBrowsePoints: ChartPoint[] = $derived(
+	const momentumPoints: ChartPoint[] = $derived(
 		(library?.momentum ?? []).flatMap((point) =>
 			(["planned", "watched"] as const).flatMap((kind) => {
 				const items = kind === "planned" ? point.planned : point.watched;
-				if (!items.length) return [];
 				const label = `${kind === "planned" ? "First planned" : `First ${conversion} from ${isGame ? "backlog" : "watchlist"}`} · ${point.period}`;
 				return [
 					{
 						label,
+						group: periodLabel(point.period),
+						seriesKey: kind,
+						period: point.period,
 						value: items.length,
 						titleCount: items.length,
 						averageRating: bucketRating(items),
@@ -83,40 +73,7 @@
 			}),
 		),
 	);
-	type HoverTooltip = {
-		label: string;
-		titleCount: number;
-		averageRating: string;
-		detail: string;
-	};
-	let hoveredTooltip = $state<HoverTooltip>();
-	let tooltipLeft = $state(0);
-	let tooltipTop = $state(0);
-	function showTooltip(
-		label: string,
-		items: StatsMediaCard[],
-		detail: string,
-		event: PointerEvent | FocusEvent,
-	) {
-		const element = event.currentTarget;
-		if (!(element instanceof HTMLElement)) return;
-		if (event.type === "focus" && !element.matches(":focus-visible")) return;
-		const position = statsTooltipPosition(event, element);
-		tooltipLeft = position.left;
-		tooltipTop = position.top;
-		hoveredTooltip = {
-			label,
-			titleCount: items.length,
-			averageRating: averageRating(bucketRating(items), settings),
-			detail,
-		};
-	}
-	function hideTooltip() {
-		hoveredTooltip = undefined;
-	}
 </script>
-
-<svelte:window onscrollcapture={hideTooltip} onresize={hideTooltip} />
 
 {#if library}
 	{#if section === "library-momentum"}<section
@@ -142,72 +99,23 @@
 				>
 			</div>
 			{#if library.planned || library.watched}
-				<div
-					class="momentum"
-					class:annual={lifetime}
-					role="group"
-					aria-label={`First planned versus first ${conversion}`}
-				>
-					{#each library.momentum as point (point.period)}
-						<div class="momentum-period">
-							<div class="pair">
-								{#each ["planned", "watched"] as kind (kind)}
-									{@const items =
-										kind === "planned" ? point.planned : point.watched}
-									{@const detail = kind === "planned" ? "" : ""}
-									{@const label = `${kind === "planned" ? "First planned" : `First ${conversion}`} · ${point.period}`}
-									<button
-										class="plain momentum-bar"
-										class:planned={kind === "planned"}
-										class:watched={kind === "watched"}
-										style:height={`${items.length ? Math.max(8, (items.length / momentumMaximum) * 110) : 0}px`}
-										disabled={!items.length}
-										onpointerenter={(event) =>
-											showTooltip(label, items, detail, event)}
-										onpointermove={(event) =>
-											showTooltip(label, items, detail, event)}
-										onpointerleave={hideTooltip}
-										onpointerup={(event) => {
-											if (event.pointerType !== "mouse") hideTooltip();
-										}}
-										onpointercancel={hideTooltip}
-										onfocus={(event) =>
-											showTooltip(label, items, detail, event)}
-										onblur={hideTooltip}
-										onkeydown={(event) =>
-											event.key === "Escape" && hideTooltip()}
-										aria-describedby={hoveredTooltip?.label === label
-											? "stats-library-tooltip"
-											: undefined}
-										aria-label={`Browse ${items.length} ${titleUnit}: ${label}`}
-										onclick={() => {
-											hideTooltip();
-											onSelect({
-												label,
-												items,
-												description: detail,
-												period: point.period,
-											});
-										}}
-									>
-										<span>{items.length || ""}</span>
-									</button>
-								{/each}
-							</div>
-							<span class="period-label">{periodLabel(point.period)}</span>
-						</div>
-					{/each}
-				</div>
-				<StatsBrowseList
+				<StatsChart
+					title={`${isGame ? "Backlog" : "Watchlist"} momentum`}
+					kind="grouped"
 					valueUnit={titleUnit}
-					points={momentumBrowsePoints}
+					{titleUnit}
+					points={momentumPoints}
+					barSeries={[
+						{ key: "planned", label: "First added", color: "#f5b85a" },
+						{ key: "watched", label: `First ${conversion}`, color: "#29acf4" },
+					]}
 					{settings}
 					onSelect={(point) =>
 						onSelect({
 							label: point.label,
 							items: point.items ?? [],
 							description: point.detail,
-							period: point.label.slice(point.label.lastIndexOf(" · ") + 3),
+							period: point.period,
 						})}
 				/>
 			{:else}<p class="note">
@@ -285,17 +193,6 @@
 			{/if}
 		</section>{/if}
 {/if}
-{#if hoveredTooltip}
-	<StatsTooltip
-		label={hoveredTooltip.label}
-		{titleUnit}
-		titleCount={hoveredTooltip.titleCount}
-		averageRating={hoveredTooltip.averageRating}
-		detail={hoveredTooltip.detail}
-		id="stats-library-tooltip"
-		position={{ left: tooltipLeft, top: tooltipTop }}
-	/>
-{/if}
 
 <style>
 	.library-section {
@@ -349,64 +246,5 @@
 	}
 	.watched {
 		background: #29acf4;
-	}
-	.momentum {
-		display: grid;
-		grid-template-columns: repeat(12, minmax(0, 1fr));
-		gap: 10px;
-		margin-top: 25px;
-	}
-	.momentum.annual {
-		grid-template-columns: repeat(auto-fit, minmax(58px, 1fr));
-	}
-	.momentum-period {
-		min-width: 0;
-		text-align: center;
-	}
-	.pair {
-		height: 132px;
-		display: flex;
-		align-items: end;
-		justify-content: center;
-		gap: 5px;
-		border-bottom: 1px solid var(--stats-border);
-	}
-	.momentum-bar {
-		position: relative;
-		width: 24px;
-		max-width: 42%;
-		min-height: 0;
-		padding: 0;
-		border-radius: 3px 3px 0 0;
-	}
-	.momentum-bar > span {
-		position: absolute;
-		bottom: calc(100% + 3px);
-		left: 50%;
-		transform: translateX(-50%);
-		font-size: 11px;
-		color: var(--stats-muted);
-	}
-	.period-label {
-		display: block;
-		font-size: 12px;
-		margin-top: 7px;
-		color: var(--stats-muted);
-	}
-	button:not(:disabled) {
-		cursor: pointer;
-	}
-	button:not(:disabled):hover {
-		filter: brightness(1.15);
-	}
-	button:focus-visible {
-		outline: 2px solid var(--stats-accent);
-		outline-offset: 3px;
-	}
-	@media (max-width: 600px) {
-		.momentum {
-			grid-template-columns: repeat(6, minmax(0, 1fr));
-			gap: 18px 8px;
-		}
 	}
 </style>

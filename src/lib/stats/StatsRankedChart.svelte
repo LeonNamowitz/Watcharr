@@ -8,6 +8,7 @@
 	import { RatingSystem } from "@/types";
 	import type { StatsBar } from "./types";
 	import { statsTooltipPosition } from "./tooltipPosition";
+	import { holdTooltip } from "./holdTooltip.svelte";
 	let {
 		title,
 		items,
@@ -28,9 +29,17 @@
 		count?: number;
 	} = $props();
 	let hovered = $state<StatsBar>();
+	const touchTooltip = holdTooltip({
+		target: ".row",
+		canPin: () => !!hovered,
+		onDismiss: () => {
+			hovered = undefined;
+		},
+	});
 	let tooltipLeft = $state(0);
 	let tooltipTop = $state(0);
 	function showTooltip(item: StatsBar, event: PointerEvent | FocusEvent) {
+		if (touchTooltip.pinned) return;
 		const element = event.currentTarget;
 		if (!(element instanceof HTMLElement)) return;
 		// Dialogs restore focus to their trigger, including after touch selection.
@@ -41,6 +50,7 @@
 		hovered = item;
 	}
 	function hideTooltip() {
+		if (touchTooltip.pinned) return;
 		hovered = undefined;
 	}
 
@@ -83,6 +93,7 @@
 <svelte:window onscrollcapture={hideTooltip} onresize={hideTooltip} />
 
 <div
+	{@attach touchTooltip.attach}
 	class="ranking"
 	role="group"
 	aria-label={title}
