@@ -60,11 +60,11 @@ var gameCategoryNames = map[int]string{
 
 type contentMetadata struct {
 	media            domain.Media
-	genres           []domain.TagSuggestionOption
-	keywords         []domain.TagSuggestionOption
-	composers        []domain.TagSuggestionOption
-	originalLanguage string
-	collection       *domain.TagSuggestionOption
+	Genres           []domain.TagSuggestionOption
+	Keywords         []domain.TagSuggestionOption
+	Composers        []domain.TagSuggestionOption
+	OriginalLanguage string
+	Collection       *domain.TagSuggestionOption
 }
 
 func (s *Service) getUntaggedWatched(userID uint, tagID uint) ([]entity.Watched, error) {
@@ -106,7 +106,7 @@ func watchedName(w *entity.Watched) string {
 	return ""
 }
 
-func (s *Service) scanContentMetadata(watched []entity.Watched) ([]contentMetadata, []domain.TagCandidate, error) {
+func (s *Service) scanContentMetadata(watched []entity.Watched, kind suggestionKind) ([]contentMetadata, []domain.TagCandidate, error) {
 	eligible := make([]entity.Watched, 0, len(watched))
 	for _, item := range watched {
 		if item.Content != nil {
@@ -134,7 +134,7 @@ func (s *Service) scanContentMetadata(watched []entity.Watched) ([]contentMetada
 		go func() {
 			defer workers.Done()
 			for item := range jobs {
-				metadata, err := s.fetchContentMetadata(item)
+				metadata, err := s.cachedContentMetadata(item, metadataProfile(kind))
 				results <- scanResult{item: item, metadata: metadata, err: err}
 			}
 		}()
@@ -183,8 +183,9 @@ func skippedTagCandidates(watched []entity.Watched) []domain.TagCandidate {
 	return items
 }
 
-func (s *Service) fetchContentMetadata(item entity.Watched) (contentMetadata, error) {
+func (s *Service) fetchContentMetadata(item entity.Watched, profile string) (contentMetadata, error) {
 	id := strconv.Itoa(item.Content.TmdbID)
+	params := metadataParams(profile, item.Content.Type)
 	var genres []domain.TagSuggestionOption
 	var keywords []domain.TagSuggestionOption
 	var composers []domain.TagSuggestionOption
@@ -194,7 +195,7 @@ func (s *Service) fetchContentMetadata(item entity.Watched) (contentMetadata, er
 	case entity.MOVIE:
 		details, err := s.tmdb.MovieDetails(tmdb.MovieDetailsOptions{
 			ID:             id,
-			Params:         map[string]string{"append_to_response": "keywords,credits"},
+			Params:         params,
 			DontRunDBCache: true,
 		})
 		if err != nil {
@@ -213,7 +214,7 @@ func (s *Service) fetchContentMetadata(item entity.Watched) (contentMetadata, er
 	case entity.SHOW:
 		details, err := s.tmdb.ShowDetails(tmdb.ShowDetailsOptions{
 			ID:             id,
-			Params:         map[string]string{"append_to_response": "keywords,aggregate_credits"},
+			Params:         params,
 			DontRunDBCache: true,
 		})
 		if err != nil {
@@ -229,11 +230,11 @@ func (s *Service) fetchContentMetadata(item entity.Watched) (contentMetadata, er
 	media := domain.NewMediaFromWatched(&item, ptr(domain.NewWatchedDtoForLists(&item)))
 	return contentMetadata{
 		media:            media,
-		genres:           genres,
-		keywords:         keywords,
-		composers:        composers,
-		originalLanguage: originalLanguage,
-		collection:       collection,
+		Genres:           genres,
+		Keywords:         keywords,
+		Composers:        composers,
+		OriginalLanguage: originalLanguage,
+		Collection:       collection,
 	}, nil
 }
 
@@ -286,11 +287,23 @@ func suggestionOptionValues(options map[int]domain.TagSuggestionOption) []domain
 }
 
 func (s *Service) GetSuggestionOptions(userID uint, tagID uint) (domain.TagSuggestionOptionsResponse, error) {
+	return s.getSuggestionOptions(userID, tagID, suggestionKindAll)
+}
+
+func (s *Service) getSuggestionOptions(userID uint, tagID uint, kind suggestionKind) (domain.TagSuggestionOptionsResponse, error) {
+	if !validSuggestionKind(kind) {
+		return domain.TagSuggestionOptionsResponse{}, errors.New("unsupported suggestion kind")
+	}
 	watched, err := s.getUntaggedWatched(userID, tagID)
 	if err != nil {
 		return domain.TagSuggestionOptionsResponse{}, err
 	}
-	metadata, skippedItems, metadataErr := s.scanContentMetadata(watched)
+	var metadata []contentMetadata
+	var skippedItems []domain.TagCandidate
+	var metadataErr error
+	if metadataProfile(kind) != "local" {
+		metadata, skippedItems, metadataErr = s.scanContentMetadata(watched, kind)
+	}
 	response := domain.TagSuggestionOptionsResponse{
 		Genres:         []domain.TagSuggestionOption{},
 		Keywords:       []domain.TagSuggestionOption{},
@@ -315,27 +328,27 @@ func (s *Service) GetSuggestionOptions(userID uint, tagID uint) (domain.TagSugge
 	gameModeCounts := map[string]domain.TagValueSuggestionOption{}
 	gameCategoryCounts := map[string]domain.TagValueSuggestionOption{}
 	for _, item := range metadata {
-		for _, genre := range item.genres {
+		for _, genre := range item.Genres {
 			genre.Count = genreCounts[genre.ID].Count + 1
 			genreCounts[genre.ID] = genre
 		}
-		for _, keyword := range item.keywords {
+		for _, keyword := range item.Keywords {
 			keyword.Count = keywordCounts[keyword.ID].Count + 1
 			keywordCounts[keyword.ID] = keyword
 		}
-		for _, composer := range item.composers {
+		for _, composer := range item.Composers {
 			composer.Count = composerCounts[composer.ID].Count + 1
 			composerCounts[composer.ID] = composer
 		}
-		if item.originalLanguage != "" {
-			option := languageCounts[item.originalLanguage]
-			option.Code = item.originalLanguage
-			option.Name = languageName(item.originalLanguage)
+		if item.OriginalLanguage != "" {
+			option := languageCounts[item.OriginalLanguage]
+			option.Code = item.OriginalLanguage
+			option.Name = languageName(item.OriginalLanguage)
 			option.Count++
-			languageCounts[item.originalLanguage] = option
+			languageCounts[item.OriginalLanguage] = option
 		}
-		if item.collection != nil {
-			collection := *item.collection
+		if item.Collection != nil {
+			collection := *item.Collection
 			collection.Count = collectionCounts[collection.ID].Count + 1
 			collectionCounts[collection.ID] = collection
 		}
@@ -473,7 +486,7 @@ func (s *Service) GetCandidates(
 	if (kind == suggestionKindGameGenre || kind == suggestionKindGameMode || kind == suggestionKindGameCategory) && strings.TrimSpace(criterion) == "" {
 		return domain.TagCandidatesResponse{}, errors.New("a game suggestion criterion is required")
 	}
-	if kind != suggestionKindAll && kind != suggestionKindGenre && kind != suggestionKindKeyword && kind != suggestionKindComposer && kind != suggestionKindLanguage && kind != suggestionKindCollection && kind != suggestionKindFuture && kind != suggestionKindGameGenre && kind != suggestionKindGameMode && kind != suggestionKindGameFuture && kind != suggestionKindGameCategory {
+	if !validSuggestionKind(kind) {
 		return domain.TagCandidatesResponse{}, errors.New("unsupported suggestion kind")
 	}
 
@@ -535,7 +548,7 @@ func (s *Service) GetCandidates(
 			}
 		}
 	case suggestionKindGenre, suggestionKindKeyword, suggestionKindComposer, suggestionKindLanguage, suggestionKindCollection:
-		metadata, skippedItems, err := s.scanContentMetadata(watched)
+		metadata, skippedItems, err := s.scanContentMetadata(watched, kind)
 		if err != nil && len(skippedItems) == 0 {
 			return domain.TagCandidatesResponse{}, err
 		}
@@ -547,7 +560,7 @@ func (s *Service) GetCandidates(
 				continue
 			}
 			if kind == suggestionKindLanguage {
-				if item.originalLanguage == originalLanguage {
+				if item.OriginalLanguage == originalLanguage {
 					candidates = append(candidates, domain.TagCandidate{
 						Media:  item.media,
 						Reason: "Original language: " + languageName(originalLanguage),
@@ -556,22 +569,22 @@ func (s *Service) GetCandidates(
 				continue
 			}
 			if kind == suggestionKindCollection {
-				if item.collection != nil && item.collection.ID == criterionID {
+				if item.Collection != nil && item.Collection.ID == criterionID {
 					candidates = append(candidates, domain.TagCandidate{
 						Media:  item.media,
-						Reason: "Collection: " + item.collection.Name,
+						Reason: "Collection: " + item.Collection.Name,
 					})
 				}
 				continue
 			}
 
-			options := item.genres
+			options := item.Genres
 			label := "Genre"
 			if kind == suggestionKindKeyword {
-				options = item.keywords
+				options = item.Keywords
 				label = "Keyword"
 			} else if kind == suggestionKindComposer {
-				options = item.composers
+				options = item.Composers
 				label = "Composer"
 			}
 			for _, option := range options {

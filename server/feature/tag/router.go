@@ -46,7 +46,7 @@ func (r *Router) GetSuggestionOptions(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, router.ErrorResponse{Error: "invalid tag id"})
 		return
 	}
-	response, err := r.service.GetSuggestionOptions(userID, uint(tagID))
+	response, err := r.service.getSuggestionOptions(userID, uint(tagID), suggestionKind(c.DefaultQuery("kind", string(suggestionKindAll))))
 	if err != nil {
 		c.JSON(http.StatusBadGateway, router.ErrorResponse{Error: err.Error()})
 		return

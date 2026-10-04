@@ -39,6 +39,20 @@ func tmdbResponse(status int, retryAfter, body string) *http.Response {
 	return &http.Response{StatusCode: status, Header: headers, Body: io.NopCloser(strings.NewReader(body))}
 }
 
+func TestTMDBRequestsTimeOutStalledConnections(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		mockTMDBRequests(t, func(r *http.Request) (*http.Response, error) {
+			<-r.Context().Done()
+			return nil, r.Context().Err()
+		})
+		started := time.Now()
+		_, err := NewTMDB("test").apiRequest("/movie/10", nil)
+		if err == nil || time.Since(started) != 15*time.Second {
+			t.Fatalf("stalled request: elapsed=%s err=%v", time.Since(started), err)
+		}
+	})
+}
+
 func TestTMDBRequestsSharePacingAcrossClientsAndEndpoints(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		var mu sync.Mutex

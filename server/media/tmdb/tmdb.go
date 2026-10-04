@@ -1,6 +1,7 @@
 package tmdb
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -65,8 +66,17 @@ func (t *TMDB) apiRequest(ep string, p map[string]string) ([]byte, error) {
 
 	for attempt := 0; ; attempt++ {
 		tmdbRequests.wait()
-		res, err := http.Get(base.String())
+		// Bound connection and body reads so one stalled title cannot hold up
+		// a library scan indefinitely. Keep the shared pacing and 429 retries.
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		request, err := http.NewRequestWithContext(ctx, http.MethodGet, base.String(), nil)
 		if err != nil {
+			cancel()
+			return nil, err
+		}
+		res, err := http.DefaultClient.Do(request)
+		if err != nil {
+			cancel()
 			return nil, err
 		}
 		if res.StatusCode == http.StatusTooManyRequests {
@@ -75,6 +85,7 @@ func (t *TMDB) apiRequest(ep string, p map[string]string) ([]byte, error) {
 		}
 		body, err := io.ReadAll(res.Body)
 		res.Body.Close()
+		cancel()
 		if err != nil {
 			return nil, err
 		}

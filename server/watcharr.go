@@ -240,7 +240,7 @@ func main() {
 	profileService := profile.NewService(db)
 	statsService := stats.NewService(db, tmdbService, &br.Cfg.TWITCH)
 	followService := follow.NewService(db)
-	tagService := tag.NewService(db, watchedService, tmdbService)
+	tagService := tag.NewService(db, watchedService, tmdbService, path.Join(config.DataPath, "cache", "tag-suggestions"))
 	searchService := search.NewService(db, br.Cfg, tmdbService, watchedService)
 	discoverService := discover.NewService(db, br.Cfg, tmdbService)
 	importService := imprt.NewService(

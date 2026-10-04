@@ -5,11 +5,13 @@ import (
 	"log/slog"
 	"time"
 
+	gocache "github.com/robfig/go-cache"
 	"github.com/sbondCo/Watcharr/database/dbmodel"
 	"github.com/sbondCo/Watcharr/database/entity"
 	"github.com/sbondCo/Watcharr/domain"
 	"github.com/sbondCo/Watcharr/media/tmdb"
 	"github.com/sbondCo/Watcharr/util"
+	"golang.org/x/sync/singleflight"
 	"gorm.io/gorm"
 )
 
@@ -27,23 +29,32 @@ type TMDBProvider interface {
 }
 
 type Service struct {
-	db              *gorm.DB
-	watchedProvider WatchedProvider
-	tmdb            TMDBProvider
-	now             func() time.Time
+	db               *gorm.DB
+	watchedProvider  WatchedProvider
+	tmdb             TMDBProvider
+	now              func() time.Time
+	metadataCache    *gocache.Cache
+	metadataCacheDir string
+	metadataRequests singleflight.Group
 }
 
 func NewService(
 	db *gorm.DB,
 	watchedProvider WatchedProvider,
 	tmdbProvider TMDBProvider,
+	metadataCacheDir ...string,
 ) *Service {
-	return &Service{
+	s := &Service{
 		db:              db,
 		watchedProvider: watchedProvider,
 		tmdb:            tmdbProvider,
 		now:             time.Now,
+		metadataCache:   gocache.New(metadataCacheTTL, 0),
 	}
+	if len(metadataCacheDir) > 0 {
+		s.metadataCacheDir = metadataCacheDir[0]
+	}
+	return s
 }
 
 func (s *Service) GetTags(userId uint) ([]entity.Tag, error) {

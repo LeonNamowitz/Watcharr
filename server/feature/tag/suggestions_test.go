@@ -20,7 +20,7 @@ type suggestionTMDB struct {
 }
 
 func (p *suggestionTMDB) MovieDetails(options tmdb.MovieDetailsOptions) (tmdb.MovieDetails, error) {
-	if options.Params["append_to_response"] != "keywords,credits" {
+	if append := options.Params["append_to_response"]; append != "" && append != "keywords" && append != "credits" && append != "keywords,credits" {
 		return tmdb.MovieDetails{}, errors.New("keywords and credits were not requested")
 	}
 	if p.failMovie[options.ID] {
@@ -30,7 +30,7 @@ func (p *suggestionTMDB) MovieDetails(options tmdb.MovieDetailsOptions) (tmdb.Mo
 }
 
 func (p *suggestionTMDB) ShowDetails(options tmdb.ShowDetailsOptions) (tmdb.ShowDetails, error) {
-	if options.Params["append_to_response"] != "keywords,aggregate_credits" {
+	if append := options.Params["append_to_response"]; append != "" && append != "keywords" && append != "aggregate_credits" && append != "keywords,aggregate_credits" {
 		return tmdb.ShowDetails{}, errors.New("keywords and aggregate credits were not requested")
 	}
 	if p.failShow[options.ID] {

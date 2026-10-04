@@ -35,7 +35,11 @@
 	let criterionValue = $state("");
 	let languageCode = $state("");
 	let facetQuery = $state("");
-	let options: TagSuggestionOptionsResponse | undefined = $state();
+	let optionResponses = $state<Record<string, TagSuggestionOptionsResponse>>(
+		{},
+	);
+	const pendingOptions = new SvelteSet<string>();
+	let options = $derived(optionResponses[optionsKey(source)]);
 	let candidates: TagCandidate[] = $state([]);
 	const selectedIds = new SvelteSet<number>();
 	let queryInput = $state("");
@@ -44,7 +48,7 @@
 	let totalPages = $state(0);
 	let totalResults = $state(0);
 	let candidateMeta: TagCandidateMeta | undefined = $state();
-	let loadingOptions = $state(false);
+	let loadingOptions = $derived(pendingOptions.has(optionsKey(source)));
 	let loadingCandidates = $state(false);
 	let saving = $state(false);
 	let error = $state("");
@@ -215,19 +219,30 @@
 		return "External ID unavailable";
 	}
 
+	function optionsKey(kind: typeof source) {
+		if (["genre", "language", "collection"].includes(kind)) return "basic";
+		if (kind.startsWith("game_") || kind === "future") return "local";
+		return kind;
+	}
+
 	async function loadOptions() {
-		if (options || loadingOptions) return;
-		loadingOptions = true;
+		const kind = source;
+		const key = optionsKey(kind);
+		if (optionResponses[key] || pendingOptions.has(key)) return;
+		pendingOptions.add(key);
 		error = "";
 		try {
-			options = await req.get<TagSuggestionOptionsResponse>(
+			optionResponses[key] = await req.get<TagSuggestionOptionsResponse>(
 				`/tag/${tag.id}/suggestion-options`,
+				{ params: { kind } },
 			);
 		} catch (err) {
 			console.error("BulkAddTagModal: Failed loading suggestion options", err);
-			error = "Failed to load suggestion options.";
+			if (mode === "suggestions" && optionsKey(source) === key) {
+				error = "Failed to load suggestion options.";
+			}
 		} finally {
-			loadingOptions = false;
+			pendingOptions.delete(key);
 		}
 	}
 
@@ -289,16 +304,21 @@
 
 	async function changeMode(nextMode: "browse" | "suggestions") {
 		mode = nextMode;
+		++requestVersion;
+		loadingCandidates = false;
 		page = 1;
 		candidateMeta = undefined;
 		if (mode === "suggestions") {
-			await loadOptions();
+			await Promise.all([loadOptions(), loadCandidates()]);
+		} else {
+			await loadCandidates();
 		}
-		await loadCandidates();
 	}
 
 	async function changeSource(event: Event) {
 		source = (event.currentTarget as HTMLSelectElement).value as typeof source;
+		++requestVersion;
+		loadingCandidates = false;
 		criterionId = "";
 		criterionValue = "";
 		languageCode = "";
@@ -306,6 +326,7 @@
 		page = 1;
 		candidateMeta = undefined;
 		await loadCandidates();
+		await loadOptions();
 	}
 
 	async function changeCriterion(event: Event) {
@@ -542,7 +563,10 @@
 				</div>
 			{/if}
 			{#if loadingOptions}
-				<div class="inline-loading"><Spinner /></div>
+				<div class="inline-loading" role="status">
+					<Spinner />
+					<span>Loading {sourceLabel()} suggestions…</span>
+				</div>
 			{:else if options?.incomplete}
 				<p class="warning">
 					Some suggestion data could not be loaded (&nbsp;
@@ -993,6 +1017,10 @@
 			font-size: 12px;
 			color: #64c894;
 		}
+	}
+
+	.inline-loading {
+		gap: 10px;
 	}
 
 	.inline-loading,
