@@ -64,6 +64,7 @@ type StatsResponse struct {
 	Media                string            `json:"media"`
 	Owner                entity.PublicUser `json:"owner"`
 	ReviewsVisible       bool              `json:"reviewsVisible"`
+	ReviewLengths        *ReviewLengths    `json:"reviewLengths,omitempty"`
 	Languages            []BarStat         `json:"languages"`
 	Studios              []PersonStat      `json:"studios"`
 	Year                 int               `json:"year,omitempty"`
@@ -455,6 +456,12 @@ func (s *Service) GetStats(userID uint, q Query) (StatsResponse, error) {
 
 	if q.HideReviews {
 		response.Breakdown.Reviews = nil
+	} else {
+		reviews := make([]savedMediaRecord, 0, len(scopeRecords))
+		for _, record := range scopeRecords {
+			reviews = append(reviews, savedMediaRecord{watched: record.watched, card: mediaCard(record, metadata)})
+		}
+		response.ReviewLengths = buildReviewLengths(reviews)
 	}
 	return response, nil
 }

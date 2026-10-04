@@ -98,7 +98,7 @@ func TestStatsLayoutPersistenceAndOwnerScope(t *testing.T) {
 	}
 	expected := map[string][]string{}
 	for _, input := range []struct{ media, first string }{{"movie", "titles"}, {"tv", "highest-rated-episodes"}, {"game", "playtime"}} {
-		body, _ := json.Marshal(map[string]any{"media": input.media, "sectionOrder": []string{input.first}})
+		body, _ := json.Marshal(map[string]any{"media": input.media, "sectionOrder": []string{"milestones", input.first}})
 		r := call(http.MethodPut, "/api/stats/layout", string(body), ownerToken)
 		if r.Code != http.StatusOK {
 			t.Fatalf("save %s: %d %s", input.media, r.Code, r.Body.String())
@@ -109,7 +109,7 @@ func TestStatsLayoutPersistenceAndOwnerScope(t *testing.T) {
 		if err := json.Unmarshal(r.Body.Bytes(), &response); err != nil {
 			t.Fatal(err)
 		}
-		expected[input.media] = normalizeSectionOrder(input.media, []string{input.first})
+		expected[input.media] = normalizeSectionOrder(input.media, []string{"milestones", input.first})
 		if !reflect.DeepEqual(response.SectionOrder, expected[input.media]) {
 			t.Fatalf("save must return normalized order: %v", response.SectionOrder)
 		}

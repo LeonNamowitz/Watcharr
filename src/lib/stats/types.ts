@@ -42,6 +42,10 @@ export interface StatsPie {
 	count: number;
 }
 export interface StatsResponse {
+	reviewLengths?: {
+		shortest?: { item: StatsMediaCard; wordCount: number };
+		longest?: { item: StatsMediaCard; wordCount: number };
+	};
 	sectionOrder?: string[];
 	library?: StatsLibrary;
 	calendar?: StatsDay[];

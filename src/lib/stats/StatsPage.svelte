@@ -911,24 +911,32 @@
 {/snippet}
 
 {#snippet milestonesSection()}
+	{@const reviews = data.reviewsVisible ? data.reviewLengths : undefined}
+	{@const hasReviews = !!(reviews?.shortest || reviews?.longest)}
 	<section data-stats-section="milestones">
 		<div class="section-heading">
 			<h2 class="norm">Milestones</h2>
 			<span>{lifetime ? "From the beginning" : `Bookends of ${data.year}`}</span
 			>
 		</div>
-		<div class="milestones">
-			{#each [{ label: isGame ? "First recorded progress" : "First watch", card: data.milestones.first }, { label: isGame ? "Last recorded progress" : "Last watch", card: data.milestones.last }] as milestone (milestone.label)}<div
+		<div class="milestones" class:with-reviews={hasReviews}>
+			{#each [{ label: isGame ? "First recorded progress" : "First watch", card: data.milestones.first, wordCount: undefined }, ...(hasReviews ? [{ label: "Shortest review", card: reviews?.shortest?.item, wordCount: reviews?.shortest?.wordCount }, { label: "Longest review", card: reviews?.longest?.item, wordCount: reviews?.longest?.wordCount }] : []), { label: isGame ? "Last recorded progress" : "Last watch", card: data.milestones.last, wordCount: undefined }] as milestone (milestone.label)}<div
 				>
 					<h3 class="norm">{milestone.label}</h3>
 					<StatsPosters
 						items={milestone.card ? [milestone.card] : []}
 						owner={publicOwner}
 						{settings}
-						detail={(c) => c.date ?? ""}
+						detail={(c) =>
+							milestone.wordCount === undefined
+								? (c.date ?? "")
+								: `${milestone.wordCount.toLocaleString()} ${milestone.wordCount === 1 ? "word" : "words"}`}
 					/>
 				</div>{/each}
 		</div>
+		{#if reviews && !hasReviews}
+			<p class="muted">No written reviews for this view.</p>
+		{/if}
 		{#if data.milestones.mostWatched.length}<h3 class="subheading norm">
 				{isGame ? "Most replayed" : "Most watched"}
 			</h3>
@@ -1911,6 +1919,9 @@
 	.milestones > :last-child {
 		grid-column: -2 / -1;
 	}
+	.milestones.with-reviews {
+		grid-template-columns: repeat(4, minmax(0, 1fr));
+	}
 	.milestones :global(.posters:not(.tiny):not(.wall):not(.episodes)) {
 		display: grid;
 		grid-template-columns: minmax(0, 1fr);
@@ -2229,7 +2240,8 @@
 		.category-controls {
 			justify-content: start;
 		}
-		.milestones {
+		.milestones,
+		.milestones.with-reviews {
 			grid-template-columns: repeat(2, minmax(0, 1fr));
 			gap: 8px;
 		}

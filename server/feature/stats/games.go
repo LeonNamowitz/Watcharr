@@ -250,6 +250,13 @@ func (s *Service) getGameStats(userID uint, q Query) (StatsResponse, error) {
 		}
 	}
 	response.Games = games
+	if !q.HideReviews {
+		reviews := make([]savedMediaRecord, 0, len(scoped))
+		for _, record := range scoped {
+			reviews = append(reviews, savedMediaRecord{watched: record.watched, card: record.card})
+		}
+		response.ReviewLengths = buildReviewLengths(reviews)
+	}
 	return response, nil
 }
 
