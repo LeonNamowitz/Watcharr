@@ -143,6 +143,7 @@ type MediaCard struct {
 type HighestRated struct {
 	Current []MediaCard `json:"current"`
 	Older   []MediaCard `json:"older"`
+	Unknown []MediaCard `json:"unknown,omitempty"`
 }
 
 type WeekStat struct {
@@ -343,6 +344,9 @@ func (s *Service) GetStats(userID uint, q Query) (StatsResponse, error) {
 		if len(r.plays) > 0 {
 			first := r.plays[0]
 			r.firstPlay = &first
+		}
+		if hasLegacyFinish(r) {
+			availableYears[r.watched.CreatedAt.UTC().Year()] = true
 		}
 		records = append(records, r)
 	}
@@ -825,6 +829,7 @@ func buildDecades(records []*watchedRecord, metadata map[string]contentMetadata)
 func buildHighestRated(records []*watchedRecord, year int, metadata map[string]contentMetadata) HighestRated {
 	current := make([]*watchedRecord, 0)
 	older := make([]*watchedRecord, 0)
+	unknown := make([]*watchedRecord, 0)
 	for _, record := range records {
 		if record.episode != nil && record.watched.Rating < highestRatedEpisodeMinimum {
 			continue
@@ -836,6 +841,8 @@ func buildHighestRated(records []*watchedRecord, year int, metadata map[string]c
 			current = append(current, record)
 		} else if releaseYear(record.content) > 0 && releaseYear(record.content) < year {
 			older = append(older, record)
+		} else if record.episode != nil && releaseYear(record.content) == 0 {
+			unknown = append(unknown, record)
 		}
 	}
 	byRating := func(items []*watchedRecord) {
@@ -848,6 +855,7 @@ func buildHighestRated(records []*watchedRecord, year int, metadata map[string]c
 	}
 	byRating(current)
 	byRating(older)
+	byRating(unknown)
 	limit := 5
 	if year == 0 {
 		limit = len(current)
@@ -871,7 +879,7 @@ func buildHighestRated(records []*watchedRecord, year int, metadata map[string]c
 		limit = len(current)
 		olderLimit = len(older)
 	}
-	return HighestRated{Current: cards(current, metadata, limit), Older: cards(older, metadata, olderLimit)}
+	return HighestRated{Current: cards(current, metadata, limit), Older: cards(older, metadata, olderLimit), Unknown: cards(unknown, metadata, len(unknown))}
 }
 
 func buildActivity(records []*watchedRecord) ActivityStats {

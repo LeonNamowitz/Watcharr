@@ -343,10 +343,6 @@
 				{titleUnit} previously planned</span
 			>
 		</div>
-		{#if library.waiting.excluded}<p class="note">
-				{library.waiting.excluded.toLocaleString()} first-{conversion}
-				{titleUnit} excluded.
-			</p>{/if}
 		<StatsChart
 			title={`${isGame ? "Backlog" : "Watchlist"} waiting time`}
 			valueUnit={titleUnit}
@@ -366,6 +362,10 @@
 					description: convertedFromList,
 				})}
 		/>
+		{#if library.waiting.excluded}<p class="note">
+				{library.waiting.excluded.toLocaleString()} first-{conversion}
+				{titleUnit} excluded.
+			</p>{/if}
 		{#if library.waiting.longest.length}
 			<h3 class="norm">The longest waits</h3>
 			<StatsPosters

@@ -48,12 +48,12 @@
 		STATS_BACKGROUND_CONTEXT,
 	);
 	let episodeCount = $state(5);
-	let episodeTab = $state<"current" | "older">("current");
+	let episodeTab = $state<"current" | "older" | "unknown">("current");
 	let highestTab = $state<"current" | "older">("current");
 	let yearlyFavoriteCount = $state(5);
-	// Rows added per click for Cast and Directors & creators only.
+	// MOD: Rows added per click for Cast and Directors & creators only.
 	const peopleExpansionRows = 3;
-	// Rows added per click in the title list popup.
+	// MOD: Rows added per click in the title list popup.
 	const titleDialogExpansionRows = 2;
 	let peopleMode = $state<"most" | "rating">("most");
 	let categorySort = $state<"count" | "rating">("count");
@@ -364,7 +364,13 @@
 			gameCalendarKind = "progress";
 			waitingCount = 5;
 			episodeCount = 5;
-			episodeTab = "current";
+			episodeTab =
+				!lifetime &&
+				data.highestRatedEpisodes?.unknown?.length &&
+				!data.highestRatedEpisodes.current.length &&
+				!data.highestRatedEpisodes.older.length
+					? "unknown"
+					: "current";
 			yearlyFavoriteCount = 5;
 			favoriteCount = 5;
 			highestTab = "current";
@@ -551,7 +557,7 @@
 			<div class="section-heading">
 				<h2 class="norm">Highest rated episodes</h2>
 				{#if lifetime}<span>Your favorites rated 9/10 or above</span>
-				{:else}<StatsSegmentedControl>
+				{:else}<StatsSegmentedControl label="Episode release year" wrap>
 						<button
 							class:active={episodeTab === "current"}
 							aria-pressed={episodeTab === "current"}
@@ -568,6 +574,16 @@
 								episodeCount = 5;
 							}}>Older</button
 						>
+						{#if data.highestRatedEpisodes?.unknown?.length}
+							<button
+								class:active={episodeTab === "unknown"}
+								aria-pressed={episodeTab === "unknown"}
+								onclick={() => {
+									episodeTab = "unknown";
+									episodeCount = 5;
+								}}>Unknown release</button
+							>
+						{/if}
 					</StatsSegmentedControl>{/if}
 			</div>
 			<StatsPosters
@@ -821,7 +837,9 @@
 											metric.key === "averageRating"
 												? historyItems(p, metric.key).length
 												: Number(p[metric.key as keyof typeof p] ?? 0),
-										averageRating: p.averageRating,
+										averageRating: meanRating(
+											historyItems(p, metric.key).map((item) => item.rating),
+										),
 									}))}
 									{settings}
 									onSelect={explorePoint}
@@ -944,14 +962,9 @@
 							>
 						</StatsSegmentedControl>
 					</div>
-					<div class="averages activity-averages">
+					<div class="activity-averages">
 						<span
-							><strong
-								>{(data.media === "tv"
-									? data.activity.total
-									: data.summary.titles
-								).toLocaleString()}</strong
-							>
+							><strong>{data.activity.total.toLocaleString()}</strong>
 							{data.media === "movie" ? "films" : "episodes"} watched</span
 						>
 						<span
@@ -1413,9 +1426,13 @@
 			<footer>
 				{isGame
 					? "Based on recorded starts, non-planned status changes and completions. Legacy games without progress history use their saved creation date."
-					: "Based on recorded whole-title watches."} Past years use current saved
+					: data.media === "tv"
+						? "TV activity counts episode finishes; show statistics use recorded whole-show watches."
+						: "Based on recorded whole-title watches."} Past years use current saved
 				ratings{data.reviewsVisible ? " and reviews" : ""}. Dates use UTC. {isGame
-					? "Game metadata from IGDB. Playtime shows current saved totals in Lifetime only."
+					? lifetime
+						? "Game metadata from IGDB. Playtime shows current saved totals."
+						: "Game metadata from IGDB. Yearly recorded hours are current saved totals for games first completed in that year."
 					: "Movie and TV metadata from TMDB."}
 			</footer>
 		</div>{/key}
@@ -1714,17 +1731,6 @@
 		color: var(--stats-muted);
 		margin: 0 0 12px;
 	}
-	.averages {
-		display: flex;
-		gap: 16px;
-		font-size: 13px;
-		opacity: 0.8;
-	}
-	.averages strong {
-		color: var(--stats-accent, #29acf4);
-		font-size: 18px;
-		font-weight: 500;
-	}
 	summary {
 		cursor: pointer;
 		font-size: 14px;
@@ -1933,12 +1939,6 @@
 		display: block;
 		font-size: 13px;
 		color: var(--stats-muted);
-	}
-	.activity-averages {
-		align-items: baseline;
-		flex-wrap: wrap;
-		row-gap: 8px;
-		margin: -4px 0 18px;
 	}
 	.back:hover,
 	.crew-person:hover {

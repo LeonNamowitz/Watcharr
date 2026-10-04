@@ -20,6 +20,22 @@
 	color: var(--stats-muted);
 }
 
+.stats-page .activity-averages {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: 10px 28px;
+	margin: -4px 0 18px;
+	color: var(--stats-muted);
+	font-size: 14px;
+}
+
+.stats-page .activity-averages strong {
+	color: var(--stats-text);
+	font-size: 22px;
+	padding-right: 4px;
+}
+
 @media (max-width: 520px) {
 	.stats-page .section-heading {
 		align-items: flex-start;

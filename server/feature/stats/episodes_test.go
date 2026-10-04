@@ -133,6 +133,9 @@ func TestEpisodeActivityRatingsAndCast(t *testing.T) {
 	if err != nil || failed.Activity.Total != 3 || !failed.Metadata.Partial || len(failed.Episodes) != 2 || failed.Episodes[0].Rating == 0 {
 		t.Fatalf("metadata failure must retain episodes: %#v %v", failed, err)
 	}
+	if len(failed.HighestRatedEpisodes.Unknown) != 1 || failed.HighestRatedEpisodes.Unknown[0].Rating != 9 || len(failed.HighestRatedEpisodes.Current) != 0 || len(failed.HighestRatedEpisodes.Older) != 0 {
+		t.Fatalf("missing release metadata must retain qualified favorites without guessing their release year: %#v", failed.HighestRatedEpisodes)
+	}
 	lifetime, err := NewService(db, episodeTMDB{}).GetStats(owner.ID, Query{Scope: ScopeLifetime, Media: "tv"})
 	if err != nil || len(lifetime.HighestRatedEpisodes.Current) != 1 {
 		t.Fatalf("lifetime rating threshold: %#v %v", lifetime.HighestRatedEpisodes, err)
@@ -203,6 +206,28 @@ func TestHighestRatedEpisodeMinimumAppliesToEveryPeriod(t *testing.T) {
 					t.Fatalf("episode below cutoff: %#v", card)
 				}
 			}
+		}
+	}
+}
+
+func TestHighestRatedEpisodesWithUnknownReleaseRetainAllFavorites(t *testing.T) {
+	records := []*watchedRecord{}
+	for i := 1; i <= 8; i++ {
+		records = append(records, &watchedRecord{
+			content: &entity.Content{TmdbID: 606, Type: entity.SHOW, Title: fmt.Sprintf("Show · S1E%d", i)},
+			watched: entity.Watched{Rating: float64(8 + i%3)},
+			episode: &entity.WatchedEpisode{SeasonNumber: 1, EpisodeNumber: i},
+		})
+	}
+	// An unknown whole-show release must retain its existing ranking rules.
+	records = append(records, &watchedRecord{content: &entity.Content{Type: entity.SHOW}, watched: entity.Watched{Rating: 10}})
+	ranked := buildHighestRated(records, 2025, nil)
+	if len(ranked.Unknown) != 6 || len(ranked.Current) != 0 || len(ranked.Older) != 0 {
+		t.Fatalf("unknown-release favorites must retain every qualified episode: %#v", ranked)
+	}
+	for i, card := range ranked.Unknown {
+		if card.Rating < 9 || card.EpisodeNumber == 0 || (i > 0 && card.Rating > ranked.Unknown[i-1].Rating) {
+			t.Fatalf("unknown-release favorites must retain the episode threshold and rating order: %#v", ranked.Unknown)
 		}
 	}
 }

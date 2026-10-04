@@ -196,7 +196,7 @@
 					>
 				</StatsSegmentedControl>
 			</div>
-			<div class="averages activity-averages">
+			<div class="activity-averages">
 				<span
 					><strong>{activity.total.toLocaleString()}</strong>
 					{activityUnit}</span
@@ -345,23 +345,6 @@
 	.muted {
 		color: var(--stats-muted);
 		font-size: 13px;
-	}
-	.averages {
-		display: flex;
-		gap: 16px;
-		font-size: 13px;
-		opacity: 0.8;
-	}
-	.averages strong {
-		color: var(--stats-accent, #29acf4);
-		font-size: 18px;
-		font-weight: 500;
-	}
-	.activity-averages {
-		align-items: baseline;
-		flex-wrap: wrap;
-		row-gap: 8px;
-		margin: -4px 0 18px;
 	}
 	.rankings {
 		display: grid;

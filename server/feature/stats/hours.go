@@ -1,17 +1,31 @@
 package stats
 
 import (
-	"github.com/sbondCo/Watcharr/database/entity"
 	"time"
+
+	"github.com/sbondCo/Watcharr/database/entity"
 )
 
-// Finished legacy rows without play activity use their original recorded date.
+// Legacy finishes have no recorded status history to supply or suppress a play.
+func hasLegacyFinish(r *watchedRecord) bool {
+	if len(r.plays) > 0 || r.watched.Status != entity.FINISHED || r.watched.CreatedAt.IsZero() {
+		return false
+	}
+	for _, activity := range r.watched.Activity {
+		if topLevelStatus(activity) != "" {
+			return false
+		}
+	}
+	return true
+}
+
+// Finished legacy rows without status history use their original recorded date.
 func recordsForHours(records []*watchedRecord, q Query) []*watchedRecord {
 	result := []*watchedRecord{}
 	for _, r := range records {
 		clone := *r
 		clone.plays = gameDatesInScope(r.plays, q)
-		if len(r.plays) == 0 && r.watched.Status == entity.FINISHED && !r.watched.CreatedAt.IsZero() {
+		if hasLegacyFinish(r) {
 			clone.plays = gameDatesInScope([]time.Time{r.watched.CreatedAt.UTC()}, q)
 		}
 		if len(clone.plays) > 0 {

@@ -81,7 +81,11 @@ export interface StatsResponse {
 		items: StatsMediaCard[];
 	}[];
 	episodes: StatsMediaCard[];
-	highestRatedEpisodes: { current: StatsMediaCard[]; older: StatsMediaCard[] };
+	highestRatedEpisodes: {
+		current: StatsMediaCard[];
+		older: StatsMediaCard[];
+		unknown?: StatsMediaCard[];
+	};
 	highestRated: { current: StatsMediaCard[]; older: StatsMediaCard[] };
 	activity: {
 		total: number;
