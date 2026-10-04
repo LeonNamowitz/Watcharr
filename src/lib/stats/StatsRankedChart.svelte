@@ -60,16 +60,22 @@
 			if (sort) count = 5;
 		});
 	});
+	// MOD: Minimum rated titles required for rating rankings.
+	const minimumRatedTitles = 2;
 	const ranked = $derived(
-		[...items].sort((a, b) =>
-			sortBy === "rating"
-				? b.averageRating - a.averageRating ||
-					b.count - a.count ||
-					a.label.localeCompare(b.label)
-				: b.count - a.count ||
-					b.averageRating - a.averageRating ||
-					a.label.localeCompare(b.label),
-		),
+		items
+			.filter(
+				(item) => sortBy !== "rating" || item.ratedCount >= minimumRatedTitles,
+			)
+			.sort((a, b) =>
+				sortBy === "rating"
+					? b.averageRating - a.averageRating ||
+						b.count - a.count ||
+						a.label.localeCompare(b.label)
+					: b.count - a.count ||
+						b.averageRating - a.averageRating ||
+						a.label.localeCompare(b.label),
+			),
 	);
 	const ratingScale = $derived(
 		settings.ratingSystem === RatingSystem.OutOf5

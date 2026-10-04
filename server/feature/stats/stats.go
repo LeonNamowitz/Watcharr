@@ -182,6 +182,7 @@ type BarStat struct {
 	TitleKeys     []string `json:"titleKeys"`
 	Label         string   `json:"label"`
 	Count         int      `json:"count"`
+	RatedCount    int      `json:"ratedCount"`
 	AverageRating float64  `json:"averageRating"`
 }
 
@@ -1042,7 +1043,7 @@ func buildBars(records []*watchedRecord, metadata map[string]contentMetadata, ge
 			keys = append(keys, key)
 		}
 		sort.Strings(keys)
-		result = append(result, BarStat{Label: label, Count: value.count, AverageRating: average(value.rating, value.rated), TitleKeys: keys})
+		result = append(result, BarStat{Label: label, Count: value.count, RatedCount: value.rated, AverageRating: average(value.rating, value.rated), TitleKeys: keys})
 	}
 	sort.SliceStable(result, func(i, j int) bool {
 		if result[i].Count == result[j].Count {

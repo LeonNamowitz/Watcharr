@@ -28,6 +28,7 @@
 	let focusAfterLoad: string | undefined;
 	let statsPage = $state<StatsPage>();
 	let requestVersion = 0;
+	let pendingRequest: AbortController | undefined;
 	let restoredKey: string | undefined;
 	let pendingContext: ReturnType<StatsPage["capture"]> | undefined;
 	const year = $derived(
@@ -87,6 +88,7 @@
 			return;
 		}
 		restoredKey = saved.key;
+		pendingRequest?.abort();
 		const version = ++requestVersion;
 		data = response;
 		loadedOwnerKey = ownerKey;
@@ -110,10 +112,12 @@
 			? `/public/users/${encodeURIComponent(owner.id)}/${encodeURIComponent(owner.username)}/stats`
 			: "/stats";
 		let active = true;
+		const controller = new AbortController();
+		pendingRequest = controller;
 		loading = true;
 		error = undefined;
 		(owner ? noAuthReq : req)
-			.get<StatsResponse>(`${path}?${params}`)
+			.get<StatsResponse>(`${path}?${params}`, { signal: controller.signal })
 			.then((result) => {
 				if (isActive()) {
 					data = result;
@@ -140,6 +144,8 @@
 			});
 		return () => {
 			active = false;
+			controller.abort();
+			if (pendingRequest === controller) pendingRequest = undefined;
 		};
 	});
 	async function saveLayout(sectionOrder: StatsSectionId[]) {

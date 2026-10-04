@@ -391,3 +391,31 @@ func TestGameBacklogPicksStableAndExcludeStartedPlannedGames(t *testing.T) {
 		t.Fatal("started planned game must retain history and leave backlog")
 	}
 }
+
+func TestGameCategoryRatedCountsExcludeUnratedTitles(t *testing.T) {
+	for _, category := range []string{"genres", "modes", "themes", "perspectives", "developers", "publishers"} {
+		t.Run(category, func(t *testing.T) {
+			records := []*gameRecord{}
+			for i, rating := range []float64{9, 7, 0} {
+				records = append(records, &gameRecord{card: MediaCard{ID: i + 1, Type: "game", Rating: rating}, categories: map[string][]string{category: {"Category", "Category"}}})
+			}
+			for _, size := range []int{1, 2, 3} {
+				expectedRated := size
+				if size == 3 {
+					expectedRated = 2
+				}
+				bars := gameBars(records[:size], category)
+				if len(bars) != 1 || bars[0].Count != size || bars[0].RatedCount != expectedRated {
+					t.Fatalf("incorrect total/rated membership: %#v", bars)
+				}
+				if size >= 2 && bars[0].AverageRating != 8 {
+					t.Fatalf("unrated game changed average: %#v", bars)
+				}
+			}
+			bars := gameBars(records[2:], category)
+			if bars[0].RatedCount != 0 || bars[0].Count != 1 || bars[0].AverageRating != 0 {
+				t.Fatalf("unrated category: %#v", bars)
+			}
+		})
+	}
+}

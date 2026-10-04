@@ -130,7 +130,9 @@
 		>
 			<div class="section-heading">
 				<h2 class="norm">
-					{isGame ? "Time in your backlog" : "Time on your watchlist"}
+					Time {isGame ? "in" : "on"}
+					{owner ? `${data.owner.username}'s` : "your"}
+					{isGame ? "backlog" : "watchlist"}
 				</h2>
 				<span
 					>Time before the first recorded {isGame

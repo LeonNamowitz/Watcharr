@@ -34,6 +34,7 @@ export interface StatsBar {
 	titleKeys: string[];
 	label: string;
 	count: number;
+	ratedCount: number;
 	averageRating: number;
 }
 export interface StatsPie {

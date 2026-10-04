@@ -413,7 +413,7 @@ func gameBars(records []*gameRecord, category string) []BarStat {
 	result := []BarStat{}
 	for label, a := range groups {
 		sort.Strings(a.keys)
-		result = append(result, BarStat{Label: label, Count: len(a.keys), TitleKeys: a.keys, AverageRating: average(a.total, a.rated)})
+		result = append(result, BarStat{Label: label, Count: len(a.keys), RatedCount: a.rated, TitleKeys: a.keys, AverageRating: average(a.total, a.rated)})
 	}
 	sort.Slice(result, func(i, j int) bool {
 		if result[i].Count == result[j].Count {

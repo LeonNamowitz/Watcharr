@@ -258,6 +258,12 @@
 		ratingSystem: data.owner.ratingSystem,
 		ratingStep: data.owner.ratingStep,
 	});
+	const ownerPossessive = $derived(
+		publicOwner ? `${data.owner.username}'s` : "your",
+	);
+	const ownerPossessiveCapitalized = $derived(
+		publicOwner ? `${data.owner.username}'s` : "Your",
+	);
 	const lifetime = $derived(data.scope === "lifetime");
 	const statsView = $derived(`${data.scope}:${data.year}:${data.media}`);
 	const period = $derived(lifetime ? "Lifetime" : String(data.year));
@@ -281,6 +287,9 @@
 			? undefined
 			: (data.breakdown.release.find((item) => item.label === "Selected year")
 					?.count ?? 0),
+	);
+	const rewatchCount = $derived(
+		data.breakdown.plays.find((item) => item.label === "Rewatches")?.count ?? 0,
 	);
 	const hoursPlayed = $derived(data.summary.hours);
 	const hoursDescription = $derived(
@@ -306,7 +315,7 @@
 				? "completion"
 				: data.media === "movie"
 					? lifetime
-						? "breakdown"
+						? "plays"
 						: "release"
 					: lifetime
 						? data.library
@@ -317,7 +326,7 @@
 				? "Jump to game completion chart"
 				: data.media === "movie"
 					? lifetime
-						? "Jump to breakdown charts"
+						? "Jump to watches and rewatches chart"
 						: "Jump to release breakdown chart"
 					: lifetime
 						? data.library
@@ -624,7 +633,9 @@
 		<section data-stats-section="highest-rated-episodes">
 			<div class="section-heading">
 				<h2 class="norm">Highest rated episodes</h2>
-				{#if lifetime}<span>Your favorites rated 9/10 or above</span>
+				{#if lifetime}<span
+						>{ownerPossessiveCapitalized} favorites rated 9/10 or above</span
+					>
 				{:else}<StatsSegmentedControl label="Episode release year" wrap>
 						<button
 							class:active={episodeTab === "current"}
@@ -769,7 +780,9 @@
 							onChange={(value) => (decadeCounts[decade.decade] = value)}
 						/>
 					</div>{:else}<p class="muted">
-						Watch and rate a few more titles to discover your favorite decades.
+						{publicOwner
+							? "More watched and rated titles are needed to discover favorite decades."
+							: "Watch and rate a few more titles to discover your favorite decades."}
 					</p>{/each}
 			</div>
 		</section>{/if}
@@ -796,7 +809,7 @@
 						}}>Older</button
 					>
 				</StatsSegmentedControl>{:else}<span
-					>Your favorites rated above 8/10</span
+					>{ownerPossessiveCapitalized} favorites rated above 8/10</span
 				>{/if}
 		</div>
 		<StatsPosters
@@ -1042,10 +1055,10 @@
 	<section data-stats-section="breakdown">
 		<div class="section-heading">
 			<h2 class="norm" data-stats-jump="breakdown" tabindex="-1">Breakdown</h2>
-			<span>Patterns in your {isGame ? "gaming" : "viewing"}</span>
+			<span>Patterns in {ownerPossessive} {isGame ? "gaming" : "viewing"}</span>
 		</div>
 		<div class="pies">
-			{#each [...(!lifetime ? [{ title: "Release years", points: pies(data.breakdown.release) }] : []), { title: isGame ? "Completions & replays" : "Watches & rewatches", points: pies(data.breakdown.plays) }, ...(data.library ? [{ title: statusBreakdownTitle, points: statusBreakdownPoints }] : []), ...(data.games ? [{ title: "Completion", points: pies(data.games.completion) }] : []), ...(data.reviewsVisible ? [{ title: "Reviews", points: pies(data.breakdown.reviews ?? []) }] : [])] as group (group.title)}<div
+			{#each [...(!lifetime ? [{ title: "Release years", points: pies(data.breakdown.release).map( (point) => ({ ...point, label: point.label === "Selected year" ? String(data.year) : point.label }) ) }] : []), { title: isGame ? "Completions & replays" : "Watches & rewatches", points: pies(data.breakdown.plays) }, ...(data.library ? [{ title: statusBreakdownTitle, points: statusBreakdownPoints }] : []), ...(data.games ? [{ title: "Completion", points: pies(data.games.completion) }] : []), ...(data.reviewsVisible ? [{ title: "Reviews", points: pies(data.breakdown.reviews ?? []) }] : [])] as group (group.title)}<div
 					class="pie"
 				>
 					<h3
@@ -1124,7 +1137,7 @@
 			class="plain watchlist-summary"
 			disabled={!watchlistTitles.length}
 			aria-haspopup="dialog"
-			aria-label={`Show ${data.breakdown.watchlistAdditions} titles added to your ${isGame ? "backlog" : "watchlist"}`}
+			aria-label={`Show ${data.breakdown.watchlistAdditions} titles added to ${ownerPossessive} ${isGame ? "backlog" : "watchlist"}`}
 			onclick={() =>
 				(selection = {
 					label: isGame ? "Added to backlog" : "Added to watchlist",
@@ -1138,8 +1151,9 @@
 					>Added to {isGame ? "backlog" : "watchlist"}</span
 				>
 				<span class="watchlist-period">
-					{lifetime ? "Across your recorded history" : `In ${data.year}`} · distinct
-					titles
+					{lifetime
+						? `Across ${ownerPossessive} recorded history`
+						: `In ${data.year}`} · distinct titles
 				</span>
 			</span>
 		</button>
@@ -1178,7 +1192,10 @@
 			<h2 class="norm" data-stats-jump="rated-higher" tabindex="-1">
 				Rated higher than average
 			</h2>
-			<span>You vs {source} · /10 · At least +1 point</span>
+			<span
+				>{publicOwner ? data.owner.username : "You"} vs {source} · /10 · At least
+				+1 point</span
+			>
 		</div>
 		<StatsPosters
 			items={higher.slice(0, higherCount)}
@@ -1197,7 +1214,10 @@
 	<section data-stats-section="rated-lower">
 		<div class="section-heading">
 			<h2 class="norm">Rated lower than average</h2>
-			<span>You vs {source} · /10 · At least −1 point</span>
+			<span
+				>{publicOwner ? data.owner.username : "You"} vs {source} · /10 · At least
+				−1 point</span
+			>
 		</div>
 		<StatsPosters
 			items={lower.slice(0, lowerCount)}
@@ -1475,12 +1495,8 @@
 				<button
 					type="button"
 					class="plain summary-tile"
-					title={selectedMedia === "movie" && selectedYear === "all"
-						? "Select a year to see new releases."
-						: summaryDestinations.secondary.label}
-					disabled={loading ||
-						!!error ||
-						(selectedMedia === "movie" && selectedYear === "all")}
+					title={summaryDestinations.secondary.label}
+					disabled={loading || !!error}
 					onclick={() => jumpToSummary("secondary")}
 				>
 					<span class="summary-label">
@@ -1488,13 +1504,17 @@
 							? "Games completed"
 							: selectedMedia === "tv"
 								? "Episodes watched"
-								: "New releases"}
+								: selectedYear === "all"
+									? "Rewatches"
+									: "New releases"}
 					</span>
 					<span class="summary-value">
 						{loading || error
 							? "—"
 							: selectedMedia === "movie"
-								? (newReleaseCount?.toLocaleString() ?? "—")
+								? lifetime
+									? rewatchCount.toLocaleString()
+									: (newReleaseCount?.toLocaleString() ?? "—")
 								: (isGame
 										? (data.summary.completed ?? 0)
 										: data.media === "tv"
@@ -1565,8 +1585,9 @@
 							.length} titles</summary
 					>
 					<p>
-						Your recorded {isGame ? "progress" : "watches"} and ratings are included.
-						Metadata charts may be incomplete.
+						{ownerPossessiveCapitalized} recorded {isGame
+							? "progress"
+							: "watches"} and ratings are included. Metadata charts may be incomplete.
 					</p>
 					<ul>
 						{#each data.metadata.failedTitles as title (title)}<li>
@@ -1578,7 +1599,11 @@
 			{#if !initialLoading && !data.summary.titles && !data.activity.total}<div
 					class="empty-year"
 				>
-					<h2 class="norm">A fresh page in your journal</h2>
+					<h2 class="norm">
+						{publicOwner
+							? `A fresh page in ${data.owner.username}'s journal`
+							: "A fresh page in your journal"}
+					</h2>
 					<p>
 						No recorded {isGame
 							? "game progress"
@@ -1586,7 +1611,8 @@
 								? "movie watches"
 								: "episode watches"} for
 						{lifetime ? "this lifetime view" : data.year}. Choose another year
-						or explore your {isGame ? "backlog" : "watchlist"} below.
+						or explore {ownerPossessive}
+						{isGame ? "backlog" : "watchlist"} below.
 					</p>
 				</div>{/if}
 

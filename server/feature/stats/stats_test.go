@@ -760,3 +760,36 @@ func TestWatchlistPicksAreStableForOwnerYearAndMedia(t *testing.T) {
 		t.Fatal("lifetime key must use all rather than current year")
 	}
 }
+
+func TestCategoryRatedCountsExcludeUnratedTitles(t *testing.T) {
+	for _, media := range []entity.ContentType{entity.MOVIE, entity.SHOW} {
+		t.Run(string(media), func(t *testing.T) {
+			records := []*watchedRecord{}
+			metadata := map[string]contentMetadata{}
+			for i, rating := range []float64{9, 7, 0} {
+				record := &watchedRecord{content: &entity.Content{TmdbID: i + 1, Type: media}, watched: entity.Watched{Rating: rating}}
+				records = append(records, record)
+				metadata[contentKey(record.content)] = contentMetadata{genres: []string{"Drama", "Drama"}, countries: []string{"France"}, languages: []string{"French"}}
+			}
+			for _, size := range []int{1, 2, 3} {
+				expectedRated := size
+				if size == 3 {
+					expectedRated = 2
+				}
+				for _, bars := range [][]BarStat{buildBars(records[:size], metadata, true), buildBars(records[:size], metadata, false), buildLanguageBars(records[:size], metadata)} {
+					if len(bars) != 1 || bars[0].Count != size || bars[0].RatedCount != expectedRated {
+						t.Fatalf("incorrect total/rated membership: %#v", bars)
+					}
+					if size >= 2 && bars[0].AverageRating != 8 {
+						t.Fatalf("unrated title changed average: %#v", bars)
+					}
+				}
+			}
+			for _, bars := range [][]BarStat{buildBars(records[2:], metadata, true), buildBars(records[2:], metadata, false), buildLanguageBars(records[2:], metadata)} {
+				if bars[0].RatedCount != 0 || bars[0].Count != 1 || bars[0].AverageRating != 0 {
+					t.Fatalf("unrated category: %#v", bars)
+				}
+			}
+		})
+	}
+}

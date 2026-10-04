@@ -70,6 +70,12 @@ export function holdTooltip(options: {
 				)
 					cancel();
 			});
+			const stopResize = on(window, "resize", () => {
+				cancel();
+				pointer = undefined;
+				suppressClick = false;
+				dismiss();
+			});
 			const stopUp = on(window, "pointerup", cancel);
 			const stopCancel = on(window, "pointercancel", cancel);
 			const stopKeyboard = on(window, "keydown", (event) => {
@@ -97,6 +103,7 @@ export function holdTooltip(options: {
 				cancel();
 				stopDown();
 				stopMove();
+				stopResize();
 				stopUp();
 				stopCancel();
 				stopKeyboard();
