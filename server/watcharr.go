@@ -239,6 +239,7 @@ func main() {
 	featureService := feature.NewService(cfg)
 	profileService := profile.NewService(db)
 	statsTMDB := stats.NewCachedTMDBProvider(tmdbService, path.Join(config.DataPath, "cache", "stats-tmdb"))
+	defer statsTMDB.Close()
 	statsService := stats.NewService(db, statsTMDB, &br.Cfg.TWITCH)
 	followService := follow.NewService(db)
 	tagService := tag.NewService(db, watchedService, tmdbService, path.Join(config.DataPath, "cache", "tag-suggestions"))

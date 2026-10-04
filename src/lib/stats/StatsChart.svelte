@@ -233,8 +233,11 @@
 		fill: var(--stats-muted);
 		font-size: 12px;
 	}
-	.chart.align-first-x-tick :global(
-			.lc-axis.placement-bottom .lc-axis-tick-group:first-child .lc-axis-tick-label
+	.chart.align-first-x-tick
+		:global(
+			.lc-axis.placement-bottom
+				.lc-axis-tick-group:first-child
+				.lc-axis-tick-label
 		) {
 		text-anchor: start;
 	}

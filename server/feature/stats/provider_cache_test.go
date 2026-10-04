@@ -33,9 +33,79 @@ func (p *persistedTMDB) MovieDetails(tmdb.MovieDetailsOptions) (tmdb.MovieDetail
 	return details, err
 }
 
+func newTestCachedTMDBProvider(t *testing.T, provider statsMetadataProvider, dir string) *cachedTMDBProvider {
+	t.Helper()
+	p := NewCachedTMDBProvider(provider, dir)
+	t.Cleanup(p.Close)
+	return p
+}
+
+func TestProviderCachePrunesExpiredFilesAtStartup(t *testing.T) {
+	dir := t.TempDir()
+	write := func(id string, age time.Duration) string {
+		t.Helper()
+		data, err := json.Marshal(providerCacheEntry{Version: 1, SavedAt: time.Now().Add(-age), Data: json.RawMessage(`{"runtime":90}`)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		path := filepath.Join(dir, providerCacheKey("movie", id, "", nil)+".json")
+		if err := os.WriteFile(path, data, 0600); err != nil {
+			t.Fatal(err)
+		}
+		return path
+	}
+	expired := write("expired", providerKeepFor)
+	fresh := write("fresh", time.Hour)
+	stale := write("stale", providerFreshFor+time.Hour)
+	unrelated := filepath.Join(dir, "unrelated.json")
+	if err := os.WriteFile(unrelated, []byte(`{"version":1,"savedAt":"2000-01-01T00:00:00Z","data":{}}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	newTestCachedTMDBProvider(t, nil, dir)
+	if _, err := os.Stat(expired); !os.IsNotExist(err) {
+		t.Fatalf("expired file was not removed: %v", err)
+	}
+	for _, path := range []string{fresh, stale, unrelated} {
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("cleanup removed a retained or unrelated file: %v", err)
+		}
+	}
+}
+
+func TestProviderCachePeriodicallyPrunesWithoutLookups(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		p := newTestCachedTMDBProvider(t, &persistedTMDB{}, t.TempDir())
+		if _, err := p.MovieDetails(tmdb.MovieDetailsOptions{ID: "10"}); err != nil {
+			t.Fatal(err)
+		}
+		p.retries.Set("failed", true, 5*time.Minute)
+		// No Get calls: inspect serialized entries so an access cannot remove them.
+		synctest.Wait()
+		time.Sleep(providerCleanupEvery)
+		synctest.Wait()
+		var retries strings.Builder
+		if err := p.retries.Save(&retries); err != nil || strings.Contains(retries.String(), "failed") {
+			t.Fatalf("expired retry entry retained without lookups: %v", err)
+		}
+		time.Sleep(providerKeepFor)
+		synctest.Wait()
+		var memory strings.Builder
+		if err := p.memory.Save(&memory); err != nil || strings.Contains(memory.String(), providerCacheKey("movie", "10", "", nil)) {
+			t.Fatalf("expired metadata retained without lookups: %v", err)
+		}
+		files, err := os.ReadDir(p.dir)
+		if err != nil || len(files) != 0 {
+			t.Fatalf("expired disk cache retained without lookups: %v %v", files, err)
+		}
+		if _, err := p.MovieDetails(tmdb.MovieDetailsOptions{ID: "10"}); err != nil {
+			t.Fatalf("pruning prevented a later lookup: %v", err)
+		}
+	})
+}
+
 func TestProviderCacheSurvivesRestartForAllStatsLookups(t *testing.T) {
 	dir := t.TempDir()
-	first := NewCachedTMDBProvider(&persistedTMDB{}, dir)
+	first := newTestCachedTMDBProvider(t, &persistedTMDB{}, dir)
 	lookup := func(p *cachedTMDBProvider) {
 		t.Helper()
 		movie, err := p.MovieDetails(tmdb.MovieDetailsOptions{ID: "10"})
@@ -57,7 +127,7 @@ func TestProviderCacheSurvivesRestartForAllStatsLookups(t *testing.T) {
 	}
 	lookup(first)
 	// A nil upstream panics on any lookup, proving this new instance uses disk.
-	lookup(NewCachedTMDBProvider(nil, dir))
+	lookup(newTestCachedTMDBProvider(t, nil, dir))
 	files, _ := os.ReadDir(dir)
 	if len(files) != 4 {
 		t.Fatalf("expected four provider responses, got %d", len(files))
@@ -68,7 +138,7 @@ func TestProviderCacheServesStaleWhileRefreshIsBlockedAndCoalesces(t *testing.T)
 	synctest.Test(t, func(t *testing.T) {
 		dir := t.TempDir()
 		options := tmdb.MovieDetailsOptions{ID: "10"}
-		first := NewCachedTMDBProvider(&persistedTMDB{}, dir)
+		first := newTestCachedTMDBProvider(t, &persistedTMDB{}, dir)
 		if _, err := first.MovieDetails(options); err != nil {
 			t.Fatal(err)
 		}
@@ -80,7 +150,7 @@ func TestProviderCacheServesStaleWhileRefreshIsBlockedAndCoalesces(t *testing.T)
 			result.Runtime = 120
 			return result, nil
 		}}
-		p := NewCachedTMDBProvider(provider, dir)
+		p := newTestCachedTMDBProvider(t, provider, dir)
 		started := time.Now()
 		for range 20 {
 			result, err := p.MovieDetails(options)
@@ -94,7 +164,7 @@ func TestProviderCacheServesStaleWhileRefreshIsBlockedAndCoalesces(t *testing.T)
 		}
 		close(release)
 		p.refresh.Wait()
-		result, err := NewCachedTMDBProvider(nil, dir).MovieDetails(options)
+		result, err := newTestCachedTMDBProvider(t, nil, dir).MovieDetails(options)
 		if err != nil || result.Runtime != 120 {
 			t.Fatalf("refreshed metadata wasn't persisted: %d %v", result.Runtime, err)
 		}
@@ -105,12 +175,12 @@ func TestProviderCacheFailureRetainsStaleAndDoesNotExtendRetention(t *testing.T)
 	synctest.Test(t, func(t *testing.T) {
 		dir := t.TempDir()
 		opts := tmdb.MovieDetailsOptions{ID: "10"}
-		if _, err := NewCachedTMDBProvider(&persistedTMDB{}, dir).MovieDetails(opts); err != nil {
+		if _, err := newTestCachedTMDBProvider(t, &persistedTMDB{}, dir).MovieDetails(opts); err != nil {
 			t.Fatal(err)
 		}
 		time.Sleep(25 * time.Hour)
 		provider := &persistedTMDB{fetch: func() (tmdb.MovieDetails, error) { return tmdb.MovieDetails{}, errors.New("offline") }}
-		p := NewCachedTMDBProvider(provider, dir)
+		p := newTestCachedTMDBProvider(t, provider, dir)
 		for range 3 {
 			result, err := p.MovieDetails(opts)
 			if err != nil || result.Runtime != 90 {
@@ -145,7 +215,7 @@ func TestProviderCacheCoalescesColdRequestsAndBoundsBackgroundWorkers(t *testing
 			<-release
 			return tmdb.MovieDetails{}, nil
 		}}
-		p := NewCachedTMDBProvider(provider, t.TempDir())
+		p := newTestCachedTMDBProvider(t, provider, t.TempDir())
 		var wg sync.WaitGroup
 		for range 20 {
 			wg.Go(func() { p.MovieDetails(tmdb.MovieDetailsOptions{ID: "10"}) })
@@ -184,7 +254,7 @@ func TestProviderCacheInvalidFilesAndStableKeys(t *testing.T) {
 		t.Fatal("map order changed cache key")
 	}
 	for _, data := range []string{"broken", `{"version":2}`, `{"version":1,"savedAt":"2099-01-01T00:00:00Z","data":{}}`, `{"version":1,"savedAt":"2000-01-01T00:00:00Z","data":{}}`} {
-		p := NewCachedTMDBProvider(&persistedTMDB{}, t.TempDir())
+		p := newTestCachedTMDBProvider(t, &persistedTMDB{}, t.TempDir())
 		key := providerCacheKey("movie", "1", "", nil)
 		if err := os.WriteFile(filepath.Join(p.dir, key+".json"), []byte(data), 0600); err != nil {
 			t.Fatal(err)
@@ -195,7 +265,7 @@ func TestProviderCacheInvalidFilesAndStableKeys(t *testing.T) {
 		}
 	}
 	// Disk caching is best effort: read-only/unusable storage must not break stats.
-	p := NewCachedTMDBProvider(&persistedTMDB{}, filepath.Join(t.TempDir(), "file"))
+	p := newTestCachedTMDBProvider(t, &persistedTMDB{}, filepath.Join(t.TempDir(), "file"))
 	if err := os.WriteFile(p.dir, nil, 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -215,12 +285,12 @@ func TestPersistedMetadataStillUsesCurrentOwnerStatsAndReviewPrivacy(t *testing.
 	db.Create(&entity.Activity{UserID: owner.ID, WatchedID: w.ID, CountAsPlay: true, CustomDate: dateTime("2025-01-01")})
 	dir := t.TempDir()
 	q := Query{Scope: ScopeYear, Year: 2025, Media: "movie"}
-	if _, err := NewService(db, NewCachedTMDBProvider(&persistedTMDB{}, dir)).GetStats(owner.ID, q); err != nil {
+	if _, err := NewService(db, newTestCachedTMDBProvider(t, &persistedTMDB{}, dir)).GetStats(owner.ID, q); err != nil {
 		t.Fatal(err)
 	}
 	db.Model(&w).Update("rating", 3)
 	q.HideReviews = true
-	data, err := NewService(db, NewCachedTMDBProvider(nil, dir)).GetStats(owner.ID, q)
+	data, err := NewService(db, newTestCachedTMDBProvider(t, nil, dir)).GetStats(owner.ID, q)
 	if err != nil || data.Summary.AverageRating != 3 || data.ReviewLengths != nil || data.Breakdown.Reviews != nil || data.Metadata.Partial {
 		t.Fatalf("cache bypassed current rating/privacy: %#v %v", data, err)
 	}

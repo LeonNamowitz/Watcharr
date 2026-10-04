@@ -2,6 +2,7 @@ package stats
 
 import (
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -17,8 +18,9 @@ import (
 )
 
 const (
-	providerFreshFor = 24 * time.Hour
-	providerKeepFor  = 7 * 24 * time.Hour
+	providerFreshFor     = 24 * time.Hour
+	providerKeepFor      = 7 * 24 * time.Hour
+	providerCleanupEvery = time.Hour
 )
 
 type statsMetadataProvider interface {
@@ -36,24 +38,84 @@ type providerCacheEntry struct {
 // Persist only public TMDB responses, never watched records or a stats response.
 // A daily restart retains enrichment while current owner data is rebuilt as usual.
 type cachedTMDBProvider struct {
-	provider statsMetadataProvider
-	dir      string
-	memory   *gocache.Cache
-	retries  *gocache.Cache
-	requests singleflight.Group
-	now      func() time.Time
-	mu       sync.Mutex
-	pending  map[string]func()
-	workers  int
-	refresh  sync.WaitGroup
+	provider    statsMetadataProvider
+	dir         string
+	memory      *gocache.Cache
+	retries     *gocache.Cache
+	requests    singleflight.Group
+	now         func() time.Time
+	mu          sync.Mutex
+	pending     map[string]func()
+	workers     int
+	refresh     sync.WaitGroup
+	diskMu      sync.Mutex
+	cleanupStop chan struct{}
+	cleanupDone chan struct{}
+	closeOnce   sync.Once
 }
 
 func NewCachedTMDBProvider(provider statsMetadataProvider, dir string) *cachedTMDBProvider {
-	return &cachedTMDBProvider{
+	p := &cachedTMDBProvider{
 		provider: provider, dir: dir,
 		memory:  gocache.New(providerKeepFor, 0),
 		retries: gocache.New(5*time.Minute, 0),
 		now:     time.Now, pending: make(map[string]func()),
+		cleanupStop: make(chan struct{}), cleanupDone: make(chan struct{}),
+	}
+	p.cleanup()
+	go func() {
+		defer close(p.cleanupDone)
+		ticker := time.NewTicker(providerCleanupEvery)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				p.cleanup()
+			case <-p.cleanupStop:
+				return
+			}
+		}
+	}()
+	return p
+}
+
+// Close stops the cache cleanup worker.
+func (p *cachedTMDBProvider) Close() {
+	p.closeOnce.Do(func() { close(p.cleanupStop) })
+	<-p.cleanupDone
+}
+
+func (p *cachedTMDBProvider) cleanup() {
+	p.memory.DeleteExpired()
+	p.retries.DeleteExpired()
+	// Serialize pruning with replacement so a refresh cannot be removed after
+	// the cleanup worker has read its previous, expired response.
+	p.diskMu.Lock()
+	defer p.diskMu.Unlock()
+	files, err := os.ReadDir(p.dir)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			slog.Debug("Stats: failed reading TMDB metadata cache for cleanup", "error", err)
+		}
+		return
+	}
+	for _, file := range files {
+		name := file.Name()
+		if !file.Type().IsRegular() || len(name) != sha256.Size*2+len(".json") || filepath.Ext(name) != ".json" {
+			continue
+		}
+		if _, err := hex.DecodeString(name[:sha256.Size*2]); err != nil {
+			continue
+		}
+		path := filepath.Join(p.dir, name)
+		data, err := os.ReadFile(path)
+		var entry providerCacheEntry
+		if err != nil || json.Unmarshal(data, &entry) != nil || entry.Version != 1 || p.now().Sub(entry.SavedAt) < providerKeepFor {
+			continue
+		}
+		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+			slog.Debug("Stats: failed removing expired TMDB metadata cache", "error", err)
+		}
 	}
 }
 
@@ -107,6 +169,8 @@ func (p *cachedTMDBProvider) save(key string, entry providerCacheEntry) error {
 	if err := file.Close(); err != nil {
 		return err
 	}
+	p.diskMu.Lock()
+	defer p.diskMu.Unlock()
 	return os.Rename(file.Name(), filepath.Join(p.dir, key+".json"))
 }
 

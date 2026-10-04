@@ -1104,7 +1104,19 @@
 				),
 			}))}
 			{settings}
-			xAxisTicks={["Unrated", "1", "2", "3", "4", "5", "6", "7", "8", "9"]}
+			xAxisTicks={[
+				"Unrated",
+				"1",
+				"2",
+				"3",
+				"4",
+				"5",
+				"6",
+				"7",
+				"8",
+				"9",
+				"10",
+			]}
 			onSelect={explorePoint}
 			color="#f5b85a"
 		/>

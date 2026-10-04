@@ -40,6 +40,7 @@
 	const sorted = $derived(
 		[...people]
 			.filter(
+				// MOD: Only show people with at least 2 titles, and if in rating mode, only show people with a rating greater than 0.
 				(p) => p.titles >= 2 && (mode !== "rating" || p.averageRating > 0),
 			)
 			.sort((a, b) =>
@@ -129,7 +130,7 @@
 		width: 100%;
 		height: 100%;
 		object-fit: cover;
-		/* Vertical crop: 0% keeps the source top and moves the face lower.
+		/* MOD: Vertical crop: 0% keeps the source top and moves the face lower.
            Increase the second percentage to move the photo up. */
 		object-position: 50% 30%;
 	}
