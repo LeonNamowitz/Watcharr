@@ -6,7 +6,10 @@ import (
 	"time"
 
 	"github.com/sbondCo/Watcharr/cache"
+	"golang.org/x/sync/singleflight"
 )
+
+var episodeCreditsRequests singleflight.Group
 
 type ShowDetailsOptions struct {
 	// TMDB ID
@@ -90,9 +93,20 @@ func (t *TMDB) EpisodeCredits(showID, seasonNumber, episodeNumber string) (Conte
 	if cache.GetCache(ContentStore, key, &resp) {
 		return *resp, nil
 	}
-	if err := t.req("/tv/"+showID+"/season/"+seasonNumber+"/episode/"+episodeNumber+"/credits", map[string]string{}, &resp); err != nil {
-		return ContentCredits{}, errors.New("episode credits request failed")
+	result, err, _ := episodeCreditsRequests.Do(key, func() (any, error) {
+		resp := new(ContentCredits)
+		// Another caller may have populated the cache after the first check.
+		if cache.GetCache(ContentStore, key, &resp) {
+			return *resp, nil
+		}
+		if err := t.req("/tv/"+showID+"/season/"+seasonNumber+"/episode/"+episodeNumber+"/credits", map[string]string{}, &resp); err != nil {
+			return ContentCredits{}, errors.New("episode credits request failed")
+		}
+		ContentStore.Set(key, resp, time.Hour*24)
+		return *resp, nil
+	})
+	if err != nil {
+		return ContentCredits{}, err
 	}
-	ContentStore.Set(key, resp, time.Hour*24)
-	return *resp, nil
+	return result.(ContentCredits), nil
 }

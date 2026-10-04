@@ -63,21 +63,30 @@ func (t *TMDB) apiRequest(ep string, p map[string]string) ([]byte, error) {
 	// Add params to url
 	base.RawQuery = params.Encode()
 
-	// Run get request
-	res, err := http.Get(base.String())
-	if err != nil {
-		return nil, err
+	for attempt := 0; ; attempt++ {
+		tmdbRequests.wait()
+		res, err := http.Get(base.String())
+		if err != nil {
+			return nil, err
+		}
+		if res.StatusCode == http.StatusTooManyRequests {
+			// Pause all queued requests, even if this caller has exhausted retries.
+			tmdbRequests.backoff(rateLimitDelay(res.Header.Get("Retry-After"), attempt, time.Now()))
+		}
+		body, err := io.ReadAll(res.Body)
+		res.Body.Close()
+		if err != nil {
+			return nil, err
+		}
+		if res.StatusCode == http.StatusTooManyRequests && attempt < maxRateLimitRetries {
+			continue
+		}
+		if res.StatusCode != http.StatusOK {
+			slog.Error("TMDB non 200 status code:", "status_code", res.StatusCode)
+			return nil, errors.New(string(body))
+		}
+		return body, nil
 	}
-	body, err := io.ReadAll(res.Body)
-	res.Body.Close()
-	if err != nil {
-		return nil, err
-	}
-	if res.StatusCode != 200 {
-		slog.Error("TMDB non 200 status code:", "status_code", res.StatusCode)
-		return nil, errors.New(string(body))
-	}
-	return body, nil
 }
 
 func (t *TMDB) req(ep string, p map[string]string, resp interface{}) error {
