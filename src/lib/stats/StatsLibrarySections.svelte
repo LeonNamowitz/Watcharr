@@ -116,6 +116,7 @@
 	) {
 		const element = event.currentTarget;
 		if (!(element instanceof HTMLElement)) return;
+		if (event.type === "focus" && !element.matches(":focus-visible")) return;
 		const position = statsTooltipPosition(event, element);
 		tooltipLeft = position.left;
 		tooltipTop = position.top;
@@ -130,6 +131,8 @@
 		hoveredTooltip = undefined;
 	}
 </script>
+
+<svelte:window onscrollcapture={hideTooltip} onresize={hideTooltip} />
 
 {#if library}
 	<section class="library-section">
@@ -158,22 +161,26 @@
 						showTooltip(
 							label,
 							group.items,
-							lifetime ? "current library status" : "recorded status changes",
+							lifetime ? "current library status" : "",
 							event,
 						)}
 					onpointermove={(event) =>
 						showTooltip(
 							label,
 							group.items,
-							lifetime ? "current library status" : "recorded status changes",
+							lifetime ? "current library status" : "",
 							event,
 						)}
 					onpointerleave={hideTooltip}
+					onpointerup={(event) => {
+						if (event.pointerType !== "mouse") hideTooltip();
+					}}
+					onpointercancel={hideTooltip}
 					onfocus={(event) =>
 						showTooltip(
 							label,
 							group.items,
-							lifetime ? "current library status" : "recorded status changes",
+							lifetime ? "current library status" : "",
 							event,
 						)}
 					onblur={hideTooltip}
@@ -268,6 +275,10 @@
 									onpointermove={(event) =>
 										showTooltip(label, items, detail, event)}
 									onpointerleave={hideTooltip}
+									onpointerup={(event) => {
+										if (event.pointerType !== "mouse") hideTooltip();
+									}}
+									onpointercancel={hideTooltip}
 									onfocus={(event) => showTooltip(label, items, detail, event)}
 									onblur={hideTooltip}
 									onkeydown={(event) => event.key === "Escape" && hideTooltip()}

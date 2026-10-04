@@ -713,11 +713,19 @@
 									titleUnit={isGame ? "games" : "titles"}
 									title={metric.label}
 									kind={metric.key === "averageRating" ? "line" : "bar"}
+									showData
+									valueUnit={metric.key === "averageRating" && isGame
+										? "games"
+										: "titles"}
 									color={metric.color}
 									points={data.history.map((p) => ({
 										label: String(p.year),
 										tooltipLabel: `${metric.label} · ${p.year}`,
 										items: historyItems(p, metric.key),
+										browseValue:
+											metric.key === "averageRating"
+												? historyItems(p, metric.key).length
+												: undefined,
 										value:
 											metric.key === "averageRating" && !p.averageRating
 												? null
@@ -881,6 +889,7 @@
 												? w.averageRating || null
 												: w.plays,
 										titleCount: w.uniqueTitles,
+										browseValue: w.plays,
 										averageRating: w.averageRating,
 										items: w.items ?? [],
 										detail: [
@@ -914,6 +923,7 @@
 												? m.averageRating || null
 												: m.plays,
 										titleCount: m.items?.length ?? 0,
+										browseValue: m.plays,
 										averageRating: m.averageRating,
 										items: m.items ?? [],
 										detail: `${m.plays} ${data.media === "tv" ? "episodes" : "films"}`,
@@ -1816,6 +1826,22 @@
 			grid-template-columns: repeat(4, minmax(0, 1fr));
 		}
 	}
+	@media (max-width: 900px) {
+		.header-summary > .placeholder-card {
+			grid-column: 1 / -1;
+			flex-direction: row;
+			align-items: center;
+			justify-content: space-between;
+			gap: 12px;
+			padding: 10px 16px;
+		}
+		.header-summary .placeholder-card dt {
+			font-size: 16px;
+		}
+		.header-summary .placeholder-card dd {
+			font-size: 14px;
+		}
+	}
 	@media (max-width: 700px) {
 		.stats-page .stats-content > :global(section) {
 			margin-inline: -24px;
@@ -1827,11 +1853,25 @@
 			gap: 20px;
 		}
 		.heading-top {
-			grid-template-columns: minmax(0, 1fr);
-			gap: 16px;
+			grid-template-columns: minmax(0, 1fr) 120px;
+			gap: 16px 12px;
+		}
+		.controls {
+			display: contents;
+		}
+		.controls label {
+			grid-column: 2;
+			grid-row: 1;
+		}
+		.controls > :global(.segmented) {
+			grid-column: 1 / -1;
+			justify-self: end;
+		}
+		select {
+			min-width: 0;
 		}
 		.header-summary {
-			grid-template-columns: repeat(auto-fit, minmax(min(100%, 176px), 1fr));
+			grid-template-columns: repeat(2, minmax(0, 1fr));
 		}
 		.category-controls {
 			justify-content: start;
@@ -1845,11 +1885,6 @@
 		}
 		.highs-lows {
 			gap: 24px 12px;
-		}
-	}
-	@media (min-width: 600px) and (max-width: 700px) {
-		.heading-top {
-			grid-template-columns: minmax(0, 1fr) auto;
 		}
 	}
 	@media (max-width: 520px) {

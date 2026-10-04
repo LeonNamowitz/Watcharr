@@ -150,6 +150,7 @@
 	function showTooltip(day: StatsDay, event: PointerEvent | FocusEvent) {
 		const element = event.currentTarget;
 		if (!(element instanceof HTMLElement)) return;
+		if (event.type === "focus" && !element.matches(":focus-visible")) return;
 		const position = statsTooltipPosition(event, element);
 		tooltipLeft = position.left;
 		tooltipTop = position.top;
@@ -167,6 +168,8 @@
 		hoveredDay = undefined;
 	}
 </script>
+
+<svelte:window onscrollcapture={hideTooltip} onresize={hideTooltip} />
 
 <section class="calendar-section">
 	<div class="section-heading">
@@ -253,6 +256,10 @@
 								if (dayData) showTooltip(dayData, event);
 							}}
 							onpointerleave={hideTooltip}
+							onpointerup={(event) => {
+								if (event.pointerType !== "mouse") hideTooltip();
+							}}
+							onpointercancel={hideTooltip}
 							onfocus={(event) => {
 								const dayData = byDate.get(date);
 								if (dayData) showTooltip(dayData, event);

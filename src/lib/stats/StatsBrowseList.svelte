@@ -15,7 +15,7 @@
 		onSelect?: (point: ChartPoint) => void;
 	} = $props();
 	function countLabel(point: ChartPoint) {
-		const value = point.value ?? 0;
+		const value = point.browseValue ?? point.value ?? 0;
 		return `${value.toLocaleString(undefined, { maximumFractionDigits: 0 })} ${statsUnitLabel(valueUnit, value)}`;
 	}
 	function preview(point: ChartPoint) {

@@ -147,6 +147,7 @@ export interface StatsResponse {
 	metadata: { partial: boolean; failedTitles: string[] };
 }
 export interface ChartPoint {
+	browseValue?: number;
 	titleKeys?: string[];
 	items?: StatsMediaCard[];
 	tooltipLabel?: string;
