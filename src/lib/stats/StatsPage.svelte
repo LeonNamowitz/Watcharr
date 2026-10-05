@@ -71,7 +71,7 @@
 	// MOD: Rows added per click for Cast and Directors & creators only.
 	const peopleExpansionRows = 3;
 	// MOD: Rows added per click in the title list popup.
-	const titleDialogExpansionRows = 2;
+	const titleDialogExpansionRows = 4;
 	let calendarMonthsExpanded = $state(false);
 	let peopleMode = $state<"most" | "rating">("most");
 	let categorySort = $state<"count" | "rating">("count");
