@@ -122,7 +122,7 @@
 <li class={isHidden ? "dont-spoil" : ""}>
 	{#if ep.still_path}
 		<img
-			src={`https://www.themoviedb.org/t/p/w227_and_h127_bestv2/${ep.still_path}`}
+			src={`https://www.themoviedb.org/t/p/w780/${ep.still_path}`}
 			alt=""
 		/>
 	{:else}

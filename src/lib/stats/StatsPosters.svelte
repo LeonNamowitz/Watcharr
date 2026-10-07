@@ -63,7 +63,7 @@
 				{#if imagePath}<PosterImage
 						fluid
 						src={c.episodeNumber !== undefined
-							? `https://www.themoviedb.org/t/p/w227_and_h127_bestv2${imagePath}`
+							? `https://www.themoviedb.org/t/p/w780${imagePath}`
 							: c.type === "game"
 								? c.posterPath
 									? `${baseURL}/${c.posterPath}`
