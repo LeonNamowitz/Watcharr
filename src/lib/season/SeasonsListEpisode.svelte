@@ -124,6 +124,7 @@
 		<img
 			src={`https://www.themoviedb.org/t/p/w780/${ep.still_path}`}
 			alt=""
+			loading="lazy"
 		/>
 	{:else}
 		<div class="no-still"></div>

@@ -90,8 +90,10 @@
 		clearTimeout(searchTimeout);
 		searchTimeout = window.setTimeout(
 			() => {
-				const query = target?.value.trim();
-				if (!query) {
+				// Keep the query as typed: trimming here removes the trailing
+				// space needed when the user is starting the next word.
+				const query = target.value;
+				if (!query.trim()) {
 					goto(resolve("/"));
 					return;
 				}

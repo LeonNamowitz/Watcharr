@@ -158,10 +158,12 @@
 		clearTimeout(searchTimeout);
 		searchTimeout = window.setTimeout(
 			() => {
-				const query = target.value.trim();
+				// Keep the query as typed: trimming here removes the trailing
+				// space needed when the user is starting the next word.
+				const query = target.value;
 				const location = new URL(page.url);
 				location.searchParams.delete("listDepth");
-				if (query) {
+				if (query.trim()) {
 					location.searchParams.set("query", query);
 				} else {
 					location.searchParams.delete("query");
