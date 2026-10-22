@@ -94,6 +94,7 @@
 	let activityMode = $state<"week" | "month">("week");
 	let activityMetric = $state<"count" | "rating">("count");
 	let calendarYear = $state<number>();
+	let calendarReleaseFilter = $state<"all" | "current">("all");
 	let gameCalendarKind = $state<"progress" | "completions">("progress");
 	let waitingCount = $state(5);
 	let selection = $state<{
@@ -137,6 +138,7 @@
 			activityMetric,
 			calendarMonthsExpanded,
 			calendarYear,
+			calendarReleaseFilter,
 			gameCalendarKind,
 			waitingCount,
 			gameCounts,
@@ -171,6 +173,7 @@
 		decadeCounts = saved.decadeCounts;
 		crewCounts = saved.crewCounts;
 		calendarYear = saved.calendarYear;
+		calendarReleaseFilter = saved.calendarReleaseFilter ?? "all";
 		gameCalendarKind = saved.gameCalendarKind ?? "progress";
 		waitingCount = saved.waitingCount ?? 5;
 		activityMode = saved.activityMode;
@@ -413,6 +416,7 @@
 	$effect(() => {
 		if (statsView) {
 			calendarYear = undefined;
+			calendarReleaseFilter = "all";
 			gameCalendarKind = "progress";
 			waitingCount = 5;
 			episodeCount = 5;
@@ -950,6 +954,7 @@
 			{settings}
 			onSelect={exploreSelection}
 			bind:calendarYear
+			bind:releaseFilter={calendarReleaseFilter}
 			bind:activityKind={gameCalendarKind}
 			bind:monthsExpanded={calendarMonthsExpanded}
 		/>{/if}

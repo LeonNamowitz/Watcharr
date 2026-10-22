@@ -48,6 +48,8 @@ backend PR workflow runs both `go test ./...` and the Go formatting check.
 
 ## Compatibility and Data Boundaries
 
+Always check that UI changes look good on desktop and mobile sizes and don't introduce new bugs.
+
 Prefer small, non-invasive changes that remain compatible with the upstream
 project. Reuse established handlers, API helpers, and UI flows before introducing
 parallel abstractions. Preserve existing API payloads and logged-in behavior unless

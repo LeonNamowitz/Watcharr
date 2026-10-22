@@ -12,6 +12,7 @@
 		settings,
 		onSelect,
 		calendarYear = $bindable<number | undefined>(),
+		releaseFilter = $bindable<"all" | "current">("all"),
 		activityKind = $bindable<"progress" | "completions">("progress"),
 		monthsExpanded = $bindable(false),
 	}: {
@@ -19,6 +20,7 @@
 		settings: RatingSettings;
 		onSelect: (selection: StatsSelection) => void;
 		calendarYear?: number;
+		releaseFilter?: "all" | "current";
 		activityKind?: "progress" | "completions";
 		monthsExpanded?: boolean;
 	} = $props();
@@ -48,9 +50,22 @@
 				: (years[0] ?? new Date().getUTCFullYear())
 			: (data.year ?? new Date().getUTCFullYear()),
 	);
-	const days = $derived(
-		calendarDays.filter((d) => Number(d.date.slice(0, 4)) === year),
-	);
+	const days = $derived.by(() => {
+		const yearDays = calendarDays.filter(
+			(d) => Number(d.date.slice(0, 4)) === year,
+		);
+		if (releaseFilter === "all") return yearDays;
+		return yearDays
+			.map((day) => {
+				const items = day.items.filter((item) => item.releaseYear === year);
+				return {
+					...day,
+					items,
+					plays: items.reduce((total, item) => total + (item.plays ?? 1), 0),
+				};
+			})
+			.filter((day) => day.plays > 0);
+	});
 	const byDate = $derived(new Map(days.map((d) => [d.date, d])));
 	const unit = $derived(
 		isGame
@@ -65,6 +80,7 @@
 		// Metric and year changes invalidate any previously displayed day tooltip.
 		void activityKind;
 		void year;
+		void releaseFilter;
 		hoveredDay = undefined;
 	});
 	type CalendarTooltip = {
@@ -192,9 +208,23 @@
 	data-stats-section="calendar"
 >
 	<div class="section-heading">
-		<h2 class="norm" data-stats-jump="calendar" tabindex="-1">
-			{isGame ? "Gaming" : "Viewing"} calendar
-		</h2>
+		<div class="calendar-title" class:lifetime>
+			<h2 class="norm" data-stats-jump="calendar" tabindex="-1">
+				{isGame ? "Gaming" : "Viewing"} calendar
+			</h2>
+			{#if lifetime && years.length}
+				<select
+					aria-label="Calendar year"
+					value={year}
+					onchange={(event) => {
+						calendarYear = Number(event.currentTarget.value);
+						monthsExpanded = false;
+					}}
+				>
+					{#each years as y (y)}<option value={y}>{y}</option>{/each}
+				</select>
+			{/if}
+		</div>
 		{#if isGame}
 			<StatsSegmentedControl label="Gaming calendar metric">
 				<button
@@ -215,17 +245,20 @@
 				>
 			</StatsSegmentedControl>
 		{/if}
-		{#if lifetime && years.length}<label
-				>Calendar year <select
-					aria-label="Calendar year"
-					value={year}
-					onchange={(event) => {
-						calendarYear = Number(event.currentTarget.value);
-						monthsExpanded = false;
-					}}
-					>{#each years as y (y)}<option value={y}>{y}</option>{/each}</select
-				></label
-			>{:else}<span>{year} · dates in UTC</span>{/if}
+		<div class="calendar-controls">
+			<StatsSegmentedControl label="Calendar release year" role="group" wrap>
+				<button
+					class:active={releaseFilter === "current"}
+					aria-pressed={releaseFilter === "current"}
+					onclick={() => (releaseFilter = "current")}>{year} releases</button
+				>
+				<button
+					class:active={releaseFilter === "all"}
+					aria-pressed={releaseFilter === "all"}
+					onclick={() => (releaseFilter = "all")}>All</button
+				>
+			</StatsSegmentedControl>
+		</div>
 	</div>
 
 	<div class="summary">
@@ -235,7 +268,7 @@
 			><strong>{summary.longest}</strong>
 			{summary.longest === 1 ? "day" : "days"} · longest streak</span
 		>
-		{#if summary.busiest}<button
+		{#if summary.busiest && summary.busiest.plays > 1}<button
 				class="plain busiest"
 				onclick={() => summary.busiest && explore(summary.busiest.date)}
 				>Busiest: {prettyDate(summary.busiest.date)} · {countLabel(
@@ -327,8 +360,8 @@
 				: "Recorded completions, including replays"
 			: data.media === "tv"
 				? "Completed episodes"
-				: "Recorded movie plays, including rewatches"}. Select a highlighted day
-		to browse. Streaks are measured within the displayed year.
+				: "Recorded movie plays, including rewatches"}. Dates are in UTC.
+		Streaks are measured within the displayed year.
 	</p>
 </section>
 {#if hoveredDay}
@@ -349,11 +382,30 @@
 		padding: 26px 0 30px;
 		border-top: 1px solid var(--stats-border);
 	}
+	.calendar-controls {
+		display: flex;
+		align-items: center;
+		justify-content: flex-end;
+		flex-wrap: wrap;
+		gap: 12px;
+		margin-left: auto;
+		font-size: 13px;
+		color: var(--stats-muted);
+	}
+	.calendar-title {
+		display: flex;
+		align-items: center;
+		flex-wrap: wrap;
+		gap: 8px 12px;
+	}
+	.calendar-title select {
+		margin: 0;
+		min-height: 40px;
+	}
 	h3 {
 		font-size: 15px;
 		margin-bottom: 10px;
 	}
-	.section-heading label,
 	.note {
 		font-size: 13px;
 		color: var(--stats-muted);
@@ -488,6 +540,21 @@
 		}
 	}
 	@media (max-width: 520px) {
+		.calendar-title h2 {
+			font-size: 20px;
+		}
+		.calendar-title {
+			flex: 1;
+		}
+		.calendar-title.lifetime {
+			flex: auto;
+			width: 100%;
+			justify-content: space-between;
+		}
+		.calendar-controls {
+			margin-left: 0;
+			justify-content: flex-start;
+		}
 		.months {
 			grid-template-columns: minmax(0, 1fr);
 		}
