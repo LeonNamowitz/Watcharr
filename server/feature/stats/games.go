@@ -244,8 +244,9 @@ func (s *Service) getGameStats(userID uint, q Query) (StatsResponse, error) {
 	}
 	if q.Scope == ScopeLifetime {
 		games.Playtime = gamePlaytime(scoped)
-		if n := len(games.Playtime.MostPlayed); n > 0 {
-			most, least := games.Playtime.MostPlayed[0], games.Playtime.MostPlayed[n-1]
+		rankedPlaytime := gamePlaytime(gameRecordsExcludingDropped(scoped)).MostPlayed
+		if n := len(rankedPlaytime); n > 0 {
+			most, least := rankedPlaytime[0], rankedPlaytime[n-1]
 			response.HighsLows.MostPlaytime, response.HighsLows.LeastPlaytime = &most, &least
 		}
 	}
@@ -625,6 +626,16 @@ func gameBreakdown(records, additions []*gameRecord, q Query) Breakdown {
 	}
 	return result
 }
+func gameRecordsExcludingDropped(records []*gameRecord) []*gameRecord {
+	result := make([]*gameRecord, 0, len(records))
+	for _, record := range records {
+		if record.watched.Status != entity.DROPPED {
+			result = append(result, record)
+		}
+	}
+	return result
+}
+
 func gameHighsLows(records []*gameRecord) (HighsLows, RatingDifferences) {
 	highs := HighsLows{}
 	differences := RatingDifferences{Higher: []MediaCard{}, Lower: []MediaCard{}}
@@ -632,13 +643,15 @@ func gameHighsLows(records []*gameRecord) (HighsLows, RatingDifferences) {
 	for _, r := range records {
 		c := r.card
 		if c.CommunityRating > 0 {
-			if highs.HighestCommunityRated == nil || c.CommunityRating > highs.HighestCommunityRated.CommunityRating {
-				copy := c
-				highs.HighestCommunityRated = &copy
-			}
-			if highs.LowestRated == nil || c.CommunityRating < highs.LowestRated.CommunityRating {
-				copy := c
-				highs.LowestRated = &copy
+			if r.watched.Status != entity.DROPPED {
+				if highs.HighestCommunityRated == nil || c.CommunityRating > highs.HighestCommunityRated.CommunityRating {
+					copy := c
+					highs.HighestCommunityRated = &copy
+				}
+				if highs.LowestRated == nil || c.CommunityRating < highs.LowestRated.CommunityRating {
+					copy := c
+					highs.LowestRated = &copy
+				}
 			}
 			if c.Rating > 0 {
 				d := c.Rating - c.CommunityRating
@@ -654,7 +667,7 @@ func gameHighsLows(records []*gameRecord) (HighsLows, RatingDifferences) {
 				}
 			}
 		}
-		if c.VoteCount > 0 {
+		if r.watched.Status != entity.DROPPED && c.VoteCount > 0 {
 			if highs.MostVoted == nil || c.VoteCount > highs.MostVoted.VoteCount {
 				copy := c
 				highs.MostVoted = &copy
@@ -664,7 +677,7 @@ func gameHighsLows(records []*gameRecord) (HighsLows, RatingDifferences) {
 				highs.LeastVoted = &copy
 			}
 		}
-		if c.Date != "" {
+		if r.watched.Status != entity.DROPPED && c.Date != "" {
 			if highs.Newest == nil || c.Date > highs.Newest.Date {
 				copy := c
 				highs.Newest = &copy

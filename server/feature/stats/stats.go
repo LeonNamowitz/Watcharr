@@ -1256,6 +1256,9 @@ func buildHighsLowsWithShowRuntime(
 ) HighsLows {
 	result := HighsLows{}
 	for _, record := range records {
+		if record.watched.Status == entity.DROPPED {
+			continue
+		}
 		card := mediaCard(record, metadata)
 		if card.TMDBRating > 0 && (result.HighestTMDBRated == nil || card.TMDBRating > result.HighestTMDBRated.TMDBRating) {
 			copyCard := card
