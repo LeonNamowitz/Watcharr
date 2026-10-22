@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { resolve } from "$app/paths";
-	import Activity from "@/lib/Activity.svelte";
+	import Activity from "@/lib/activity/Activity.svelte";
 	import Error from "@/lib/Error.svelte";
 	import HorizontalList from "@/lib/HorizontalList.svelte";
 	import Icon from "@/lib/Icon.svelte";

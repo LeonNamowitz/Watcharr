@@ -21,6 +21,12 @@ export interface ReqerConfig extends Omit<RequestInit, "body"> {
 	 * Example: `{ page: 1 }` will become &page=1 on the requests final url.
 	 */
 	params?: ReqerParams;
+	/**
+	 * AbortSignal.
+	 *
+	 * Optional cancellation or caller-defined timeout.
+	 */
+	signal?: AbortSignal;
 }
 
 type ReqerConfigWithoutMethod = Omit<ReqerConfig, "method">;
@@ -342,6 +348,28 @@ export class Reqer {
 		cfg?: ReqerConfigWithoutMethod,
 	): Promise<ReqerResponse<T>> {
 		return await this.do<T>(p, { ...cfg, method: "PUT", body: data });
+	}
+
+	/**
+	 * PATCH request, returning parsed response body.
+	 */
+	async patch<T>(
+		p: string,
+		data?: unknown,
+		cfg?: ReqerConfigWithoutMethod,
+	): Promise<T> {
+		return (await this.do<T>(p, { ...cfg, method: "PATCH", body: data })).body;
+	}
+
+	/**
+	 * Same as `patch()`, except the whole ReqerResponse object is returned.
+	 */
+	async patchWhole<T>(
+		p: string,
+		data?: unknown,
+		cfg?: ReqerConfigWithoutMethod,
+	): Promise<ReqerResponse<T>> {
+		return await this.do<T>(p, { ...cfg, method: "PATCH", body: data });
 	}
 
 	/**

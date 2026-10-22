@@ -36,6 +36,7 @@
 		STATS_BACKGROUND_CONTEXT,
 		type StatsBackgroundState,
 	} from "@/lib/stats/backgroundContext";
+	import HandbookModal from "@/lib/handbook/HandbookModal.svelte";
 	interface Props {
 		children?: import("svelte").Snippet;
 	}
@@ -408,3 +409,7 @@
 		}}
 	/>
 {/await}
+
+{#if page.state.handbook}
+	<HandbookModal onClose={() => history.back()} />
+{/if}

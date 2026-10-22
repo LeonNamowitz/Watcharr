@@ -2,25 +2,13 @@ package watched
 
 import (
 	"encoding/json"
+	"gorm.io/gorm"
 	"testing"
 
 	"github.com/sbondCo/Watcharr/database/entity"
 	"github.com/sbondCo/Watcharr/domain"
 	"github.com/sbondCo/Watcharr/internal/testutil"
 )
-
-type playtimeActivityProvider struct {
-	requests []domain.ActivityAddProps
-}
-
-func (p *playtimeActivityProvider) AddActivity(
-	_ uint,
-	ar domain.ActivityAddProps,
-	_ bool,
-) (entity.Activity, error) {
-	p.requests = append(p.requests, ar)
-	return entity.Activity{Type: ar.Type, Data: ar.Data}, nil
-}
 
 func TestUpdateWatchedGamePlaytime(t *testing.T) {
 	db := testutil.SetupDB(t)
@@ -35,11 +23,11 @@ func TestUpdateWatchedGamePlaytime(t *testing.T) {
 		Status: entity.PLANNED,
 	}
 	mustCreate(t, db.Create(&watched).Error)
-	activityProvider := &playtimeActivityProvider{}
-	service := NewService(db, nil, nil, activityProvider, nil)
+
+	service := NewService(db, nil, nil, nil)
 
 	hours := uint(42)
-	if _, err := service.updateWatched(user.ID, watched.ID, domain.WatchedUpdateRequest{
+	if _, err := service.UpdateWatched(user.ID, watched.ID, domain.WatchedUpdateRequest{
 		PlaytimeHours: &hours,
 	}); err != nil {
 		t.Fatalf("setting playtime failed: %v", err)
@@ -50,9 +38,9 @@ func TestUpdateWatchedGamePlaytime(t *testing.T) {
 	if updated.PlaytimeHours == nil || *updated.PlaytimeHours != hours {
 		t.Fatalf("playtime = %v, want %d", updated.PlaytimeHours, hours)
 	}
-	assertPlaytimeActivity(t, activityProvider, &hours)
+	assertPlaytimeActivity(t, db, &hours)
 
-	if _, err := service.updateWatched(user.ID, watched.ID, domain.WatchedUpdateRequest{
+	if _, err := service.UpdateWatched(user.ID, watched.ID, domain.WatchedUpdateRequest{
 		RemovePlaytime: true,
 	}); err != nil {
 		t.Fatalf("clearing playtime failed: %v", err)
@@ -61,10 +49,10 @@ func TestUpdateWatchedGamePlaytime(t *testing.T) {
 	if updated.PlaytimeHours != nil {
 		t.Fatalf("playtime = %v after clearing, want nil", updated.PlaytimeHours)
 	}
-	assertPlaytimeActivity(t, activityProvider, nil)
+	assertPlaytimeActivity(t, db, nil)
 
 	zero := uint(0)
-	if _, err := service.updateWatched(user.ID, watched.ID, domain.WatchedUpdateRequest{
+	if _, err := service.UpdateWatched(user.ID, watched.ID, domain.WatchedUpdateRequest{
 		PlaytimeHours: &zero,
 	}); err != nil {
 		t.Fatalf("setting zero playtime failed: %v", err)
@@ -73,19 +61,17 @@ func TestUpdateWatchedGamePlaytime(t *testing.T) {
 	if updated.PlaytimeHours == nil || *updated.PlaytimeHours != 0 {
 		t.Fatalf("playtime = %v, want explicit zero", updated.PlaytimeHours)
 	}
-	assertPlaytimeActivity(t, activityProvider, &zero)
+	assertPlaytimeActivity(t, db, &zero)
 }
 
 func assertPlaytimeActivity(
 	t *testing.T,
-	provider *playtimeActivityProvider,
+	db *gorm.DB,
 	wantHours *uint,
 ) {
 	t.Helper()
-	if len(provider.requests) == 0 {
-		t.Fatal("playtime update did not add activity")
-	}
-	activity := provider.requests[len(provider.requests)-1]
+	var activity entity.Activity
+	mustCreate(t, db.Order("id DESC").First(&activity).Error)
 	if activity.Type != entity.PLAYTIME_CHANGED {
 		t.Fatalf("activity type = %q, want %q", activity.Type, entity.PLAYTIME_CHANGED)
 	}
@@ -129,14 +115,14 @@ func TestUpdateWatchedRejectsPlaytimeForNonGameAndOtherUser(t *testing.T) {
 	mustCreate(t, db.Create(&movieWatched).Error)
 	mustCreate(t, db.Create(&gameWatched).Error)
 
-	service := NewService(db, nil, nil, nil, nil)
+	service := NewService(db, nil, nil, nil)
 	hours := uint(8)
-	if _, err := service.updateWatched(owner.ID, movieWatched.ID, domain.WatchedUpdateRequest{
+	if _, err := service.UpdateWatched(owner.ID, movieWatched.ID, domain.WatchedUpdateRequest{
 		PlaytimeHours: &hours,
 	}); err == nil {
 		t.Fatal("setting playtime on a movie unexpectedly succeeded")
 	}
-	if _, err := service.updateWatched(other.ID, gameWatched.ID, domain.WatchedUpdateRequest{
+	if _, err := service.UpdateWatched(other.ID, gameWatched.ID, domain.WatchedUpdateRequest{
 		PlaytimeHours: &hours,
 	}); err == nil {
 		t.Fatal("setting another user's playtime unexpectedly succeeded")

@@ -101,7 +101,7 @@ func TestGetWatchedPageDateAddedUsesActivityCustomDate(t *testing.T) {
 		Type:      entity.IMPORTED_WATCHED,
 	}).Error)
 
-	service := NewService(db, nil, nil, nil, watchedSortUserProvider{})
+	service := NewService(db, nil, nil, watchedSortUserProvider{})
 	page, err := service.GetWatchedPage(
 		user.ID,
 		util.PaginationParams{Page: 1, Limit: 10},
@@ -206,7 +206,7 @@ func TestGetWatchedPageLastChangedUsesLatestActivityDate(t *testing.T) {
 		mustCreate(t, db.Create(&activities[i]).Error)
 	}
 
-	service := NewService(db, nil, nil, nil, watchedSortUserProvider{})
+	service := NewService(db, nil, nil, watchedSortUserProvider{})
 	page, err := service.GetWatchedPage(
 		user.ID,
 		util.PaginationParams{Page: 1, Limit: 10},
@@ -257,7 +257,7 @@ func TestGetWatchedPageProvidesLastSeenForPosterDTO(t *testing.T) {
 		CustomDate: &newerWatchingAt,
 	}).Error)
 
-	service := NewService(db, nil, nil, nil, watchedSortUserProvider{})
+	service := NewService(db, nil, nil, watchedSortUserProvider{})
 	page, err := service.GetWatchedPage(
 		user.ID,
 		util.PaginationParams{Page: 1, Limit: 10},

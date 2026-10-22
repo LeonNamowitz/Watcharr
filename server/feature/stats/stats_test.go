@@ -300,7 +300,7 @@ func TestPublicStatsIsOwnerScopedAndAnonymous(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
 	br := appRouter.NewBaseRouter(db, engine.Group("/api"), &config.ServerConfig{JWT_SECRET: "test"})
-	NewRouter(br, NewService(db, nil), watchedFeature.NewService(db, nil, nil, nil, nil)).AddRoutes()
+	NewRouter(br, NewService(db, nil), watchedFeature.NewService(db, nil, nil, nil)).AddRoutes()
 	path := "/api/public/users/" + strconv.FormatUint(uint64(owner.ID), 10) + "/owner/stats?year=2025"
 	recorder := request(t, engine, path)
 	if recorder.Code != http.StatusOK {
@@ -447,7 +447,7 @@ func TestPublicPrivacyValidationBeforeMetadata(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
 	br := appRouter.NewBaseRouter(db, engine.Group("/api"), &config.ServerConfig{JWT_SECRET: "test"})
-	NewRouter(br, NewService(db, provider), watchedFeature.NewService(db, nil, nil, nil, nil)).AddRoutes()
+	NewRouter(br, NewService(db, provider), watchedFeature.NewService(db, nil, nil, nil)).AddRoutes()
 	path := "/api/public/users/" + strconv.Itoa(int(owner.ID)) + "/private-owner/stats?year=2025"
 	for _, p := range []string{path, strings.Replace(path, "private-owner", "wrong-name", 1)} {
 		if r := request(t, engine, p); r.Code != 403 {
@@ -520,7 +520,7 @@ func TestAuthenticatedStatsAndPublicViewerKeepOwnerScope(t *testing.T) {
 	}
 	engine := gin.New()
 	br := appRouter.NewBaseRouter(db, engine.Group("/api"), &config.ServerConfig{JWT_SECRET: "test"})
-	NewRouter(br, NewService(db, &successfulTMDB{}), watchedFeature.NewService(db, nil, nil, nil, nil)).AddRoutes()
+	NewRouter(br, NewService(db, &successfulTMDB{}), watchedFeature.NewService(db, nil, nil, nil)).AddRoutes()
 	auth, err := jwt.NewWithClaims(jwt.SigningMethodHS256, entity.TokenClaims{UserID: owners[1].ID, RegisteredClaims: jwt.RegisteredClaims{IssuedAt: jwt.NewNumericDate(time.Now()), ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour))}}).SignedString([]byte("test"))
 	if err != nil {
 		t.Fatal(err)

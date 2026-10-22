@@ -57,7 +57,7 @@ func TestStatsLayoutPersistenceAndOwnerScope(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
 	br := appRouter.NewBaseRouter(db, engine.Group("/api"), &config.ServerConfig{JWT_SECRET: "test"})
-	NewRouter(br, NewService(db, nil), watchedFeature.NewService(db, nil, nil, nil, nil)).AddRoutes()
+	NewRouter(br, NewService(db, nil), watchedFeature.NewService(db, nil, nil, nil)).AddRoutes()
 	token := func(id uint) string {
 		t.Helper()
 		value, err := jwt.NewWithClaims(jwt.SigningMethodHS256, entity.TokenClaims{UserID: id, RegisteredClaims: jwt.RegisteredClaims{IssuedAt: jwt.NewNumericDate(time.Now()), ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour))}}).SignedString([]byte("test"))

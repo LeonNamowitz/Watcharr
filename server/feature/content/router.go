@@ -12,6 +12,7 @@ import (
 	"github.com/sbondCo/Watcharr/database/entity"
 	"github.com/sbondCo/Watcharr/domain"
 	"github.com/sbondCo/Watcharr/feature/auth/authmiddleware"
+	"github.com/sbondCo/Watcharr/feature/user/usermiddleware"
 	"github.com/sbondCo/Watcharr/feature/watched/addedtocontent"
 	"github.com/sbondCo/Watcharr/media/tmdb"
 	"github.com/sbondCo/Watcharr/router"
@@ -60,7 +61,7 @@ func NewRouter(
 }
 
 func (r *Router) AddRoutes() {
-	content := r.br.Router.Group("/content").Use(authmiddleware.AuthRequired(nil, r.br.Cfg))
+	content := r.br.Router.Group("/content").Use(authmiddleware.AuthRequired(r.br.Cfg))
 	publicOwnerContent := r.br.Router.Group("/public/users/:id/:username/content").Use(r.PublicOwnerRequired)
 	exp := time.Hour * 24
 
@@ -68,11 +69,11 @@ func (r *Router) AddRoutes() {
 	// don't and rather have their caching on the TMDB methods directly.
 
 	// Get movie details (for movie page)
-	content.GET("/movie/:id", router.WhereaboutsRequired(r.br.Cfg), r.GetMovieDetails)
+	content.GET("/movie/:id", usermiddleware.WithUser(r.br.DB), router.WhereaboutsRequired(r.br.Cfg), r.GetMovieDetails)
 	// Get movie cast
 	content.GET("/movie/:id/credits", cache.CachePage(r.br.MemStore, exp, r.GetMovieCredits))
 	// Get tv details (for tv page)
-	content.GET("/tv/:id", router.WhereaboutsRequired(r.br.Cfg), r.GetTvDetails)
+	content.GET("/tv/:id", usermiddleware.WithUser(r.br.DB), router.WhereaboutsRequired(r.br.Cfg), r.GetTvDetails)
 	// Get tv cast
 	content.GET("/tv/:id/credits", cache.CachePage(r.br.MemStore, exp, r.GetTvCredits))
 

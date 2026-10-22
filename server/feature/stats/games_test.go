@@ -309,7 +309,7 @@ func TestPublicGameStatsPrivacyOwnerIsolationAndHiddenReviews(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
 	br := appRouter.NewBaseRouter(db, engine.Group("/api"), &config.ServerConfig{JWT_SECRET: "test"})
-	NewRouter(br, NewService(db, nil, provider), watchedFeature.NewService(db, nil, nil, nil, nil)).AddRoutes()
+	NewRouter(br, NewService(db, nil, provider), watchedFeature.NewService(db, nil, nil, nil)).AddRoutes()
 	base := fmt.Sprintf("/api/public/users/%d/shared-games/stats?media=game", owner.ID)
 	r := request(t, engine, base+"&year=all")
 	if r.Code != http.StatusOK || r.Header().Get("Cache-Control") != "no-store" {

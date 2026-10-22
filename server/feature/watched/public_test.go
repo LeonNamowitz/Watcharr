@@ -84,7 +84,7 @@ func TestPublicWatchedRoutesAreAnonymousAndRespectThoughtPrivacy(t *testing.T) {
 		Rating:        8,
 	}).Error)
 
-	service := NewService(db, nil, nil, nil, watchedSearchUserProvider{})
+	service := NewService(db, nil, nil, watchedSearchUserProvider{})
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
 	api := engine.Group("/api")
@@ -199,7 +199,7 @@ func TestPublicWatchedRouteRejectsMismatchedOwner(t *testing.T) {
 	}
 	mustCreate(t, db.Create(&owner).Error)
 
-	service := NewService(db, nil, nil, nil, watchedSearchUserProvider{})
+	service := NewService(db, nil, nil, watchedSearchUserProvider{})
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
 	api := engine.Group("/api")
@@ -224,7 +224,7 @@ func TestOptionalPublicWatchedItemAllowsOffListContent(t *testing.T) {
 		},
 	}
 	mustCreate(t, db.Create(&owner).Error)
-	service := NewService(db, nil, nil, nil, watchedSearchUserProvider{})
+	service := NewService(db, nil, nil, watchedSearchUserProvider{})
 
 	watched, thoughtsPublic, err := service.GetOptionalPublicWatchedItem(
 		owner.ID,

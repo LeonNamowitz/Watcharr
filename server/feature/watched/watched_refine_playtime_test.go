@@ -66,7 +66,7 @@ func TestGetWatchedPageSortsOnlyRecordedGamePlaytime(t *testing.T) {
 		mustCreate(t, db.Create(&entries[i]).Error)
 	}
 
-	service := NewService(db, nil, nil, nil, playtimeSortUserProvider{})
+	service := NewService(db, nil, nil, playtimeSortUserProvider{})
 	assertPlaytimeSort(t, service, user.ID, domain.WatchedSortDirDesc, []string{
 		"Movie A",
 		"High Game",

@@ -136,7 +136,7 @@ func TestGetWatchedPageFuzzySearchIsOwnerScopedSortedAndPaginated(t *testing.T) 
 		mustCreate(t, db.Create(&watched[i]).Error)
 	}
 
-	service := NewService(db, nil, nil, nil, watchedSearchUserProvider{})
+	service := NewService(db, nil, nil, watchedSearchUserProvider{})
 	request := domain.WatchedGetPageRequest{
 		Sort:    domain.WatchedSortAlphabetical,
 		SortDir: domain.WatchedSortDirAsc,

@@ -22,7 +22,7 @@ func NewRouter(br *router.BaseRouter, service *Service, validator PublicOwnerVal
 	return &Router{br, service, validator}
 }
 func (r *Router) AddRoutes() {
-	private := r.br.Router.Group("/stats").Use(authmiddleware.AuthRequired(nil, r.br.Cfg))
+	private := r.br.Router.Group("/stats").Use(authmiddleware.AuthRequired(r.br.Cfg))
 	private.GET("", r.GetPrivateStats)
 	private.PUT("/layout", r.UpdateLayout)
 	r.br.Router.GET("/public/users/:id/:username/stats", r.GetPublicStats)
