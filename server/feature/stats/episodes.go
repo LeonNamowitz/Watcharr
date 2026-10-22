@@ -141,12 +141,19 @@ func (s *Service) enrichEpisodes(records []*watchedRecord, metadata map[string]c
 	for i := 0; i < min(metadataWorkers, len(groups)); i++ {
 		go func() {
 			for j := range jobs {
+				if s.db.Statement.Context.Err() != nil {
+					results <- ""
+					continue
+				}
 				details, err := provider.SeasonDetails(strconv.Itoa(j.id), strconv.Itoa(j.season))
 				if err != nil {
 					results <- fmt.Sprintf("%s (season %d)", strings.Split(j.records[0].content.Title, " · ")[0], j.season)
 					continue
 				}
 				for _, r := range j.records {
+					if s.db.Statement.Context.Err() != nil {
+						break
+					}
 					for _, ep := range details.Episodes {
 						if ep.EpisodeNumber != r.episode.EpisodeNumber {
 							continue

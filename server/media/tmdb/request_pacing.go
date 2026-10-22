@@ -1,6 +1,7 @@
 package tmdb
 
 import (
+	"context"
 	"net/http"
 	"strconv"
 	"strings"
@@ -20,17 +21,28 @@ type requestPacer struct {
 	next     time.Time
 }
 
-func (p *requestPacer) wait() {
+func (p *requestPacer) wait() { _ = p.waitContext(context.Background()) }
+
+func (p *requestPacer) waitContext(ctx context.Context) error {
 	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		p.mu.Lock()
 		delay := time.Until(p.next)
 		if delay <= 0 {
 			p.next = time.Now().Add(p.interval)
 			p.mu.Unlock()
-			return
+			return nil
 		}
 		p.mu.Unlock()
-		time.Sleep(delay)
+		timer := time.NewTimer(delay)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return ctx.Err()
+		case <-timer.C:
+		}
 		// Recheck after sleeping so a 429 pauses callers already in the queue.
 	}
 }

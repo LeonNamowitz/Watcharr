@@ -180,6 +180,9 @@ func (s *Service) getGameStats(userID uint, q Query) (StatsResponse, error) {
 	// Enrich only cards needed by this view; history uses saved metadata.
 	enrich := append(append(append([]*gameRecord{}, scoped...), backlog...), additions...)
 	failures := s.enrichGames(enrich)
+	if err := s.db.Statement.Context.Err(); err != nil {
+		return StatsResponse{}, err
+	}
 	history := gameHistory(all, q.HideReviews)
 	for i, r := range scoped {
 		clone := *r
@@ -272,7 +275,7 @@ func (s *Service) enrichGames(records []*gameRecord) []string {
 	}
 	sort.Ints(ids)
 	metadata := map[int]igdb.GameStatsDetails{}
-	if s.igdb != nil && len(ids) > 0 {
+	if s.igdb != nil && len(ids) > 0 && s.db.Statement.Context.Err() == nil {
 		metadata, _ = s.igdb.GameStatsDetails(ids)
 	}
 	failures := []string{}

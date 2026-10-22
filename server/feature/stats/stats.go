@@ -1,6 +1,7 @@
 package stats
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
@@ -212,6 +213,7 @@ type PersonStat struct {
 	Name          string   `json:"name"`
 	ProfilePath   string   `json:"profilePath,omitempty"`
 	Titles        int      `json:"titles"`
+	RatedCount    int      `json:"ratedCount"`
 	AverageRating float64  `json:"averageRating"`
 }
 
@@ -294,6 +296,28 @@ type contentMetadata struct {
 }
 
 func (s *Service) GetStats(userID uint, q Query) (StatsResponse, error) {
+	return s.GetStatsContext(context.Background(), userID, q)
+}
+
+// GetStatsContext binds database and provider work to this request only.
+func (s *Service) GetStatsContext(ctx context.Context, userID uint, q Query) (StatsResponse, error) {
+	request := *s
+	request.db = s.db.WithContext(ctx)
+	request.tmdb = bindTMDBContext(ctx, s.tmdb)
+	if provider, ok := s.igdb.(*igdb.IGDB); ok {
+		request.igdb = provider.WithContext(ctx)
+	}
+	response, err := request.getStats(userID, q)
+	if ctx.Err() != nil {
+		return StatsResponse{}, ctx.Err()
+	}
+	return response, err
+}
+
+func (s *Service) getStats(userID uint, q Query) (StatsResponse, error) {
+	if err := s.db.Statement.Context.Err(); err != nil {
+		return StatsResponse{}, err
+	}
 	if q.Scope != ScopeLifetime && q.Scope != ScopeYear {
 		return StatsResponse{}, errors.New("invalid stats scope")
 	}
@@ -397,6 +421,9 @@ func (s *Service) GetStats(userID uint, q Query) (StatsResponse, error) {
 	enrichmentRecords = append(enrichmentRecords, watchlist...)
 	enrichmentRecords = append(enrichmentRecords, watchlistAdditions...)
 	metadata, failures := s.enrich(enrichmentRecords)
+	if err := s.db.Statement.Context.Err(); err != nil {
+		return StatsResponse{}, err
+	}
 	for _, r := range enrichmentRecords {
 		if c := metadata[contentKey(r.content)].card; c != nil {
 			r.content = c
@@ -434,6 +461,9 @@ func (s *Service) GetStats(userID uint, q Query) (StatsResponse, error) {
 	if q.Media == "tv" {
 		activityRecords = episodeRecords
 		s.enrichEpisodes(episodeRecords, metadata, &response.Metadata)
+		if err := s.db.Statement.Context.Err(); err != nil {
+			return StatsResponse{}, err
+		}
 		response.HighestRatedEpisodes = buildHighestRated(episodeRecords, q.Year, metadata)
 		response.Episodes = uniqueCards(episodeRecords, metadata)
 		response.People.Cast = buildEpisodeCast(episodeRecords, metadata)
@@ -554,6 +584,9 @@ func (s *Service) enrich(records []*watchedRecord) (map[string]contentMetadata, 
 	worker := func() {
 		defer wg.Done()
 		for record := range jobs {
+			if s.db.Statement.Context.Err() != nil {
+				continue
+			}
 			key := contentKey(record.content)
 			data, err := s.fetchMetadata(record.content)
 			results <- result{key: key, data: data, err: err}
@@ -569,6 +602,9 @@ func (s *Service) enrich(records []*watchedRecord) (map[string]contentMetadata, 
 	}
 	go func() {
 		for _, record := range unique {
+			if s.db.Statement.Context.Err() != nil {
+				break
+			}
 			jobs <- record
 		}
 		close(jobs)
@@ -1174,6 +1210,7 @@ func addPerson(values map[int]*personAggregate, credit personCredit, record *wat
 		value.total += record.watched.Rating
 		value.rated++
 	}
+	value.stat.RatedCount = value.rated
 	value.stat.AverageRating = average(value.total, value.rated)
 }
 

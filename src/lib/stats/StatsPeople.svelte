@@ -40,8 +40,8 @@
 	const sorted = $derived(
 		[...people]
 			.filter(
-				// MOD: Only show people with at least 2 titles, and if in rating mode, only show people with a rating greater than 0.
-				(p) => p.titles >= 2 && (mode !== "rating" || p.averageRating > 0),
+				// MOD: Rating rankings require two contributing ratings.
+				(p) => p.titles >= 2 && (mode !== "rating" || p.ratedCount >= 2),
 			)
 			.sort((a, b) =>
 				mode === "rating"
@@ -77,7 +77,8 @@
 				>
 			</div>
 		{:else}<p class="empty">
-				No contributors with two watched {unit} yet.
+				No contributors with two {mode === "rating" ? "rated" : "watched"}
+				{unit} yet.
 			</p>{/each}
 	</div>
 	<StatsExpansion

@@ -60,8 +60,11 @@ func (r *Router) GetPublicStats(c *gin.Context) {
 		return
 	}
 	var owner entity.User
-	if err = r.br.DB.First(&owner, uint(id)).Error; err != nil {
-		c.JSON(http.StatusForbidden, router.ErrorResponse{Error: "failed to load stats owner"})
+	if err = r.br.DB.WithContext(c.Request.Context()).First(&owner, uint(id)).Error; err != nil {
+		if c.Request.Context().Err() != nil {
+			return
+		}
+		c.JSON(http.StatusInternalServerError, router.ErrorResponse{Error: "unable to load stats"})
 		return
 	}
 	r.respond(c, uint(id), owner.PrivateThoughts != nil && *owner.PrivateThoughts)
@@ -73,9 +76,12 @@ func (r *Router) respond(c *gin.Context, id uint, hideReviews bool) {
 		return
 	}
 	q.HideReviews = hideReviews
-	data, err := r.service.GetStats(id, q)
+	data, err := r.service.GetStatsContext(c.Request.Context(), id, q)
+	if c.Request.Context().Err() != nil {
+		return
+	}
 	if err != nil {
-		c.JSON(http.StatusBadRequest, router.ErrorResponse{Error: err.Error()})
+		c.JSON(http.StatusInternalServerError, router.ErrorResponse{Error: "unable to load stats"})
 		return
 	}
 	c.Header("Cache-Control", "no-store")

@@ -28,6 +28,7 @@ export interface StatsPerson {
 	name: string;
 	profilePath?: string;
 	titles: number;
+	ratedCount: number;
 	averageRating: number;
 }
 export interface StatsBar {

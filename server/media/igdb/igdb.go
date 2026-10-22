@@ -37,6 +37,7 @@ first_release_date`
 var tokenRefreshJobCancel context.CancelFunc
 
 type IGDB struct {
+	ctx                context.Context
 	ClientID           *string   `json:"clientId,omitempty"`
 	ClientSecret       *string   `json:"clientSecret,omitempty"`
 	AccessToken        string    `json:"accessToken,omitempty"`
@@ -51,24 +52,64 @@ var nextRequest time.Time
 var requestSlots = make(chan struct{}, 8)
 
 func waitForRequestSlot() func() {
-	requestSlots <- struct{}{}
-	requestPacingMu.Lock()
-	if delay := time.Until(nextRequest); delay > 0 {
-		time.Sleep(delay)
+	release, _ := waitForRequestSlotContext(context.Background())
+	return release
+}
+
+func waitForRequestSlotContext(ctx context.Context) (func(), error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
 	}
-	nextRequest = time.Now().Add(250 * time.Millisecond)
-	requestPacingMu.Unlock()
-	return func() { <-requestSlots }
+	select {
+	case requestSlots <- struct{}{}:
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+	for {
+		requestPacingMu.Lock()
+		delay := time.Until(nextRequest)
+		if delay <= 0 {
+			nextRequest = time.Now().Add(250 * time.Millisecond)
+			requestPacingMu.Unlock()
+			return func() { <-requestSlots }, nil
+		}
+		requestPacingMu.Unlock()
+		timer := time.NewTimer(delay)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			<-requestSlots
+			return nil, ctx.Err()
+		case <-timer.C:
+		}
+	}
+}
+
+// WithContext keeps cancellation local to one stats request.
+func (i *IGDB) WithContext(ctx context.Context) *IGDB {
+	copy := *i
+	copy.ctx = ctx
+	return &copy
 }
 
 func (i *IGDB) req(host string, ep string, p map[string]string, b string, resp interface{}) error {
+	ctx := i.ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	// if using igdb host and we have no access token, error before running req
 	if host == igdbHost && (i.ClientID == nil || i.AccessToken == "") {
 		return errors.New("using igdbHost without a clientID or accessToken")
 	}
 
 	if host == igdbHost {
-		release := waitForRequestSlot()
+		release, err := waitForRequestSlotContext(ctx)
+		if err != nil {
+			return err
+		}
 		defer release()
 	}
 
@@ -93,7 +134,7 @@ func (i *IGDB) req(host string, ep string, p map[string]string, b string, resp i
 
 	slog.Debug("req", "base", base.String())
 
-	req, err := http.NewRequest("POST", base.String(), bytes.NewBuffer([]byte(b)))
+	req, err := http.NewRequestWithContext(ctx, "POST", base.String(), bytes.NewBuffer([]byte(b)))
 	if err != nil {
 		return err
 	}

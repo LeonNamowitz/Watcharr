@@ -1,6 +1,7 @@
 package tmdb
 
 import (
+	"context"
 	"errors"
 	"io"
 	"net/http"
@@ -311,4 +312,40 @@ func TestEpisodeCreditsSharesFailureAndAllowsLaterRetry(t *testing.T) {
 			t.Fatalf("later caller could not retry failed credits: %d calls, %v", calls, err)
 		}
 	})
+}
+
+func TestTMDBRequestCancellationStopsHTTPAndPacing(t *testing.T) {
+	for _, waiting := range []bool{false, true} {
+		synctest.Test(t, func(t *testing.T) {
+			started := make(chan struct{})
+			calls := 0
+			mockTMDBRequests(t, func(r *http.Request) (*http.Response, error) {
+				calls++
+				close(started)
+				<-r.Context().Done()
+				return nil, r.Context().Err()
+			})
+			if waiting {
+				tmdbRequests.backoff(time.Hour)
+			}
+			ctx, cancel := context.WithCancel(context.Background())
+			done := make(chan error, 1)
+			provider := NewTMDB("test")
+			go func() { _, err := provider.WithContext(ctx).apiRequest("/movie/123456", nil); done <- err }()
+			if !waiting {
+				<-started
+			}
+			synctest.Wait()
+			cancel()
+			if err := <-done; !errors.Is(err, context.Canceled) {
+				t.Fatalf("request not cancelled: %v", err)
+			}
+			if waiting && calls != 0 {
+				t.Fatal("cancelled paced request reached HTTP")
+			}
+			if provider.ctx != nil {
+				t.Fatal("request context leaked onto shared provider")
+			}
+		})
+	}
 }

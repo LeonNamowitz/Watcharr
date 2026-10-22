@@ -1334,14 +1334,14 @@
 							></summary
 						>{#each department.jobs as job (job.job)}{@const remaining =
 								job.people.filter(
-									(p) => peopleMode !== "rating" || p.averageRating > 0,
+									(p) => peopleMode !== "rating" || p.ratedCount >= 2,
 								).length -
 								(crewCounts[`${department.department}:${job.job}`] ?? 5)}
 							<details class="job">
 								<summary>{job.job}</summary>
 								<ul>
 									{#each [...job.people]
-										.filter((p) => peopleMode !== "rating" || p.averageRating > 0)
+										.filter((p) => peopleMode !== "rating" || p.ratedCount >= 2)
 										.sort( (a, b) => (peopleMode === "rating" ? b.averageRating - a.averageRating : b.titles - a.titles) )
 										.slice(0, crewCounts[`${department.department}:${job.job}`] ?? 5) as person (person.id)}<li
 										>

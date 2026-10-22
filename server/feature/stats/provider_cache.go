@@ -1,9 +1,11 @@
 package stats
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/url"
@@ -219,41 +221,77 @@ func (p *cachedTMDBProvider) enqueue(key string, fetch func()) {
 }
 
 func cachedProviderValue[T any](p *cachedTMDBProvider, key string, fetch func() (T, error)) (T, error) {
-	fresh := func() (T, error) {
-		result, err, _ := p.requests.Do(key, func() (any, error) {
-			var value T
-			if entry, ok := p.load(key); ok && p.now().Sub(entry.SavedAt) < providerFreshFor && json.Unmarshal(entry.Data, &value) == nil {
+	return cachedProviderValueContext(context.Background(), p, key, func(context.Context) (T, error) { return fetch() })
+}
+
+var errMetadataFetchCancelled = errors.New("metadata fetch owner cancelled")
+
+func cachedProviderValueContext[T any](ctx context.Context, p *cachedTMDBProvider, key string, fetch func(context.Context) (T, error)) (T, error) {
+	fresh := func(ctx context.Context) (T, error) {
+		for {
+			if err := ctx.Err(); err != nil {
+				var zero T
+				return zero, err
+			}
+			pending := p.requests.DoChan(key, func() (any, error) {
+				if err := ctx.Err(); err != nil {
+					return nil, errors.Join(errMetadataFetchCancelled, err)
+				}
+				var value T
+				if entry, ok := p.load(key); ok && p.now().Sub(entry.SavedAt) < providerFreshFor && json.Unmarshal(entry.Data, &value) == nil {
+					return value, nil
+				}
+				value, err := fetch(ctx)
+				if ctx.Err() != nil {
+					return nil, errors.Join(errMetadataFetchCancelled, ctx.Err())
+				}
+				if err != nil {
+					if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+						return nil, err
+					}
+					p.retries.Set(key, true, 5*time.Minute)
+					return value, err
+				}
+				data, err := json.Marshal(value)
+				if err != nil {
+					return value, err
+				}
+				entry := providerCacheEntry{Version: 1, SavedAt: p.now(), Data: data}
+				p.memory.Set(key, entry, providerKeepFor)
+				p.retries.Delete(key)
+				if err := p.save(key, entry); err != nil {
+					slog.Warn("Stats: failed saving TMDB metadata cache", "error", err)
+				}
 				return value, nil
+			})
+			select {
+			case <-ctx.Done():
+				var zero T
+				return zero, ctx.Err()
+			case result := <-pending:
+				// A different request may have started the shared fetch and cancelled it.
+				// Live waiters retry, rather than inheriting that request's cancellation.
+				if errors.Is(result.Err, errMetadataFetchCancelled) && ctx.Err() == nil {
+					continue
+				}
+				if result.Err != nil {
+					var zero T
+					return zero, result.Err
+				}
+				return result.Val.(T), nil
 			}
-			value, err := fetch()
-			if err != nil {
-				p.retries.Set(key, true, 5*time.Minute)
-				return value, err
-			}
-			data, err := json.Marshal(value)
-			if err != nil {
-				return value, err
-			}
-			entry := providerCacheEntry{Version: 1, SavedAt: p.now(), Data: data}
-			p.memory.Set(key, entry, providerKeepFor)
-			p.retries.Delete(key)
-			if err := p.save(key, entry); err != nil {
-				slog.Warn("Stats: failed saving TMDB metadata cache", "error", err)
-			}
-			return value, nil
-		})
-		if err != nil {
-			var zero T
-			return zero, err
 		}
-		return result.(T), nil
+	}
+	if err := ctx.Err(); err != nil {
+		var zero T
+		return zero, err
 	}
 	if entry, ok := p.load(key); ok {
 		var value T
 		if json.Unmarshal(entry.Data, &value) == nil {
 			if p.now().Sub(entry.SavedAt) >= providerFreshFor {
 				p.enqueue(key, func() {
-					if _, err := fresh(); err != nil {
+					if _, err := fresh(context.Background()); err != nil {
 						slog.Debug("Stats: background metadata refresh failed", "error", err)
 					}
 				})
@@ -261,7 +299,7 @@ func cachedProviderValue[T any](p *cachedTMDBProvider, key string, fetch func() 
 			return value, nil
 		}
 	}
-	return fresh()
+	return fresh(ctx)
 }
 
 func (p *cachedTMDBProvider) MovieDetails(o tmdb.MovieDetailsOptions) (tmdb.MovieDetails, error) {
@@ -285,5 +323,46 @@ func (p *cachedTMDBProvider) SeasonDetails(id, season string) (tmdb.SeasonDetail
 func (p *cachedTMDBProvider) EpisodeCredits(id, season, episode string) (tmdb.ContentCredits, error) {
 	return cachedProviderValue(p, providerCacheKey("episode", id, "", map[string]string{"season": season, "episode": episode}), func() (tmdb.ContentCredits, error) {
 		return p.provider.EpisodeCredits(id, season, episode)
+	})
+}
+
+// A request-scoped view keeps cache state shared without copying mutexes.
+type contextualTMDBCache struct {
+	cache *cachedTMDBProvider
+	ctx   context.Context
+}
+
+func bindTMDBContext(ctx context.Context, provider TMDBProvider) TMDBProvider {
+	switch p := provider.(type) {
+	case *tmdb.TMDB:
+		return p.WithContext(ctx)
+	case *cachedTMDBProvider:
+		return &contextualTMDBCache{cache: p, ctx: ctx}
+	default:
+		return provider
+	}
+}
+
+func (p *contextualTMDBCache) provider(ctx context.Context) statsMetadataProvider {
+	if provider, ok := p.cache.provider.(*tmdb.TMDB); ok {
+		return provider.WithContext(ctx)
+	}
+	return p.cache.provider
+}
+
+func (p *contextualTMDBCache) MovieDetails(o tmdb.MovieDetailsOptions) (tmdb.MovieDetails, error) {
+	return cachedProviderValueContext(p.ctx, p.cache, providerCacheKey("movie", o.ID, o.Country, o.Params), func(ctx context.Context) (tmdb.MovieDetails, error) { return p.provider(ctx).MovieDetails(o) })
+}
+func (p *contextualTMDBCache) ShowDetails(o tmdb.ShowDetailsOptions) (tmdb.ShowDetails, error) {
+	return cachedProviderValueContext(p.ctx, p.cache, providerCacheKey("tv", o.ID, o.Country, o.Params), func(ctx context.Context) (tmdb.ShowDetails, error) { return p.provider(ctx).ShowDetails(o) })
+}
+func (p *contextualTMDBCache) SeasonDetails(id, season string) (tmdb.SeasonDetails, error) {
+	return cachedProviderValueContext(p.ctx, p.cache, providerCacheKey("season", id, "", map[string]string{"season": season}), func(ctx context.Context) (tmdb.SeasonDetails, error) {
+		return p.provider(ctx).SeasonDetails(id, season)
+	})
+}
+func (p *contextualTMDBCache) EpisodeCredits(id, season, episode string) (tmdb.ContentCredits, error) {
+	return cachedProviderValueContext(p.ctx, p.cache, providerCacheKey("episode", id, "", map[string]string{"season": season, "episode": episode}), func(ctx context.Context) (tmdb.ContentCredits, error) {
+		return p.provider(ctx).EpisodeCredits(id, season, episode)
 	})
 }

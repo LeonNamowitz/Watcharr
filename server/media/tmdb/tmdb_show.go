@@ -93,7 +93,7 @@ func (t *TMDB) EpisodeCredits(showID, seasonNumber, episodeNumber string) (Conte
 	if cache.GetCache(ContentStore, key, &resp) {
 		return *resp, nil
 	}
-	result, err, _ := episodeCreditsRequests.Do(key, func() (any, error) {
+	fetch := func() (any, error) {
 		resp := new(ContentCredits)
 		// Another caller may have populated the cache after the first check.
 		if cache.GetCache(ContentStore, key, &resp) {
@@ -104,7 +104,14 @@ func (t *TMDB) EpisodeCredits(showID, seasonNumber, episodeNumber string) (Conte
 		}
 		ContentStore.Set(key, resp, time.Hour*24)
 		return *resp, nil
-	})
+	}
+	var result any
+	var err error
+	if t.ctx != nil {
+		result, err = fetch()
+	} else {
+		result, err, _ = episodeCreditsRequests.Do(key, fetch)
+	}
 	if err != nil {
 		return ContentCredits{}, err
 	}

@@ -1,10 +1,10 @@
 package igdb
 
 import (
+	"context"
 	"errors"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -33,7 +33,7 @@ type GameStatsDetails struct {
 // Serializes cache fills across concurrent stats requests, including the cache
 // recheck, to avoid duplicate fetches. GameStatsDetails keeps successes if a
 // later batch fails so callers can fall back only for the missing games.
-var statsFetchMu sync.Mutex
+var statsFetchSlot = make(chan struct{}, 1)
 
 func (i *IGDB) GameStatsDetails(ids []int) (map[int]GameStatsDetails, error) {
 	result := make(map[int]GameStatsDetails)
@@ -43,8 +43,19 @@ func (i *IGDB) GameStatsDetails(ids []int) (map[int]GameStatsDetails, error) {
 	if i == nil || i.ClientID == nil || i.AccessToken == "" {
 		return result, errors.New("IGDB is not configured")
 	}
-	statsFetchMu.Lock()
-	defer statsFetchMu.Unlock()
+	ctx := i.ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	select {
+	case statsFetchSlot <- struct{}{}:
+	case <-ctx.Done():
+		return result, ctx.Err()
+	}
+	defer func() { <-statsFetchSlot }()
+	if err := ctx.Err(); err != nil {
+		return result, err
+	}
 	missing := make([]int, 0)
 	seen := make(map[int]bool)
 	for _, id := range ids {
@@ -60,6 +71,9 @@ func (i *IGDB) GameStatsDetails(ids []int) (map[int]GameStatsDetails, error) {
 	}
 	var failures []error
 	for start := 0; start < len(missing); start += 100 {
+		if err := ctx.Err(); err != nil {
+			return result, err
+		}
 		end := start + 100
 		if end > len(missing) {
 			end = len(missing)
